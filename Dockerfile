@@ -1,18 +1,16 @@
 ##### BASE IMAGE #####
-FROM python:3.6-slim-stretch
+FROM elixircloud/foca:latest
 
 ##### METADATA ##### 
 LABEL base.image="python:3.6-slim-stretch"
-LABEL software="trs-filer"
-LABEL software.version="0.1.0"
-LABEL software.description="Lightweight, flexible Flask/Gunicorn-based GA4GH TRS implementation"
+LABEL software="TRS-filer"
+LABEL software.version="0.2.0"
+LABEL software.description=""
 LABEL software.website="https://github.com/elixir-cloud-aai/trs-filer"
 LABEL software.documentation="https://github.com/elixir-cloud-aai/trs-filer"
-LABEL software.license="https://github.com/elixir-cloud-aai/trs-filer/blob/master/LICENSE"
-LABEL software.tags="General"
-LABEL maintainer="nagorikushagra9@gmail.com"
+LABEL software.license="https://spdx.org/licenses/Apache-2.0"
+LABEL maintainer="alexander.kanitz@alumni.ethz.ch"
 LABEL maintainer.organisation="ELIXIR Cloud & AAI"
-LABEL maintainer.license="https://spdx.org/licenses/Apache-2.0"
 
 # Python UserID workaround for OpenShift/K8S
 ENV LOGNAME=ipython

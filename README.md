@@ -1,4 +1,4 @@
-# trs-filer
+# TRS-filer
 
 [![License][badge-license]][badge-url-license]
 [![Build_status][badge-build-status]][badge-url-build-status]

@@ -1,11 +1,12 @@
 from setuptools import (setup, find_packages)
 
+
 with open('README.md', 'r') as fh:
     long_description = fh.read()
 
 setup(
     name='trs-filer',
-    version='0.1.0',
+    version="0.1.0",
     author='ELIXIR Cloud & AAI',
     author_email='nagorikushagra9@gmail.com',
     description='Lightweight, flexible Flask/Gunicorn-based \
@@ -16,7 +17,7 @@ setup(
     url='https://github.com/elixir-cloud-aai/trs-filer.git',
     packages=find_packages(),
     keywords=(
-        'ga4gh drs elixir rest restful api app server openapi '
+        'ga4gh trs elixir rest restful api app server openapi '
         'swagger mongodb python flask'
     ),
     classifiers=[
@@ -25,10 +26,7 @@ setup(
         'Intended Audience :: Science/Research',
         'Topic :: Scientific/Engineering :: Bio-Informatics',
         'Natural Language :: English',
-        'Programming Language :: Python :: 3.5',
         'Programming Language :: Python :: 3.6',
-        'Programming Language :: Python :: 3.7',
-        'Programming Language :: Python :: 3.8',
     ],
-    install_requires=['connexion', 'Flask-Cors', 'Flask-PyMongo'],
+    install_requires=[],
 )
