@@ -1,12 +1,12 @@
 from setuptools import (setup, find_packages)
-
+from trs import __version__
 
 with open('README.md', 'r') as fh:
     long_description = fh.read()
 
 setup(
     name='trs-filer',
-    version="0.1.0",
+    version=__version__,
     author='ELIXIR Cloud & AAI',
     author_email='nagorikushagra9@gmail.com',
     description='Lightweight, flexible Flask/Gunicorn-based \
