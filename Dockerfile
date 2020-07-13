@@ -2,12 +2,9 @@
 FROM elixircloud/foca:latest
 
 ##### METADATA ##### 
-LABEL base.image="python:3.6-slim-stretch"
 LABEL software="TRS-filer"
-LABEL software.version="0.2.0"
-LABEL software.description=""
+LABEL software.description="Tool Registry Service with FOCA"
 LABEL software.website="https://github.com/elixir-cloud-aai/trs-filer"
-LABEL software.documentation="https://github.com/elixir-cloud-aai/trs-filer"
 LABEL software.license="https://spdx.org/licenses/Apache-2.0"
 LABEL maintainer="alexander.kanitz@alumni.ethz.ch"
 LABEL maintainer.organisation="ELIXIR Cloud & AAI"
@@ -29,7 +26,6 @@ COPY ./requirements.txt /app/requirements.txt
 ## Install Python dependencies - (TODO: Refer cwl-wes later)
 RUN cd /app \
   && pip install -r requirements.txt \
-
 
 ## Copy remaining app files
 COPY ./ /app
