@@ -31,5 +31,8 @@ RUN cd /app \
 COPY ./ /app
 
 ## Install app
+## Install app
 RUN cd /app \
   && python setup.py develop \
+  && cd / \
+  && chmod g+w /app/drs_filer/api/
