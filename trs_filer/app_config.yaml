@@ -19,13 +19,14 @@ db:
 
 api:
     specs:
-        - path: api/trsSpecs.yaml
+        - path:
+            - api/trsSpecs.yaml
           append: null
           add_operation_fields:
               x-openapi-router-controller: ga4gh/trs/server
           connexion:
               strict_validation: True
-              validate_responses: False
+              validate_responses: True
               options:
                   swagger_ui: True
                   serve_spec: True
@@ -47,3 +48,7 @@ log:
     root:
         level: 10
         handlers: [console]
+
+exceptions:
+    exceptions: trs_filer.errors.exceptions.exceptions
+    logging: ExceptionLoggingEnum.regular

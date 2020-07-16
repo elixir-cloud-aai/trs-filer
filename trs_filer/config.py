@@ -3,7 +3,7 @@ import os
 from foca.config.config_parser import ConfigParser
 
 # Source the TRS config for defaults
-# flask_config = parse_app_config(config_var='DRS_CONFIG')
+# flask_config = parse_app_config(config_var='TRS_CONFIG')
 
 # # Gunicorn number of workers and threads
 workers = int(os.environ.get('GUNICORN_PROCESSES', '1'))
