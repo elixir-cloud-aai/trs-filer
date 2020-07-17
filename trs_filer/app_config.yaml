@@ -22,7 +22,7 @@ api:
         - path: api/trsSpecs.yaml
           append: null
           add_operation_fields:
-              x-openapi-router-controller: controllers
+              x-openapi-router-controller: ga4gh.trs.server
           connexion:
               strict_validation: True
               validate_responses: True
