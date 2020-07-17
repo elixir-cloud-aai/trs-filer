@@ -11,7 +11,7 @@ services:
             - mongodb
         command: bash -c "cd /app/trs_filer; python app.py"
         ports:
-            - "8888:8080"
+            - "80:8080"
 
     mongodb: 
         image: mongo:3.6

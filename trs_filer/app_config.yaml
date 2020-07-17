@@ -25,7 +25,7 @@ api:
               x-openapi-router-controller: controllers
           connexion:
               strict_validation: True
-              validate_responses: False
+              validate_responses: True
               options:
                   swagger_ui: True
                   serve_spec: True
