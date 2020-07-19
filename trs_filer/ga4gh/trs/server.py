@@ -1,36 +1,41 @@
-def toolsIdGet():
+def toolsIdGet(id):
     return None
 
 
-def toolsIdVersionsGet():
+def toolsIdVersionsGet(id):
     return None
 
 
-def toolsIdVersionsVersionIdGet():
+def toolsIdVersionsVersionIdGet(id, version_id):
     return None
 
 
-def toolsGet():
+def toolsGet(
+    id, alias, toolClass, registry, organization,
+    name, toolname, description, author, checker
+):
     return None
 
 
-def toolsIdVersionsVersionIdTypeDescriptorGet():
+def toolsIdVersionsVersionIdTypeDescriptorGet(type, id, version_id):
     return None
 
 
-def toolsIdVersionsVersionIdTypeDescriptorRelativePathGet():
+def toolsIdVersionsVersionIdTypeDescriptorRelativePathGet(
+    type, id, version_id, relative_path
+):
     return None
 
 
-def toolsIdVersionsVersionIdTypeTestsGet():
+def toolsIdVersionsVersionIdTypeTestsGet(type, id, version_id):
     return None
 
 
-def toolsIdVersionsVersionIdTypeFilesGet():
+def toolsIdVersionsVersionIdTypeFilesGet(type, id, version_id, format):
     return None
 
 
-def toolsIdVersionsVersionIdContainerfileGet():
+def toolsIdVersionsVersionIdContainerfileGet(id, version_id):
     return None
 
 
