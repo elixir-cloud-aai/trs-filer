@@ -19,7 +19,7 @@ db:
 
 api:
     specs:
-        - path: api/trsSpecs.yaml
+        - path: api/20200404.0aa5443.openapi.yaml
           append: null
           add_operation_fields:
               x-openapi-router-controller: ga4gh.trs.server
