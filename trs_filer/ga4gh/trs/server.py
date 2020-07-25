@@ -41,3 +41,7 @@ def toolsIdVersionsVersionIdContainerfileGet(id, version_id):
 
 def toolClassesGet():
     return None
+
+
+def getServiceInfo():
+    return None

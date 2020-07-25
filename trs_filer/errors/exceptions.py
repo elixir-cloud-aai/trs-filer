@@ -2,6 +2,7 @@ from connexion.exceptions import (
     ExtraParameterProblem,
     Forbidden,
     Unauthorized,
+    BadRequestProblem
 )
 
 from werkzeug.exceptions import (
@@ -13,45 +14,68 @@ from werkzeug.exceptions import (
     ServiceUnavailable,
 )
 
+
+class ObjectNotFound(Exception):
+    """Exception raised when object with given object_id is not found"""
+    pass
+
+
+class URLNotFound(Exception):
+    """Exception raised when Access URL for object is not found"""
+    pass
+
+
 exceptions = {
     Exception: {
-        "title": "Internal Server Error",
-        "status": 500,
+        "msg": "An unexpected error occurred",
+        "status_code": '500',
+    },
+    BadRequestProblem: {
+        "msg": "The request is malformed",
+        "status_code": '400',
     },
     BadRequest: {
-        "title": "Bad Request",
-        "status": 400,
+        "msg": "Bad Request",
+        "status_code": '400',
     },
     ExtraParameterProblem: {
-        "title": "Bad Request",
-        "status": 400,
+        "msg": "Bad Request",
+        "status_code": '400',
     },
     Unauthorized: {
-        "title": "Unauthorized",
-        "status": 401,
+        "msg": " The request is unauthorized.",
+        "status_code": '401',
     },
     Forbidden: {
-        "title": "Forbidden",
-        "status": 403,
+        "msg": "The requester is not authorized to perform this action",
+        "status_code": '403',
     },
     NotFound: {
-        "title": "Not Found",
-        "status": 404,
+        "msg": "The requested `DrsObject` wasn't found",
+        "status_code": '404',
+    },
+    ObjectNotFound: {
+        "msg": "The requested `DrsObject` wasn't found",
+        "status_code": '404',
+    },
+    URLNotFound: {
+        "msg": "The requested access URL wasn't found",
+        "status_code": '404',
     },
     InternalServerError: {
-        "title": "Internal Server Error",
-        "status": 500,
+        "msg": "An unexpected error occurred",
+        "status_code": '500',
     },
     BadGateway: {
-        "title": "Bad Gateway",
-        "status": 502,
+        "msg": "Bad Gateway",
+        "status_code": '502',
     },
     ServiceUnavailable: {
-        "title": "Service Unavailable",
-        "status": 502,
+        "msg": "Service Unavailable",
+        "status_code": '502',
     },
     GatewayTimeout: {
-        "title": "Gateway Timeout",
-        "status": 504,
+        "msg": "Gateway Timeout",
+        "status_code": '504',
     }
 }

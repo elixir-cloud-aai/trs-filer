@@ -14,4 +14,7 @@ LABEL maintainer.organisation="ELIXIR Cloud & AAI"
 COPY ./ /app
 
 ## Install app
-RUN cd /app 
+RUN cd /app \
+  && python setup.py develop \
+  && cd / \
+  && chmod g+w /app/trs_filer/api/
