@@ -2,16 +2,12 @@ from connexion.exceptions import (
     ExtraParameterProblem,
     Forbidden,
     Unauthorized,
-    BadRequestProblem
 )
 
 from werkzeug.exceptions import (
     BadRequest,
-    BadGateway,
-    GatewayTimeout,
     InternalServerError,
     NotFound,
-    ServiceUnavailable,
 )
 
 exceptions = {
