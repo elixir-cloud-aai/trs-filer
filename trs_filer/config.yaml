@@ -4,7 +4,7 @@ server:
     debug: True
     environment: development
     testing: False
-    use_reloader: True
+    use_reloader: False
 
 db:
     host: mongodb

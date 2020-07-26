@@ -12,31 +12,31 @@ from werkzeug.exceptions import (
 
 exceptions = {
     Exception: {
-        "message": "Internal Server Error",
+        "message": "An unexpected error occurred.",
         "code": 500,
     },
     BadRequest: {
-        "message": "Bad Request",
+        "message": "The request is malformed.",
         "code": 400,
     },
     ExtraParameterProblem: {
-        "message": "Bad Request",
+        "message": "The request is malformed.",
         "code": 400,
     },
     Unauthorized: {
-        "message": "Unauthorized",
+        "message": "The request is unauthorized.",
         "code": 401,
     },
     Forbidden: {
-        "message": "Forbidden",
+        "message": "The requester is not authorized to perform this action.",
         "code": 403,
     },
     NotFound: {
-        "message": "Not Found",
+        "message": "The requested resource wasn't found.",
         "code": 404,
     },
     InternalServerError: {
-        "message": "Internal Server Error",
+        "message": "An unexpected error occurred.",
         "code": 500,
     }
 }

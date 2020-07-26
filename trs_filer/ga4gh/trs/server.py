@@ -1,18 +1,36 @@
+"""" Controllers for TRS endpoints """
+
+import logging
+from foca.utils.logging import log_traffic
+
+logger = logging.getLogger(__name__)
+
+
+@log_traffic
 def toolsIdGet(id):
-    return None
+    """ List one specific tool, acts as an anchor for self references. """
+    return {}
 
 
+@log_traffic
 def toolsIdVersionsGet(id):
-    return None
+    """ List versions of a tool. """
+    return {}
 
 
+@log_traffic
 def toolsIdVersionsVersionIdGet(
     id,
     version_id,
 ):
-    return None
+    """
+    List one specific tool version, acts
+    as an anchor for self references.
+    """
+    return {}
 
 
+@log_traffic
 def toolsGet(
     id,
     alias,
@@ -25,53 +43,68 @@ def toolsGet(
     author,
     checker,
 ):
-    return None
+    """ List all tools. """
+    return {}
 
 
+@log_traffic
 def toolsIdVersionsVersionIdTypeDescriptorGet(
     type,
     id,
     version_id,
 ):
-    return None
+    """ Get the tool descriptor for the specified tool. """
+    return {}
 
 
+@log_traffic
 def toolsIdVersionsVersionIdTypeDescriptorRelativePathGet(
     type,
     id,
     version_id,
     relative_path,
 ):
-    return None
+    """ Get additional tool descriptor files relative to the main file. """
+    return {}
 
 
+@log_traffic
 def toolsIdVersionsVersionIdTypeTestsGet(
     type,
     id,
     version_id,
 ):
-    return None
+    """ Get a list of test JSONs. """
+    return {}
 
 
+@log_traffic
 def toolsIdVersionsVersionIdTypeFilesGet(
     type,
     id,
     version_id,
     format,
 ):
-    return None
+    """ Get a list of objects that contain the relative path and file type. """
+    return {}
 
 
+@log_traffic
 def toolsIdVersionsVersionIdContainerfileGet(
     id,
     version_id
 ):
-    return None
+    """ Get the container specification(s) for the specified image. """
+    return {}
 
 
+@log_traffic
 def toolClassesGet():
-    return None
+    """ List all tool types. """
+    return {}
 
 
+@log_traffic
 def getServiceInfo():
-    return None
+    """ Show information about this service. """
+    return {}
