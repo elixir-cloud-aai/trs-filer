@@ -9,8 +9,7 @@ LABEL software.license="https://spdx.org/licenses/Apache-2.0"
 LABEL maintainer="nagorikushagra9@gmail.com"
 LABEL maintainer.organisation="ELIXIR Cloud & AAI"
 
-
-## Copy remaining app files
+## Copy app files
 COPY ./ /app
 
 ## Install app
