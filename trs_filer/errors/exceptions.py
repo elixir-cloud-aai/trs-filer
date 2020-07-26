@@ -16,31 +16,31 @@ from werkzeug.exceptions import (
 
 exceptions = {
     Exception: {
-        "title": "Internal Server Error",
-        "status": 500,
+        "message": "Internal Server Error",
+        "code": 500,
     },
     BadRequest: {
-        "title": "Bad Request",
-        "status": 400,
+        "message": "Bad Request",
+        "code": 400,
     },
     ExtraParameterProblem: {
-        "title": "Bad Request",
-        "status": 400,
+        "message": "Bad Request",
+        "code": 400,
     },
     Unauthorized: {
-        "title": "Unauthorized",
-        "status": 401,
+        "message": "Unauthorized",
+        "code": 401,
     },
     Forbidden: {
-        "title": "Forbidden",
-        "status": 403,
+        "message": "Forbidden",
+        "code": 403,
     },
     NotFound: {
-        "title": "Not Found",
-        "status": 404,
+        "message": "Not Found",
+        "code": 404,
     },
     InternalServerError: {
-        "title": "Internal Server Error",
-        "status": 500,
+        "message": "Internal Server Error",
+        "code": 500,
     }
 }

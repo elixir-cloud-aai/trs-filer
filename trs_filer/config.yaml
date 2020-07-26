@@ -49,6 +49,6 @@ log:
         handlers: [console]
 
 exceptions:
-    required_members: [['msg'], ['status_code']]
-    status_member: ['status_code']
+    required_members: [['message'], ['code']]
+    status_member: ['code']
     exceptions: trs_filer.errors.exceptions.exceptions
