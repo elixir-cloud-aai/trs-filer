@@ -1,6 +1,7 @@
-"""" Controllers for TRS endpoints """
+""""Controllers for TRS endpoints."""
 
 import logging
+
 from foca.utils.logging import log_traffic
 
 logger = logging.getLogger(__name__)

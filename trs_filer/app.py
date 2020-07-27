@@ -1,7 +1,7 @@
 import logging
 import os
-from foca.foca import foca
 
+from foca.foca import foca
 
 logger = logging.getLogger(__name__)
 
