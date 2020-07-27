@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 @log_traffic
 def toolsIdGet(id):
     """ List one specific tool, acts as an anchor for self references. """
-    return []
+    return {}
 
 
 @log_traffic
@@ -27,7 +27,7 @@ def toolsIdVersionsVersionIdGet(
     List one specific tool version, acts
     as an anchor for self references.
     """
-    return []
+    return {}
 
 
 @log_traffic
@@ -54,7 +54,7 @@ def toolsIdVersionsVersionIdTypeDescriptorGet(
     version_id,
 ):
     """ Get the tool descriptor for the specified tool. """
-    return []
+    return {}
 
 
 @log_traffic
@@ -65,7 +65,7 @@ def toolsIdVersionsVersionIdTypeDescriptorRelativePathGet(
     relative_path,
 ):
     """ Get additional tool descriptor files relative to the main file. """
-    return []
+    return {}
 
 
 @log_traffic
@@ -107,4 +107,4 @@ def toolClassesGet():
 @log_traffic
 def getServiceInfo():
     """ Show information about this service. """
-    return []
+    return {}
