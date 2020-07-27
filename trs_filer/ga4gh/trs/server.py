@@ -9,13 +9,13 @@ logger = logging.getLogger(__name__)
 @log_traffic
 def toolsIdGet(id):
     """ List one specific tool, acts as an anchor for self references. """
-    return {}
+    return []
 
 
 @log_traffic
 def toolsIdVersionsGet(id):
     """ List versions of a tool. """
-    return {}
+    return []
 
 
 @log_traffic
@@ -27,7 +27,7 @@ def toolsIdVersionsVersionIdGet(
     List one specific tool version, acts
     as an anchor for self references.
     """
-    return {}
+    return []
 
 
 @log_traffic
@@ -44,7 +44,7 @@ def toolsGet(
     checker,
 ):
     """ List all tools. """
-    return {}
+    return []
 
 
 @log_traffic
@@ -54,7 +54,7 @@ def toolsIdVersionsVersionIdTypeDescriptorGet(
     version_id,
 ):
     """ Get the tool descriptor for the specified tool. """
-    return {}
+    return []
 
 
 @log_traffic
@@ -65,7 +65,7 @@ def toolsIdVersionsVersionIdTypeDescriptorRelativePathGet(
     relative_path,
 ):
     """ Get additional tool descriptor files relative to the main file. """
-    return {}
+    return []
 
 
 @log_traffic
@@ -75,7 +75,7 @@ def toolsIdVersionsVersionIdTypeTestsGet(
     version_id,
 ):
     """ Get a list of test JSONs. """
-    return {}
+    return []
 
 
 @log_traffic
@@ -86,7 +86,7 @@ def toolsIdVersionsVersionIdTypeFilesGet(
     format,
 ):
     """ Get a list of objects that contain the relative path and file type. """
-    return {}
+    return []
 
 
 @log_traffic
@@ -95,16 +95,16 @@ def toolsIdVersionsVersionIdContainerfileGet(
     version_id
 ):
     """ Get the container specification(s) for the specified image. """
-    return {}
+    return []
 
 
 @log_traffic
 def toolClassesGet():
     """ List all tool types. """
-    return {}
+    return []
 
 
 @log_traffic
 def getServiceInfo():
     """ Show information about this service. """
-    return {}
+    return []

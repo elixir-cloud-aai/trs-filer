@@ -9,8 +9,8 @@ info:
   contact:
     name: 'GA4GH Discovery Networks Team'
     email: 'ga4gh-discovery-networks@ga4gh.org'
-security:
-  - bearerAuth: []
+# security:
+#   - bearerAuth: []
 paths:
   /service-info:
     get:
@@ -26,11 +26,11 @@ paths:
               schema:
                 $ref: '#/components/schemas/Service'
 components:
-  securitySchemes:
-    bearerAuth:
-      type: http
-      scheme: bearer
-      bearerFormat: JWT
+  # securitySchemes:
+  #   bearerAuth:
+  #     type: http
+  #     scheme: bearer
+  #     bearerFormat: JWT
   schemas:
     Service:
       description: 'GA4GH service'
