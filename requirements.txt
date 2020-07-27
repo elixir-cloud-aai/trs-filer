@@ -1,5 +1,2 @@
-flake8==3.7.9
-Flask==1.1.2
-foca==0.1.0
-pylint==2.4.4
-PyYAML==5.3
+foca==0.4.0
+setuptools==46.4.0

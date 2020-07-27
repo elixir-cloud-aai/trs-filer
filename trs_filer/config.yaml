@@ -1,0 +1,54 @@
+server:
+    host: '0.0.0.0'
+    port: 8080
+    debug: True
+    environment: development
+    testing: False
+    use_reloader: False
+
+db:
+    host: mongodb
+    port: 27017
+    dbs:
+        trsStore:
+            collections:
+                objects:
+                    indexes: null
+
+api:
+    specs:
+        - path:
+            - api/20200404.0aa5443.openapi.yaml
+            - api/20200131.11d2c12.service-info.yaml
+          append: null
+          add_operation_fields:
+              x-openapi-router-controller: ga4gh.trs.server
+          connexion:
+              strict_validation: True
+              validate_responses: True
+              options:
+                  swagger_ui: True
+                  serve_spec: True
+
+log:
+    version: 1
+    disable_existing_loggers: False
+    formatters:
+        standard:
+            class: logging.Formatter
+            style: "{"
+            format: "[{asctime}: {levelname:<8}] {message} [{name}]"
+    handlers:
+        console:
+            class: logging.StreamHandler
+            level: 20
+            formatter: standard
+            stream: ext://sys.stderr
+    root:
+        level: 10
+        handlers: [console]
+
+exceptions:
+    required_members: [['message'], ['code']]
+    status_member: ['code']
+    exceptions: trs_filer.errors.exceptions.exceptions
