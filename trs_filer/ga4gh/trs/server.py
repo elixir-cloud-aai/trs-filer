@@ -109,3 +109,28 @@ def toolClassesGet():
 def getServiceInfo():
     """ Show information about this service. """
     return {}
+
+
+@log_traffic
+def addTool(tool):
+    return {}
+
+
+@log_traffic
+def addFileWrapper(filewrapper):
+    return {}
+
+
+@log_traffic
+def addToolFiles(toolfile):
+    return []
+
+
+@log_traffic
+def addToolClasses(toolclass):
+    return []
+
+
+@log_traffic
+def addToolVersion(toolversion):
+    return []
