@@ -95,6 +95,10 @@ components:
           description: The type (or types) of descriptors available.
           items:
             $ref: "#/components/schemas/DescriptorType"
+        meta_version:
+          type: string
+          description: The version of this tool version in the registry. Iterates when
+            fields like the description, author, etc. are updated.
         verified_source:
           type: array
           items:
