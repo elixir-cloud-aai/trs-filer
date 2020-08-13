@@ -1,8 +1,12 @@
 """"Controllers for TRS endpoints."""
 
 import logging
-
+from typing import Dict
+from flask import (current_app, request)
 from foca.utils.logging import log_traffic
+from trs_filer.ga4gh.trs.endpoints.registerObjects import (
+    CreateToolPostObject,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -112,5 +116,15 @@ def getServiceInfo():
 
 
 @log_traffic
-def addTool(tool):
-    return {}
+def addTool() -> Dict:
+    tool_create_instance = CreateToolPostObject(request)
+    tool = tool_create_instance.create_object()
+    ret_tool = {
+        "aliases": tool['aliases'],
+        "organization": tool['organization'],
+        "name": tool['name'],
+        "description": tool['description'],
+        "checker_url": tool['checker_url'],
+        "versions": tool['versions'],
+    }
+    return ret_tool
