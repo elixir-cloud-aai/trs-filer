@@ -2,7 +2,7 @@
 
 import logging
 from typing import Dict
-from flask import (current_app, request)
+from flask import (request)
 from foca.utils.logging import log_traffic
 from trs_filer.ga4gh.trs.endpoints.registerObjects import (
     CreateToolPostObject,

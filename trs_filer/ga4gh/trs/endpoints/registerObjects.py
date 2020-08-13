@@ -31,7 +31,7 @@ class CreateToolPostObject:
             "id": "123456",
             "name": "ToolClass"
         }
-    
+
     def create_object(self) -> Dict:
         """
         Add new tool post objects to TRS Registry.
@@ -44,8 +44,11 @@ class CreateToolPostObject:
         """
 
         # set checker variable
-        self.tool_data['has_checker'] = True if "checker_url" in self.tool_data else False
-        
+        if "checker_url" in self.tool_data:
+            self.tool_data['has_checker'] = True
+        else:
+            self.tool_data['has_checker'] = False
+
         # set tool class (proper method needs to be added)
         self.create_tool_class()
 
@@ -54,9 +57,11 @@ class CreateToolPostObject:
         # set unique id and url and save object
         while True:
             try:
-                generated_object_id = self.create_id(self.id_charset, self.id_length)
+                generated_object_id = self.\
+                    create_id(self.id_charset, self.id_length)
                 self.tool_data['id'] = generated_object_id
-                self.tool_data['url'] = f"{self.host_name}/tools/{self.tool_data['id']}"
+                self.tool_data['url'] = \
+                    f"{self.host_name}/tools/{self.tool_data['id']}"
                 self.db_collection.insert_one(self.tool_data)
             except DuplicateKeyError:
                 continue
@@ -64,5 +69,5 @@ class CreateToolPostObject:
                 raise e
             logger.info(f"object with id: {self.tool_data['id']} created.")
             break
-        
+
         return self.tool_data
