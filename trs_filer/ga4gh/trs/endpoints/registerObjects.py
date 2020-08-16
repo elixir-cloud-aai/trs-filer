@@ -23,11 +23,11 @@ class CreateToolPostObject:
         self.host_name = current_app.config['FOCA'].server.host
 
     def create_id(self, charset, length) -> str:
-        """Creates random ID."""
+        """ Creates random ID. """
         return ''.join(choice(charset) for __ in range(length))
 
     def create_tool_class(self):
-        """Create tool class."""
+        """ Create tool class. """
         self.tool_data['toolclass'] = {
             "description": "Temporary tool class.",
             "id": "123456",
@@ -35,13 +35,7 @@ class CreateToolPostObject:
         }
 
     def create_object(self) -> Dict:
-        """
-        Add new tool post objects to TRS Registry.
-        Args:
-            request: API request object.
-        Returns:
-            A unique identifier for the object.
-        """
+        """ Add new tool post objects to TRS Registry. """
 
         # set checker variable
         if "checker_url" in self.tool_data:
@@ -74,6 +68,7 @@ class CreateToolPostObject:
         return self.tool_data
 
     def get_tool_object_data(self):
+        """ Create and get required fields from tool object. """
         tool_data = self.create_object()
         return {
             "aliases": tool_data['aliases'],
