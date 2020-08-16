@@ -13,13 +13,31 @@ paths:
               $ref: '#/components/schemas/ToolPost'
       responses:
         '200':
-          description: tool response
+          description: The `TrsObject` was successfully created.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ToolPost'
-        default:
-          description: unexpected error
+        '400':
+          description: The request is malformed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: The request is unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: The requester is not authorized to perform this action.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: An unexpected error occurred.
           content:
             application/json:
               schema:
