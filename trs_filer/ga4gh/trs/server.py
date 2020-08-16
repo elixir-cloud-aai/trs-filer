@@ -1,14 +1,13 @@
 """"Controllers for TRS endpoints."""
 
-import logging
 from typing import Dict
+
 from flask import request
 from foca.utils.logging import log_traffic
+
 from trs_filer.ga4gh.trs.endpoints.registerObjects import (
     CreateToolPostObject,
 )
-
-logger = logging.getLogger(__name__)
 
 
 @log_traffic

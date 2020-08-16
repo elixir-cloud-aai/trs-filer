@@ -2,9 +2,11 @@
 
 from random import choice
 from typing import Dict
-from trs_filer.app import logger
+
 from flask import (current_app, request)
 from pymongo.errors import DuplicateKeyError
+
+from trs_filer.app import logger
 
 
 class CreateToolPostObject:
