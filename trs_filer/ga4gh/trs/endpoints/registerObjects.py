@@ -14,10 +14,12 @@ class CreateToolPostObject:
             collections['objects'].client
         )
         self.tool_data = request.json
-        self.id_charset = current_app.config['FOCA'].\
-            endpoints['objects']['id_charset']
-        self.id_length = current_app.config['FOCA'].\
-            endpoints['objects']['id_length']
+        self.id_charset = (
+            current_app.config['FOCA'].endpoints['tools']['id_charset']
+        )
+        self.id_length = (
+            current_app.config['FOCA'].endpoints['tools']['id_length']
+        )
         self.host_name = current_app.config['FOCA'].server.host
 
     def create_id(self, charset, length) -> str:
@@ -35,10 +37,8 @@ class CreateToolPostObject:
     def create_object(self) -> Dict:
         """
         Add new tool post objects to TRS Registry.
-
         Args:
             request: API request object.
-
         Returns:
             A unique identifier for the object.
         """
@@ -56,18 +56,30 @@ class CreateToolPostObject:
 
         # set unique id and url and save object
         while True:
+            generated_object_id = self.create_id(
+                charset=self.id_charset,
+                length=self.id_length
+            )
+            self.tool_data['id'] = generated_object_id
+            self.tool_data['url'] = (
+                f"{self.host_name}/tools/{self.tool_data['id']}"
+            )
             try:
-                generated_object_id = self.\
-                    create_id(self.id_charset, self.id_length)
-                self.tool_data['id'] = generated_object_id
-                self.tool_data['url'] = \
-                    f"{self.host_name}/tools/{self.tool_data['id']}"
                 self.db_collection.insert_one(self.tool_data)
             except DuplicateKeyError:
                 continue
-            except Exception as e:
-                raise e
-            logger.info(f"object with id: {self.tool_data['id']} created.")
+            logger.info(f"Tool with id: {self.tool_data['id']} created.")
             break
 
         return self.tool_data
+
+    def get_tool_object_data(self):
+        tool_data = self.create_object()
+        return {
+            "aliases": tool_data['aliases'],
+            "organization": tool_data['organization'],
+            "name": tool_data['name'],
+            "description": tool_data['description'],
+            "checker_url": tool_data['checker_url'],
+            "versions": tool_data['versions'],
+        }

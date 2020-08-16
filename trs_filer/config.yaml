@@ -59,6 +59,6 @@ exceptions:
     exceptions: trs_filer.errors.exceptions.exceptions
 
 endpoints:
-    objects:
+    tools:
         id_charset: string.ascii_letters + string.digits + ".-_~"
         id_length: 6
