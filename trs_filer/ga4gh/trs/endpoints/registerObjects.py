@@ -1,7 +1,7 @@
 """Controller for adding new objects."""
 
 from random import choice
-from typing import Dict
+from typing import (Dict, List)
 import string
 
 from flask import (current_app, request)
@@ -59,6 +59,42 @@ class CreateToolPostObject:
             "name": "ToolClass"
         }
 
+    def get_latest_meta_version(
+        self,
+        lst_versions: List[str]
+    ) -> str:
+        """Sort and give the latest version from version list.
+        Args:
+            lst_versions: List of versions of the tool.
+        Returns:
+            Latest version string from the list.
+        """
+        lst_versions.sort(key=lambda s: list(map(int, s.split('.'))))
+        return lst_versions[-1]
+
+    def update_meta_version(self) -> None:
+        """Sets the latest vesion as meta_version if not specified.
+        """
+        version_lst = self.tool_data.get("versions", None)
+        current_meta = self.tool_data.get("meta_version", None)
+
+        if current_meta:
+            self.tool_data["meta_version"] = current_meta
+        elif version_lst:
+            lst_meta_versions = []
+            for sub_version in version_lst:
+                sub_version_meta = sub_version.get("meta_version", None)
+                if sub_version_meta:
+                    lst_meta_versions.append(sub_version_meta)
+            if lst_meta_versions:
+                self.tool_data["meta_version"] = self.get_latest_meta_version(
+                    lst_meta_versions
+                )
+            else:
+                self.tool_data["meta_version"] = ""
+        else:
+            self.tool_data["meta_version"] = ""
+
     def create_object(self) -> Dict:
         """Register tool with TRS.
         Returns:
@@ -77,6 +113,7 @@ class CreateToolPostObject:
         self.create_tool_class()
 
         # set meta_version method
+        self.update_meta_version()
 
         # set unique id and url and save object
         while True:
