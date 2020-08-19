@@ -67,10 +67,15 @@ class CreateToolPostObject:
         Args:
             lst_versions: List of versions of the tool.
         Returns:
-            Latest version string from the list.
+            Latest version string from the list
+            if semantic versioning else empty string.
         """
-        lst_versions.sort(key=lambda s: list(map(int, s.split('.'))))
-        return lst_versions[-1]
+        try:
+            lst_versions.sort(key=lambda s: list(map(int, s.split('.'))))
+            return lst_versions[-1]
+        except Exception as e:
+            logger.info("Non semantic versioning", e)
+            return ""
 
     def update_meta_version(self) -> None:
         """Sets the latest vesion as meta_version if not specified.
