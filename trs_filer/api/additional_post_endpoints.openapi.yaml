@@ -17,7 +17,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ToolPost'
+                type: string
         '400':
           description: The request is malformed.
           content:

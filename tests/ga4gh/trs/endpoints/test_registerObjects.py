@@ -76,38 +76,7 @@ MOCK_REQUEST_DATA_1 = {
         }
     ]
 }
-MOCK_RESPONSE_1 = {
-    "aliases": [
-        "630d31c3-381e-488d-b639-ce5d047a0142",
-        "dockstore.org:630d31c3-381e-488d-b639-ce5d047a0142",
-        "bio.tools:630d31c3-381e-488d-b639-ce5d047a0142"
-    ],
-    "checker_url": "string",
-    "description": "string",
-    "name": "string",
-    "organization": "string",
-    "versions": [
-        {
-            "author": [
-                "string"
-            ],
-            "descriptor_type": [
-                "CWL"
-            ],
-            "included_apps": [
-                "https://bio.tools/tool/mytum.de/SNAP2/1",
-                "https://bio.tools/bioexcel_seqqc"
-            ],
-            "is_production": True,
-            "meta_version": "string",
-            "name": "string",
-            "signed": True,
-            "verified_source": [
-                "string"
-            ]
-        }
-    ]
-}
+
 
 MOCK_REQUEST_DATA_2 = {
     "aliases": [
@@ -445,9 +414,9 @@ def test_create_tool_duplicate_key():
     request_data = Dict()
     request_data.json = MOCK_REQUEST_DATA_1
     with app.app_context():
-        assert (
+        assert isinstance(
             CreateToolPostObject(request_data)
-            .get_tool_object_data() == MOCK_RESPONSE_1
+            .get_tool_object_data(), str
         )
 
 
@@ -466,7 +435,7 @@ def test_get_tool_object_data():
     request_data.json = MOCK_REQUEST_DATA_1
 
     with app.app_context():
-        assert (
+        assert isinstance(
             CreateToolPostObject(request_data)
-            .get_tool_object_data() == MOCK_RESPONSE_1
+            .get_tool_object_data(), str
         )

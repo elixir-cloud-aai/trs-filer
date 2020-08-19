@@ -145,11 +145,4 @@ class CreateToolPostObject:
             Required fields from tool object.
         """
         tool_data = self.create_object()
-        return {
-            "aliases": tool_data['aliases'],
-            "organization": tool_data['organization'],
-            "name": tool_data['name'],
-            "description": tool_data['description'],
-            "checker_url": tool_data['checker_url'],
-            "versions": tool_data['versions'],
-        }
+        return tool_data['id']
