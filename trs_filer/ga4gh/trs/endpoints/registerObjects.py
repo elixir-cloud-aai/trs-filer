@@ -15,8 +15,10 @@ class CreateToolPostObject:
 
     def __init__(self, request: request) -> None:
         """ Initialise the ToolPost object creation.
+
         Args:
             request: API request object.
+
         Returns:
             None type.
         """
@@ -39,9 +41,11 @@ class CreateToolPostObject:
         length: int = 6
     ) -> str:
         """Generate random string based on allowed set of characters.
+
         Args:
             charset: String of allowed characters.
             length: Length of returned string.
+
         Returns:
             Random string of specified length and composed of defined set of
             allowed characters.
@@ -50,6 +54,7 @@ class CreateToolPostObject:
 
     def create_tool_class(self) -> Dict:
         """Create tool class.
+
         Returns:
             Generated tool class for the initialised tool object.
         """
@@ -64,8 +69,10 @@ class CreateToolPostObject:
         lst_versions: List[str]
     ) -> str:
         """Sort and give the latest version from version list.
+
         Args:
             lst_versions: List of versions of the tool.
+
         Returns:
             Latest version string from the list
             if semantic versioning else empty string.
@@ -102,8 +109,10 @@ class CreateToolPostObject:
 
     def create_object(self) -> Dict:
         """Register tool with TRS.
+
         Returns:
             Tool object generated.
+
         Raises:
             DuplicateKeyError is duplicated key found.
         """
@@ -141,6 +150,7 @@ class CreateToolPostObject:
 
     def get_tool_object_data(self) -> Dict:
         """Create and get required fields from tool object.
+
         Returns:
             Required fields from tool object.
         """

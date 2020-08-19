@@ -86,7 +86,10 @@ components:
         meta_version:
           type: string
           description: The version of this tool in the registry. Iterates when fields like
-            the description, author, etc. are updated.
+            the description, author, etc. are updated. 
+            
+            Unless provided, it is attempted to parse the latest version from the meta_version
+            properties of the available versions. Unset if the latest version cannot be determined.
         versions:
           description: A list of versions for this tool.
           type: array
