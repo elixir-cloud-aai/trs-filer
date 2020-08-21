@@ -36,12 +36,6 @@ ENDPOINT_CONFIG = {
         "id_length": 6
     }
 }
-INVALID_ENDPOINT_CONFIG = {
-    "tools": {
-        "id_charset": 'string.digits',
-        "id_length": 6
-    }
-}
 
 MOCK_REQUEST_DATA_1 = {
     "aliases": [

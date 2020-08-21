@@ -1,8 +1,9 @@
 """Controller for adding new objects."""
 
-from random import choice
-from typing import (Dict, List)
 import string
+from random import choice
+from packaging.version import (Version, InvalidVersion)
+from typing import (Dict, List)
 
 from flask import (current_app, request)
 from pymongo.errors import DuplicateKeyError
@@ -78,10 +79,13 @@ class CreateToolPostObject:
             if semantic versioning else empty string.
         """
         try:
-            lst_versions.sort(key=lambda s: list(map(int, s.split('.'))))
-            return lst_versions[-1]
-        except Exception as e:
-            logger.info("Non semantic versioning", e)
+            lst_versions_tuple = [
+                (Version(v), v) for v in lst_versions
+            ]
+            lst_versions_tuple.sort()
+            return lst_versions_tuple[-1][1]
+        except InvalidVersion:
+            logger.warning("Invalid Versioning.")
             return ""
 
     def update_meta_version(self) -> None:
