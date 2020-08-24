@@ -18,6 +18,13 @@ from trs_filer.ga4gh.trs.server import (
     toolsIdVersionsVersionIdTypeDescriptorGet,
     toolsIdVersionsVersionIdTypeDescriptorRelativePathGet,
 )
+from trs_filer.errors.exceptions import (
+    NotFound,
+    Forbidden,
+    BadRequest,
+    Unauthorized,
+    InternalServerError,
+)
 
 TEMP_ID = "id"
 TEMP_VERSION_ID = "version_id"
@@ -200,3 +207,12 @@ def test_addTool():
     with app.test_request_context(json=MOCK_REQUEST_DATA_1):
         res = addTool.__wrapped__()
         assert isinstance(res, str)
+
+
+def test_errors():
+    """ Test for exception raised. """
+    assert NotFound.code == 404
+    assert Forbidden.code == 403
+    assert BadRequest.code == 400
+    assert Unauthorized.code == 401
+    assert InternalServerError.code == 500
