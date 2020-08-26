@@ -60,5 +60,5 @@ exceptions:
 
 endpoints:
     tools:
-        id_charset: string.ascii_letters + string.digits + ".-_~"
+        id_charset: string.ascii_uppercase + string.digits
         id_length: 6

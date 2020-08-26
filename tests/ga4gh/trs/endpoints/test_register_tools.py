@@ -8,8 +8,8 @@ from foca.models.config import Config, MongoConfig
 from unittest.mock import MagicMock
 from addict import Dict
 
-from trs_filer.ga4gh.trs.endpoints.registerObjects import (
-    CreateToolPostObject
+from trs_filer.ga4gh.trs.endpoints.register_tools import (
+    RegisterObject
 )
 
 INDEX_CONFIG = {
@@ -30,9 +30,15 @@ MONGO_CONFIG = {
         'trsStore': DB_CONFIG,
     },
 }
-ENDPOINT_CONFIG = {
+ENDPOINT_CONFIG_1 = {
     "tools": {
         "id_charset": 'string.digits',
+        "id_length": 6
+    }
+}
+ENDPOINT_CONFIG_2 = {
+    "tools": {
+        "id_charset": '0123456789',
         "id_length": 6
     }
 }
@@ -247,17 +253,30 @@ SAMPLE_TOOL_CLASS = {
 SAMPLE_VERSION_LIST = ["1.0.0", "1.2.0", "2.0.0"]
 
 
-def test_create_id():
-    """ Test for create_id method. """
+def test_generate_id():
+    """Test for generate_id method."""
     app = Flask(__name__)
     app.config['FOCA'] = Config(
         db=MongoConfig(**MONGO_CONFIG),
-        endpoints=ENDPOINT_CONFIG
+        endpoints=ENDPOINT_CONFIG_1
     )
     request_data = Dict()
     request_data.json = MOCK_REQUEST_DATA_1
     with app.app_context():
-        assert isinstance(CreateToolPostObject(request_data).create_id(), str)
+        assert isinstance(RegisterObject(request_data).generate_id(), str)
+
+
+def test_generate_id_no_expression():
+    """Test for generate_id method, raw charset string supplied."""
+    app = Flask(__name__)
+    app.config['FOCA'] = Config(
+        db=MongoConfig(**MONGO_CONFIG),
+        endpoints=ENDPOINT_CONFIG_2
+    )
+    request_data = Dict()
+    request_data.json = MOCK_REQUEST_DATA_1
+    with app.app_context():
+        assert isinstance(RegisterObject(request_data).generate_id(), str)
 
 
 def test_latest_version_return():
@@ -265,14 +284,14 @@ def test_latest_version_return():
     app = Flask(__name__)
     app.config['FOCA'] = Config(
         db=MongoConfig(**MONGO_CONFIG),
-        endpoints=ENDPOINT_CONFIG
+        endpoints=ENDPOINT_CONFIG_1
     )
     request_data = Dict()
     request_data.json = MOCK_REQUEST_DATA_1
 
     with app.app_context():
         assert (
-            CreateToolPostObject(request_data)
+            RegisterObject(request_data)
             .get_latest_meta_version(SAMPLE_VERSION_LIST) == "2.0.0"
         )
 
@@ -284,7 +303,7 @@ def test_create_tool_object_meta_version():
     app = Flask(__name__)
     app.config['FOCA'] = Config(
         db=MongoConfig(**MONGO_CONFIG),
-        endpoints=ENDPOINT_CONFIG
+        endpoints=ENDPOINT_CONFIG_1
     )
 
     app.config['FOCA'].db.dbs['trsStore'] \
@@ -295,8 +314,8 @@ def test_create_tool_object_meta_version():
 
     with app.app_context():
         assert (
-            CreateToolPostObject(request_data)
-            .create_object().get("meta_version") == "0.0.0"
+            RegisterObject(request_data)
+            .register_object().get("meta_version") == "0.0.0"
         )
 
 
@@ -307,7 +326,7 @@ def test_create_tool_object_meta_version_sub_version_based():
     app = Flask(__name__)
     app.config['FOCA'] = Config(
         db=MongoConfig(**MONGO_CONFIG),
-        endpoints=ENDPOINT_CONFIG
+        endpoints=ENDPOINT_CONFIG_1
     )
 
     app.config['FOCA'].db.dbs['trsStore'] \
@@ -318,8 +337,8 @@ def test_create_tool_object_meta_version_sub_version_based():
 
     with app.app_context():
         assert (
-            CreateToolPostObject(request_data)
-            .create_object().get("meta_version") == "1.1.0"
+            RegisterObject(request_data)
+            .register_object().get("meta_version") == "1.1.0"
         )
 
 
@@ -330,7 +349,7 @@ def test_create_tool_no_meta_version():
     app = Flask(__name__)
     app.config['FOCA'] = Config(
         db=MongoConfig(**MONGO_CONFIG),
-        endpoints=ENDPOINT_CONFIG
+        endpoints=ENDPOINT_CONFIG_1
     )
 
     app.config['FOCA'].db.dbs['trsStore'] \
@@ -341,8 +360,8 @@ def test_create_tool_no_meta_version():
 
     with app.app_context():
         assert (
-            CreateToolPostObject(request_data)
-            .create_object().get("meta_version") == ""
+            RegisterObject(request_data)
+            .register_object().get("meta_version") == ""
         )
 
 
@@ -353,7 +372,7 @@ def test_create_tool_non_semantic_versions():
     app = Flask(__name__)
     app.config['FOCA'] = Config(
         db=MongoConfig(**MONGO_CONFIG),
-        endpoints=ENDPOINT_CONFIG
+        endpoints=ENDPOINT_CONFIG_1
     )
 
     app.config['FOCA'].db.dbs['trsStore'] \
@@ -364,8 +383,8 @@ def test_create_tool_non_semantic_versions():
 
     with app.app_context():
         assert (
-            CreateToolPostObject(request_data)
-            .create_object().get("meta_version") == ""
+            RegisterObject(request_data)
+            .register_object().get("meta_version") == ""
         )
 
 
@@ -376,7 +395,7 @@ def test_create_tool_versions_checker_absence():
     app = Flask(__name__)
     app.config['FOCA'] = Config(
         db=MongoConfig(**MONGO_CONFIG),
-        endpoints=ENDPOINT_CONFIG
+        endpoints=ENDPOINT_CONFIG_1
     )
 
     app.config['FOCA'].db.dbs['trsStore'] \
@@ -386,7 +405,7 @@ def test_create_tool_versions_checker_absence():
     request_data.json = MOCK_REQUEST_DATA_5
 
     with app.app_context():
-        tool_data = CreateToolPostObject(request_data).create_object()
+        tool_data = RegisterObject(request_data).register_object()
         assert (tool_data.get("meta_version") == "")
         assert (tool_data.get("has_checker") is False)
 
@@ -396,7 +415,7 @@ def test_create_tool_duplicate_key():
     app = Flask(__name__)
     app.config['FOCA'] = Config(
         db=MongoConfig(**MONGO_CONFIG),
-        endpoints=ENDPOINT_CONFIG
+        endpoints=ENDPOINT_CONFIG_1
     )
 
     app.config['FOCA'].db.dbs['trsStore'] \
@@ -409,27 +428,6 @@ def test_create_tool_duplicate_key():
     request_data.json = MOCK_REQUEST_DATA_1
     with app.app_context():
         assert isinstance(
-            CreateToolPostObject(request_data)
-            .get_tool_object_data(), str
-        )
-
-
-def test_get_tool_object_data():
-    """ Test for valid object creation and access. """
-    app = Flask(__name__)
-    app.config['FOCA'] = Config(
-        db=MongoConfig(**MONGO_CONFIG),
-        endpoints=ENDPOINT_CONFIG
-    )
-
-    app.config['FOCA'].db.dbs['trsStore'] \
-        .collections['objects'].client = mongomock.MongoClient().db.collection
-
-    request_data = Dict()
-    request_data.json = MOCK_REQUEST_DATA_1
-
-    with app.app_context():
-        assert isinstance(
-            CreateToolPostObject(request_data)
-            .get_tool_object_data(), str
+            RegisterObject(request_data)
+            .register_object()['id'], str
         )

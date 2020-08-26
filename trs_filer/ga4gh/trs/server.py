@@ -5,8 +5,8 @@ from typing import (Optional, Dict, List)
 from flask import request
 from foca.utils.logging import log_traffic
 
-from trs_filer.ga4gh.trs.endpoints.registerObjects import (
-    CreateToolPostObject,
+from trs_filer.ga4gh.trs.endpoints.register_tools import (
+    RegisterObject,
 )
 
 
@@ -121,5 +121,6 @@ def getServiceInfo() -> Dict:
 @log_traffic
 def addTool() -> Dict:
     """ Add new tool object to the database. """
-    tool_create_instance = CreateToolPostObject(request)
-    return tool_create_instance.get_tool_object_data()
+    tool_creator = RegisterObject(request)
+    tool = tool_creator.register_object()
+    return tool['id']
