@@ -1,0 +1,144 @@
+paths:
+  "/tools/":
+    post:
+      description: Create a tool object.
+      operationId: addTool
+      requestBody:
+        description: Tool to add to the TRS store
+        required: true
+        content:
+          application/json:
+            schema:
+              x-body-name: tool
+              $ref: '#/components/schemas/ToolPost'
+      responses:
+        '200':
+          description: The `TrsObject` was successfully created.
+          content:
+            application/json:
+              schema:
+                type: string
+        '400':
+          description: The request is malformed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: The request is unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: The requester is not authorized to perform this action.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: An unexpected error occurred.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+components:
+  schemas:
+    ToolPost:
+      type: object
+      description: A tool (or described tool) is defined as a tuple of a descriptor
+        file (which potentially consists of multiple files), a set of container
+        images, and a set of instructions for creating those images.
+      required:
+        - organization
+        - versions
+      properties:
+        aliases:
+          type: array
+          items:
+            type: string
+          example:
+            - 630d31c3-381e-488d-b639-ce5d047a0142
+            - dockstore.org:630d31c3-381e-488d-b639-ce5d047a0142
+            - bio.tools:630d31c3-381e-488d-b639-ce5d047a0142
+          description: >-
+            Support for this parameter is optional for tool registries that
+            support aliases.
+
+            A list of strings that can be used to identify this tool which could be  straight up URLs. 
+
+            This can be used to expose alternative ids (such as GUIDs) for a tool
+
+            for registries. Can be used to match tools across registries.
+        organization:
+          type: string
+          description: The organization that published the image.
+        name:
+          type: string
+          description: The name of the tool.
+        description:
+          type: string
+          description: The description of the tool.
+        checker_url:
+          type: string
+          description: Optional url to the checker tool that will exit successfully if
+            this tool produced the expected result given test data.
+        meta_version:
+          type: string
+          description: The version of this tool in the registry. Iterates when fields like
+            the description, author, etc. are updated. 
+            
+            Unless provided, it is attempted to parse the latest version from the meta_version
+            properties of the available versions. Unset if the latest version cannot be determined.
+        versions:
+          description: A list of versions for this tool.
+          type: array
+          items:
+            $ref: "#/components/schemas/ToolVersionPost"
+    ToolVersionPost:
+      type: object
+      description: A tool version describes a particular iteration of a tool as
+        described by a reference to a specific image and/or documents.
+      properties:
+        author:
+          type: array
+          items:
+            type: string
+          description: Contact information for the author of this version of the tool in
+            the registry. (More complex authorship information is handled by the
+            descriptor).
+        name:
+          type: string
+          description: The name of the version.
+        is_production:
+          type: boolean
+          description: This version of a tool is guaranteed to not change over time (for
+            example, a  tool built from a tag in git as opposed to a branch). A
+            production quality tool  is required to have a checksum
+        descriptor_type:
+          type: array
+          description: The type (or types) of descriptors available.
+          items:
+            $ref: "#/components/schemas/DescriptorType"
+        meta_version:
+          type: string
+          description: The version of this tool version in the registry. Iterates when
+            fields like the description, author, etc. are updated.
+        verified_source:
+          type: array
+          items:
+            type: string
+          description: Source of metadata that can support a verified tool, such as an
+            email or URL.
+        signed:
+          type: boolean
+          description: Reports whether this version of the tool has been signed.
+        included_apps:
+          description: An array of IDs for the applications that are stored inside this
+            tool.
+          example:
+            - https://bio.tools/tool/mytum.de/SNAP2/1
+            - https://bio.tools/bioexcel_seqqc
+          type: array
+          items:
+            type: string
