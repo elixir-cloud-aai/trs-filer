@@ -34,11 +34,19 @@ ENDPOINT_CONFIG_1 = {
     "tools": {
         "id_charset": 'string.digits',
         "id_length": 6
+    },
+    "tool_versions": {
+        "id_charset": 'string.digits',
+        "id_length": 6
     }
 }
 ENDPOINT_CONFIG_2 = {
     "tools": {
         "id_charset": '0123456789',
+        "id_length": 6
+    },
+    "tool_versions": {
+        "id_charset": 'string.digits',
         "id_length": 6
     }
 }

@@ -7,11 +7,11 @@ from foca.models.config import Config, MongoConfig
 from trs_filer.ga4gh.trs.server import (
     addTool,
     toolsGet,
-    toolsIdGet,
+    # toolsIdGet,
     getServiceInfo,
     toolClassesGet,
-    toolsIdVersionsGet,
-    toolsIdVersionsVersionIdGet,
+    # toolsIdVersionsGet,
+    # toolsIdVersionsVersionIdGet,
     toolsIdVersionsVersionIdTypeTestsGet,
     toolsIdVersionsVersionIdTypeFilesGet,
     toolsIdVersionsVersionIdContainerfileGet,
@@ -53,6 +53,10 @@ ENDPOINT_CONFIG = {
     "tools": {
         "id_charset": 'string.digits',
         "id_length": 6
+    },
+    "tool_versions": {
+        "id_charset": 'string.digits',
+        "id_length": 6
     }
 }
 
@@ -91,29 +95,29 @@ MOCK_REQUEST_DATA_1 = {
 }
 
 
-def test_toolIdGet():
-    """Test for getting tool id.
-    """
-    res = toolsIdGet.__wrapped__(TEMP_ID)
-    assert isinstance(res, Dict)
+# def test_toolIdGet():
+#     """Test for getting tool id.
+#     """
+#     res = toolsIdGet.__wrapped__(TEMP_ID)
+#     assert isinstance(res, Dict)
 
 
-def test_toolsIdVersionsGet():
-    """Test for getting version list for a given tool id.
-    """
-    res = toolsIdVersionsGet.__wrapped__(TEMP_ID)
-    assert isinstance(res, List)
+# def test_toolsIdVersionsGet():
+#     """Test for getting version list for a given tool id.
+#     """
+#     res = toolsIdVersionsGet.__wrapped__(TEMP_ID)
+#     assert isinstance(res, List)
 
 
-def test_toolsIdVersionsVersionIdGet():
-    """Test for getting particular version of a particular
-    tool.
-    """
-    res = toolsIdVersionsVersionIdGet.__wrapped__(
-        TEMP_ID,
-        TEMP_VERSION_ID
-    )
-    assert isinstance(res, Dict)
+# def test_toolsIdVersionsVersionIdGet():
+#     """Test for getting particular version of a particular
+#     tool.
+#     """
+#     res = toolsIdVersionsVersionIdGet.__wrapped__(
+#         TEMP_ID,
+#         TEMP_VERSION_ID
+#     )
+#     assert isinstance(res, Dict)
 
 
 def test_toolsGet():

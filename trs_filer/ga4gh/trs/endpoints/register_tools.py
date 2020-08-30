@@ -36,6 +36,8 @@ class RegisterObject:
             .collections['objects'].client
         )
         self.tool_data = request.json
+
+        # add tool id charset
         self.id_charset = (
             current_app.config['FOCA'].endpoints['tools']['id_charset']
         )
@@ -47,6 +49,22 @@ class RegisterObject:
             self.id_charset = ''.join(sorted(set(self.id_charset)))
         self.id_length = int(
             current_app.config['FOCA'].endpoints['tools']['id_length']
+        )
+
+        # add tool version id charset
+        self.version_id_charset = (
+            current_app.config['FOCA'].endpoints['tool_versions']['id_charset']
+        )
+        # try to evaluate in case user has supplied an expression evaluating
+        # to a character set
+        try:
+            self.version_id_charset = eval(self.version_id_charset)
+        except Exception:
+            self.version_id_charset = ''.join(
+                sorted(set(self.version_id_charset))
+            )
+        self.version_id_length = int(
+            current_app.config['FOCA'].endpoints['tool_versions']['id_length']
         )
         self.host_name = current_app.config['FOCA'].server.host
 
@@ -79,6 +97,11 @@ class RegisterObject:
             self.tool_data['url'] = (
                 f"{self.host_name}/tools/{self.tool_data['id']}"
             )
+            # update version information
+            if self.tool_data.get("versions", None):
+                self.tool_data["versions"] = self.add_version_info(
+                    self.tool_data["versions"]
+                )
             try:
                 self.db_collection.insert_one(self.tool_data)
             except DuplicateKeyError:
@@ -166,3 +189,49 @@ class RegisterObject:
                 self.tool_data["meta_version"] = ""
         else:
             self.tool_data["meta_version"] = ""
+
+    def add_version_info(
+        self,
+        versions: List[Dict],
+    ) -> List[Dict]:
+        """Generates and adds version id and url information for each and every
+        version.
+
+        Args:
+            versions: List of version information dictionaries.
+
+        Returns:
+            Updated list of version information dictionaries with added info
+            about url, id and verification source.
+        """
+
+        updated_version_list = []
+
+        for version in versions:
+            new_version = version
+            while True:
+                generated_version_id = self.generate_id(
+                    charset=self.version_id_charset,
+                    length=self.version_id_length
+                )
+                new_version['id'] = generated_version_id
+                new_version['url'] = (
+                    f"{self.host_name}/tools/{self.tool_data['id']}/"
+                    "versions/{new_version['id']}"
+                )
+                if new_version["verified_source"]:
+                    new_version["verified"] = True
+                else:
+                    new_version["verified"] = False
+
+                if new_version['id'] in updated_version_list:
+                    continue
+                else:
+                    updated_version_list.append(new_version)
+                logger.info(
+                    f"Added version with id: {new_version['id']}to tool with"
+                    "id: {self.tool_data['id']}"
+                )
+                break
+
+        return updated_version_list

@@ -2,28 +2,75 @@
 
 from typing import (Optional, Dict, List)
 
-from flask import request
+from flask import (current_app, request)
 from foca.utils.logging import log_traffic
 
 from trs_filer.ga4gh.trs.endpoints.register_tools import (
     RegisterObject,
 )
+from trs_filer.errors.exceptions import NotFound
+from trs_filer.app import logger
 
 
 @log_traffic
 def toolsIdGet(
     id: str
 ) -> Dict:
-    """ List one specific tool, acts as an anchor for self references. """
-    return {}
+    """List one specific tool, acts as an anchor for self references.
+
+    Args:
+        id: Tool id to be extracted.
+
+    Returns:
+        Tool object dict corresponding given tool id.
+
+    Raise:
+        NotFound if no object mapping with given id present.
+    """
+
+    db_collection = (
+        current_app.config['FOCA'].db.dbs['trsStore']
+        .collections['objects'].client
+    )
+
+    obj = db_collection.find_one({"id": id})
+
+    if not obj:
+        logger.info(f"Tool object mapping for id:{id} cannot be found.")
+        raise NotFound
+
+    del obj["_id"]
+    return obj
 
 
 @log_traffic
 def toolsIdVersionsGet(
     id: str
-) -> List:
-    """ List versions of a tool. """
-    return []
+) -> List[Dict]:
+    """List versions of a tool.
+
+    Args:
+        id: Tool id.
+
+    Returns:
+        List of version dicts corresponding given tool id.
+
+    Raise:
+        NotFound if no object mapping with given id present.
+    """
+
+    db_collection = (
+        current_app.config['FOCA'].db.dbs['trsStore']
+        .collections['objects'].client
+    )
+
+    obj = db_collection.find_one({"id": id})
+
+    if not obj:
+        logger.info(f"Tool object mapping for id:{id} cannot be found.")
+        raise NotFound
+
+    return obj["versions"]
 
 
 @log_traffic
@@ -34,8 +81,39 @@ def toolsIdVersionsVersionIdGet(
     """
     List one specific tool version, acts
     as an anchor for self references.
+
+    Args:
+        id: Tool id.
+        version_id: Specific version corresponding tool version.
+
+    Returns:
+        Specific version dict of the given tool.
+
+    Raises:
+        NotFound if no tool object present.
+        Also, if version with given id not found.
     """
-    return {}
+
+    db_collection = (
+        current_app.config['FOCA'].db.dbs['trsStore']
+        .collections['objects'].client
+    )
+
+    obj = db_collection.find_one({"id": id})
+
+    if not obj:
+        logger.info(f"Tool object mapping for id:{id} cannot be found.")
+        raise NotFound
+
+    for version in obj["versions"]:
+        if version['id'] == version_id:
+            return version
+
+    logger.info(
+        f"Version mapping for version_id: {version_id} cannot "
+        "be found for tool object with id: {id}."
+    )
+    raise NotFound
 
 
 @log_traffic
