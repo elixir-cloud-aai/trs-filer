@@ -2,20 +2,42 @@
 
 from typing import (Optional, Dict, List)
 
-from flask import request
+from flask import (request, current_app)
 from foca.utils.logging import log_traffic
 
 from trs_filer.ga4gh.trs.endpoints.register_tools import (
     RegisterObject,
 )
+from trs_filer.errors.exceptions import NotFound
+from trs_filer.app import logger
 
 
 @log_traffic
 def toolsIdGet(
     id: str
 ) -> Dict:
-    """ List one specific tool, acts as an anchor for self references. """
-    return {}  # pragma: no cover
+    """List one specific tool, acts as an anchor for self references.
+    Args:
+        id: A unique identifier of the tool.
+    Returns:
+        Tool object dict corresponding given tool id.
+    Raise:
+        NotFound if no object mapping with given id present.
+    """
+
+    db_collection = (
+        current_app.config['FOCA'].db.dbs['trsStore']
+        .collections['objects'].client
+    )
+
+    obj = db_collection.find_one({"id": id})
+
+    if not obj:
+        logger.info(f"Tool object mapping for id:{id} cannot be found.")
+        raise NotFound
+
+    del obj["_id"]
+    return obj
 
 
 @log_traffic
