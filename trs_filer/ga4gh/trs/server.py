@@ -15,7 +15,7 @@ def toolsIdGet(
     id: str
 ) -> Dict:
     """ List one specific tool, acts as an anchor for self references. """
-    return {}
+    return {}  # pragma: no cover
 
 
 @log_traffic
@@ -23,7 +23,7 @@ def toolsIdVersionsGet(
     id: str
 ) -> List:
     """ List versions of a tool. """
-    return []
+    return []  # pragma: no cover
 
 
 @log_traffic
@@ -35,7 +35,7 @@ def toolsIdVersionsVersionIdGet(
     List one specific tool version, acts
     as an anchor for self references.
     """
-    return {}
+    return {}  # pragma: no cover
 
 
 @log_traffic
@@ -52,7 +52,7 @@ def toolsGet(
     checker: Optional[bool] = None,
 ) -> List:
     """ List all tools. """
-    return []
+    return []  # pragma: no cover
 
 
 @log_traffic
@@ -62,7 +62,7 @@ def toolsIdVersionsVersionIdTypeDescriptorGet(
     version_id: str,
 ) -> Dict:
     """ Get the tool descriptor for the specified tool. """
-    return {}
+    return {}  # pragma: no cover
 
 
 @log_traffic
@@ -73,7 +73,7 @@ def toolsIdVersionsVersionIdTypeDescriptorRelativePathGet(
     relative_path: str,
 ) -> Dict:
     """ Get additional tool descriptor files relative to the main file. """
-    return {}
+    return {}  # pragma: no cover
 
 
 @log_traffic
@@ -83,7 +83,7 @@ def toolsIdVersionsVersionIdTypeTestsGet(
     version_id: str,
 ) -> List:
     """ Get a list of test JSONs. """
-    return []
+    return []  # pragma: no cover
 
 
 @log_traffic
@@ -94,7 +94,7 @@ def toolsIdVersionsVersionIdTypeFilesGet(
     format: Optional[str] = None,
 ) -> List:
     """ Get a list of objects that contain the relative path and file type. """
-    return []
+    return []  # pragma: no cover
 
 
 @log_traffic
@@ -103,19 +103,19 @@ def toolsIdVersionsVersionIdContainerfileGet(
     version_id: str,
 ) -> List:
     """ Get the container specification(s) for the specified image. """
-    return []
+    return []  # pragma: no cover
 
 
 @log_traffic
 def toolClassesGet() -> List:
     """ List all tool types. """
-    return []
+    return []  # pragma: no cover
 
 
 @log_traffic
 def getServiceInfo() -> Dict:
     """ Show information about this service. """
-    return {}
+    return {}  # pragma: no cover
 
 
 @log_traffic

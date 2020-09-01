@@ -34,15 +34,22 @@ ENDPOINT_CONFIG_1 = {
     "tools": {
         "id_charset": 'string.digits',
         "id_length": 6
-    }
+    },
+    "tool_versions": {
+        "id_charset": 'string.digits',
+        "id_length": 6
+    },
 }
 ENDPOINT_CONFIG_2 = {
     "tools": {
         "id_charset": '0123456789',
         "id_length": 6
-    }
+    },
+    "tool_versions": {
+        "id_charset": '0123456789',
+        "id_length": 6
+    },
 }
-
 MOCK_REQUEST_DATA_1 = {
     "aliases": [
         "630d31c3-381e-488d-b639-ce5d047a0142",
@@ -76,8 +83,6 @@ MOCK_REQUEST_DATA_1 = {
         }
     ]
 }
-
-
 MOCK_REQUEST_DATA_2 = {
     "aliases": [
         "630d31c3-381e-488d-b639-ce5d047a0142",
@@ -123,9 +128,6 @@ MOCK_REQUEST_DATA_2 = {
             "meta_version": "0.1.0",
             "name": "string",
             "signed": True,
-            "verified_source": [
-                "string"
-            ]
         },
         {
             "author": [
@@ -142,13 +144,10 @@ MOCK_REQUEST_DATA_2 = {
             "meta_version": "1.1.0",
             "name": "string",
             "signed": True,
-            "verified_source": [
-                "string"
-            ]
+            "verified_source": [],
         }
     ]
 }
-
 MOCK_REQUEST_DATA_3 = {
     "aliases": [
         "630d31c3-381e-488d-b639-ce5d047a0142",
@@ -180,7 +179,6 @@ MOCK_REQUEST_DATA_3 = {
         }
     ]
 }
-
 MOCK_REQUEST_DATA_4 = {
     "aliases": [
         "630d31c3-381e-488d-b639-ce5d047a0142",
@@ -232,7 +230,6 @@ MOCK_REQUEST_DATA_4 = {
         }
     ]
 }
-
 MOCK_REQUEST_DATA_5 = {
     "aliases": [
         "630d31c3-381e-488d-b639-ce5d047a0142",
@@ -243,13 +240,11 @@ MOCK_REQUEST_DATA_5 = {
     "name": "string",
     "organization": "string",
 }
-
 SAMPLE_TOOL_CLASS = {
     "description": "Temporary tool class.",
     "id": "123456",
     "name": "ToolClass"
 }
-
 SAMPLE_VERSION_LIST = ["1.0.0", "1.2.0", "2.0.0"]
 
 
@@ -280,7 +275,7 @@ def test_generate_id_no_expression():
 
 
 def test_latest_version_return():
-    """ Test for finding latest version from versions list. """
+    """Test for finding latest version from versions list."""
     app = Flask(__name__)
     app.config['FOCA'] = Config(
         db=MongoConfig(**MONGO_CONFIG),
@@ -297,9 +292,7 @@ def test_latest_version_return():
 
 
 def test_create_tool_object_meta_version():
-    """ Test for valid meta_version when
-    set from user specifically.
-    """
+    """Test for valid meta_version when set from user specifically."""
     app = Flask(__name__)
     app.config['FOCA'] = Config(
         db=MongoConfig(**MONGO_CONFIG),
@@ -320,8 +313,8 @@ def test_create_tool_object_meta_version():
 
 
 def test_create_tool_object_meta_version_sub_version_based():
-    """ Test for valid meta_version when assigned
-    based on the version information available.
+    """Test for valid meta_version when assigned based on the version
+    information available.
     """
     app = Flask(__name__)
     app.config['FOCA'] = Config(
@@ -343,8 +336,8 @@ def test_create_tool_object_meta_version_sub_version_based():
 
 
 def test_create_tool_no_meta_version():
-    """ Test for valid meta_version when not
-    specified, i.e, neither in tools, nor in versions.
+    """ Test for valid meta_version when not specified, i.e, neither in tools,
+    nor in versions.
     """
     app = Flask(__name__)
     app.config['FOCA'] = Config(
@@ -366,9 +359,7 @@ def test_create_tool_no_meta_version():
 
 
 def test_create_tool_non_semantic_versions():
-    """ Test for valid meta_version when non
-    semantic versioning present.
-    """
+    """Test for valid meta_version when non semantic versioning present."""
     app = Flask(__name__)
     app.config['FOCA'] = Config(
         db=MongoConfig(**MONGO_CONFIG),
@@ -389,8 +380,8 @@ def test_create_tool_non_semantic_versions():
 
 
 def test_create_tool_versions_checker_absence():
-    """ Test for valid meta_version when versions not present.
-    Also covers the case when checker_url is absent.
+    """Test for valid meta_version when versions not present. Also covers the
+    case when checker_url is absent.
     """
     app = Flask(__name__)
     app.config['FOCA'] = Config(
@@ -411,7 +402,7 @@ def test_create_tool_versions_checker_absence():
 
 
 def test_create_tool_duplicate_key():
-    """ Test for valid duplicate key error. """
+    """Test for valid duplicate key error."""
     app = Flask(__name__)
     app.config['FOCA'] = Config(
         db=MongoConfig(**MONGO_CONFIG),

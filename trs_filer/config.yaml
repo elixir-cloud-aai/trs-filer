@@ -62,3 +62,6 @@ endpoints:
     tools:
         id_charset: string.ascii_uppercase + string.digits
         id_length: 6
+    tool_versions:
+        id_charset: string.ascii_lowercase + string.digits
+        id_length: 6
