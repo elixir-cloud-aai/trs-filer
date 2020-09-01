@@ -5,7 +5,7 @@ from random import choice
 import string
 from typing import (Dict, List)
 
-from flask import (current_app, request)
+from flask import (current_app, Request)
 from pymongo.errors import DuplicateKeyError
 
 from trs_filer.app import logger
@@ -14,7 +14,7 @@ from trs_filer.app import logger
 class RegisterObject:
     """ Tool creation class."""
 
-    def __init__(self, request: request) -> None:
+    def __init__(self, request: Request) -> None:
         """ Initialise the ToolPost object creation.
 
         Args:
@@ -128,7 +128,7 @@ class RegisterObject:
         """
         return ''.join(choice(charset) for __ in range(length))
 
-    def create_tool_class(self) -> Dict:
+    def create_tool_class(self) -> None:
         """Create tool class.
 
         Returns:
@@ -204,7 +204,6 @@ class RegisterObject:
             Updated list of version information dictionaries with added info
             about url, id and verification source.
         """
-
         updated_version_list = []
 
         for version in versions:
@@ -217,7 +216,7 @@ class RegisterObject:
                 new_version['id'] = generated_version_id
                 new_version['url'] = (
                     f"{self.host_name}/tools/{self.tool_data['id']}/"
-                    "versions/{new_version['id']}"
+                    f"versions/{new_version['id']}"
                 )
                 if new_version["verified_source"]:
                     new_version["verified"] = True
