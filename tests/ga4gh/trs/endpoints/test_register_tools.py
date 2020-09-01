@@ -46,7 +46,7 @@ ENDPOINT_CONFIG_2 = {
         "id_length": 6
     },
     "tool_versions": {
-        "id_charset": 'string.digits',
+        "id_charset": '0123456789',
         "id_length": 6
     }
 }
@@ -85,6 +85,37 @@ MOCK_REQUEST_DATA_1 = {
     ]
 }
 
+MOCK_REQUEST_DATA_1_NON_VERIFIED = {
+    "aliases": [
+        "630d31c3-381e-488d-b639-ce5d047a0142",
+        "dockstore.org:630d31c3-381e-488d-b639-ce5d047a0142",
+        "bio.tools:630d31c3-381e-488d-b639-ce5d047a0142"
+    ],
+    "checker_url": "string",
+    "description": "string",
+    "meta_version": "0.0.0",
+    "name": "string",
+    "organization": "string",
+    "versions": [
+        {
+            "author": [
+                "string"
+            ],
+            "descriptor_type": [
+                "CWL"
+            ],
+            "included_apps": [
+                "https://bio.tools/tool/mytum.de/SNAP2/1",
+                "https://bio.tools/bioexcel_seqqc"
+            ],
+            "is_production": True,
+            "meta_version": "string",
+            "name": "string",
+            "signed": True,
+            "verified_source": []
+        }
+    ]
+}
 
 MOCK_REQUEST_DATA_2 = {
     "aliases": [
@@ -416,6 +447,26 @@ def test_create_tool_versions_checker_absence():
         tool_data = RegisterObject(request_data).register_object()
         assert (tool_data.get("meta_version") == "")
         assert (tool_data.get("has_checker") is False)
+
+
+def test_create_tool_non_verified_version():
+    """ Test for absense of verified sources. """
+    app = Flask(__name__)
+    app.config['FOCA'] = Config(
+        db=MongoConfig(**MONGO_CONFIG),
+        endpoints=ENDPOINT_CONFIG_1
+    )
+
+    app.config['FOCA'].db.dbs['trsStore'] \
+        .collections['objects'].client = mongomock.MongoClient().db.collection
+
+    request_data = Dict()
+    request_data.json = MOCK_REQUEST_DATA_1_NON_VERIFIED
+
+    with app.app_context():
+        tool_data = RegisterObject(request_data).register_object()
+        for version in tool_data.get("versions"):
+            assert(version["verified"] is False)
 
 
 def test_create_tool_duplicate_key():

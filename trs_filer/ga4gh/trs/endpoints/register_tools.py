@@ -225,6 +225,7 @@ class RegisterObject:
                     new_version["verified"] = False
 
                 if new_version['id'] in updated_version_list:
+                    logger.warning(f"Duplicate version key generated.")
                     continue
                 else:
                     updated_version_list.append(new_version)

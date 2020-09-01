@@ -2,7 +2,7 @@
 
 from typing import (Optional, Dict, List)
 
-from flask import (current_app, request)
+from flask import (current_app, request, Response)
 from foca.utils.logging import log_traffic
 
 from trs_filer.ga4gh.trs.endpoints.register_tools import (
@@ -19,7 +19,7 @@ def toolsIdGet(
     """List one specific tool, acts as an anchor for self references.
 
     Args:
-        id: Tool id to be extracted.
+        id: A unique identifier of the tool.
 
     Returns:
         Tool object dict corresponding given tool id.
@@ -50,7 +50,7 @@ def toolsIdVersionsGet(
     """List versions of a tool.
 
     Args:
-        id: Tool id.
+        id: A unique identifier of the tool.
 
     Returns:
         List of version dicts corresponding given tool id.
@@ -83,7 +83,7 @@ def toolsIdVersionsVersionIdGet(
     as an anchor for self references.
 
     Args:
-        id: Tool id.
+        id: A unique identifier of the tool.
         version_id: Specific version corresponding tool version.
 
     Returns:
@@ -128,8 +128,77 @@ def toolsGet(
     description: Optional[str] = None,
     author: Optional[str] = None,
     checker: Optional[bool] = None,
+    limit: Optional[int] = None,
+    offset: Optional[int] = None
 ) -> List:
-    """ List all tools. """
+    """List all tools.
+
+    Args:
+        id: A unique identifier of the tool.
+        alias: Tool alias identifier.
+        toolClass: Tool sub class.
+        registry: The image registry that contains the image.
+        organization: The organization in the registry that published
+        the image.
+        name: Name of the image.
+        toolname: Name of the tool.
+        description: Description of the tool.
+        author: Author of the tool.
+        checker: Flag for identifying checker workflows.
+    
+    Returns:
+        Returns a list of all tools if no filters applied.
+        Filters and returns tools if params provided.
+    """
+    # filter_list = []
+    
+    # if id is not None:
+    #     filter_list.append({"id": id})
+    
+    # if organization is not None:
+    #     filter_list.append({"organization": organization})
+    
+    # if toolClass is not None:
+    #     filter_list.append({"toolClass": toolClass})
+    
+    # if description is not None:
+    #     filter_list.append({"description": description})
+
+    # if toolname is not None:
+    #     filter_list.append({"name": toolname})
+
+    # # add support for registry, name, author and checker.
+
+    # # Apply filter 
+    # db_collection = (
+    #     current_app.config['FOCA'].db.dbs['trsStore']
+    #     .collections['objects'].client
+    # )
+    
+    # if filter_list:
+    #     records = db_collection.find(
+    #         {"$and": filter_list},
+    #         {"_id": False}
+    #     )
+    # else:
+    #     records = db_collection.find({}, {"_id": False})
+    # records = list(records)
+    
+    # if alias is not None:
+    #     records = [rec for rec in records if alias in rec["aliases"]]
+
+    # if offset:
+    #     records = records[offset:]
+    # if limit:
+    #     records = records[:limit]
+    
+    # response = Response(records)
+    # response.headers['next_page'] = None
+    # response.headers['last_page'] = None
+    # response.headers['self_link'] = None
+    # response.headers['current_offset'] = None
+    # response.headers['current_limit'] = None
+    # return response
     return []
 
 
