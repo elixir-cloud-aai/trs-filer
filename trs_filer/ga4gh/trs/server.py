@@ -9,7 +9,9 @@ from trs_filer.ga4gh.trs.endpoints.register_tools import (
     RegisterObject,
 )
 from trs_filer.errors.exceptions import NotFound
-from trs_filer.app import logger
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 @log_traffic
