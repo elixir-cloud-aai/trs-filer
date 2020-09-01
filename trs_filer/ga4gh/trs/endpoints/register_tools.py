@@ -5,7 +5,7 @@ from random import choice
 import string
 from typing import (Dict, List)
 
-from flask import (current_app, request)
+from flask import (current_app, Request)
 from pymongo.errors import DuplicateKeyError
 
 from trs_filer.app import logger
@@ -14,41 +14,49 @@ from trs_filer.app import logger
 class RegisterObject:
     """ Tool creation class."""
 
-    def __init__(self, request: request) -> None:
+    def __init__(self, request: Request) -> None:
         """ Initialise the ToolPost object creation.
 
         Args:
             request: API request object.
 
         Attributes:
-            db_collection: Database collection storing tool objects.
             tool_data: Request object data.
+            db_collection: Database collection storing tool objects.
             id_charset: Allowed character set or expression evaluating to
                 allowed character set for generating object identifiers.
+            id_charset_ver: Allowed character set or expression evaluating
+                to allowed character set for generating version identifiers.
             id_length: Length of generated object identifiers.
+            id_length_ver: Length of generated version identifiers.
             host_name: Name of host for generating TRS URL identifiers.
 
         Returns:
             None type.
         """
+        self.tool_data = request.json
         self.db_collection = (
             current_app.config['FOCA'].db.dbs['trsStore']
             .collections['objects'].client
         )
-        self.tool_data = request.json
-        self.id_charset = (
-            current_app.config['FOCA'].endpoints['tools']['id_charset']
-        )
-        # try to evaluate in case user has supplied an expression evaluating
-        # to a character set
+
+        # configure attributes required for setting IDs and URLs
+        endpoint_conf = current_app.config['FOCA'].endpoints
+        self.id_charset = endpoint_conf['tools']['id_charset']
+        self.id_charset_ver = endpoint_conf['tool_versions']['id_charset']
+        self.id_length = int(endpoint_conf['tools']['id_length'])
+        self.id_length_ver = int(endpoint_conf['tool_versions']['id_length'])
+        self.host_name = current_app.config['FOCA'].server.host
+
+        # evaluate character set expression or interpret literal string as set
         try:
             self.id_charset = eval(self.id_charset)
         except Exception:
             self.id_charset = ''.join(sorted(set(self.id_charset)))
-        self.id_length = int(
-            current_app.config['FOCA'].endpoints['tools']['id_length']
-        )
-        self.host_name = current_app.config['FOCA'].server.host
+        try:
+            self.id_charset_ver = eval(self.id_charset_ver)
+        except Exception:
+            self.id_charset_ver = ''.join(sorted(set(self.id_charset_ver)))
 
     def register_object(self) -> Dict:
         """Register tool with TRS.
@@ -66,19 +74,22 @@ class RegisterObject:
         # set tool class (proper method needs to be added)
         self.create_tool_class()
 
-        # set meta_version method
+        # set meta_version
         self.update_meta_version()
 
-        # set unique id and url and save object
+        # set unique ID/URL and register object
         while True:
-            generated_object_id = self.generate_id(
+            self.tool_data['id'] = self.generate_id(
                 charset=self.id_charset,
                 length=self.id_length
             )
-            self.tool_data['id'] = generated_object_id
             self.tool_data['url'] = (
                 f"{self.host_name}/tools/{self.tool_data['id']}"
             )
+            # update version information
+            if 'versions' in self.tool_data:
+                self.add_version_info()
+            # insert tool into database
             try:
                 self.db_collection.insert_one(self.tool_data)
             except DuplicateKeyError:
@@ -105,7 +116,7 @@ class RegisterObject:
         """
         return ''.join(choice(charset) for __ in range(length))
 
-    def create_tool_class(self) -> Dict:
+    def create_tool_class(self) -> None:
         """Create tool class.
 
         Returns:
@@ -155,14 +166,45 @@ class RegisterObject:
         elif versions:
             meta_versions = []
             for sub_version in versions:
-                sub_version_meta = sub_version.get("meta_version", None)
+                sub_version_meta = sub_version.get('meta_version', None)
                 if sub_version_meta:
                     meta_versions.append(sub_version_meta)
             if meta_versions:
-                self.tool_data["meta_version"] = self.get_latest_meta_version(
+                self.tool_data['meta_version'] = self.get_latest_meta_version(
                     versions=meta_versions
                 )
             else:
-                self.tool_data["meta_version"] = ""
+                self.tool_data['meta_version'] = ""
         else:
-            self.tool_data["meta_version"] = ""
+            self.tool_data['meta_version'] = ""
+
+    def add_version_info(
+        self,
+    ) -> None:
+        """Generates and adds version ID and URL information for each version.
+        """
+        version_list = []
+
+        for version in self.tool_data['versions']:
+            while True:
+                # set `verified` flag according to availability of verification
+                # source
+                if version.get('verified_source', None):
+                    version['verified'] = True
+                else:
+                    version['verified'] = False
+                # generate random version ID and set ID and URL accordingly
+                version['id'] = self.generate_id(
+                    charset=self.id_charset_ver,
+                    length=self.id_length_ver
+                )
+                version['url'] = (
+                    f"{self.host_name}/tools/{self.tool_data['id']}/"
+                    f"versions/{version['id']}"
+                )
+                # ensure that generated version has not been assigned
+                if version['id'] not in version_list:
+                    version_list.append(version)
+                    break
+
+        self.tool_data['versions'] = version_list
