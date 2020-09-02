@@ -41,9 +41,17 @@ def toolsIdGet(
 @log_traffic
 def toolsIdVersionsGet(
     id: str
-) -> List:
-    """ List versions of a tool. """
-    return []  # pragma: no cover
+) -> List[Dict]:
+    """List versions of a tool.
+    Args:
+        id: A unique identifier of the tool.
+    Returns:
+        List of version dicts corresponding given tool id.
+    """
+
+    obj = toolsIdGet.__wrapped__(id)
+
+    return obj["versions"]
 
 
 @log_traffic
