@@ -1,11 +1,13 @@
 from flask import Flask
 from foca.models.config import Config, MongoConfig
 import mongomock
+import pytest
 
 from trs_filer.ga4gh.trs.server import (
     addTool,
+    toolsIdGet,
 )
-from trs_filer.errors.exceptions import exceptions  # noqa: F401
+from trs_filer.errors.exceptions import NotFound
 
 INDEX_CONFIG = {
     'keys': [('id', 1)]
@@ -71,8 +73,7 @@ MOCK_REQUEST_DATA_1 = {
 
 
 def test_addTool():
-    """Test add new tool object.
-    """
+    """Test add new tool object."""
     app = Flask(__name__)
     app.config['FOCA'] = Config(
         db=MongoConfig(**MONGO_CONFIG),
@@ -85,3 +86,46 @@ def test_addTool():
     with app.test_request_context(json=MOCK_REQUEST_DATA_1):
         res = addTool.__wrapped__()
         assert isinstance(res, str)
+
+
+def test_toolsIdGet():
+    """Test for getting tool object using `tool_id`."""
+    app = Flask(__name__)
+    app.config['FOCA'] = Config(
+        db=MongoConfig(**MONGO_CONFIG)
+    )
+
+    app.config['FOCA'].db.dbs['trsStore'] \
+        .collections['objects'].client = mongomock.MongoClient().db.collection
+
+    temp_object = MOCK_REQUEST_DATA_1
+    temp_object['id'] = "TMP001"
+    temp_object['_id'] = app.config['FOCA'].db.dbs['trsStore'] \
+        .collections['objects'].client.insert_one(temp_object).inserted_id
+    del temp_object['_id']
+
+    with app.app_context():
+        res = toolsIdGet.__wrapped__("TMP001")
+        assert res == temp_object
+
+
+def test_toolsIdGet_object_not_found():
+    """Test when requested tool_id is invalid."""
+    with pytest.raises(NotFound):
+        app = Flask(__name__)
+        app.config['FOCA'] = Config(
+            db=MongoConfig(**MONGO_CONFIG)
+        )
+
+        app.config['FOCA'].db.dbs['trsStore'] \
+            .collections['objects'].client = mongomock.MongoClient() \
+            .db.collection
+
+        temp_object = MOCK_REQUEST_DATA_1
+        temp_object['id'] = "TMP001"
+        temp_object['_id'] = app.config['FOCA'].db.dbs['trsStore'] \
+            .collections['objects'].client.insert_one(temp_object).inserted_id
+        del temp_object['_id']
+
+        with app.app_context():
+            toolsIdGet.__wrapped__("TMP002")
