@@ -7,7 +7,7 @@ from trs_filer.ga4gh.trs.server import (
     addTool,
     toolsIdGet,
 )
-from trs_filer.errors.exceptions import NotFound  # noqa: F401
+from trs_filer.errors.exceptions import NotFound
 
 INDEX_CONFIG = {
     'keys': [('id', 1)]
@@ -73,8 +73,7 @@ MOCK_REQUEST_DATA_1 = {
 
 
 def test_addTool():
-    """Test add new tool object.
-    """
+    """Test add new tool object."""
     app = Flask(__name__)
     app.config['FOCA'] = Config(
         db=MongoConfig(**MONGO_CONFIG),
@@ -90,8 +89,7 @@ def test_addTool():
 
 
 def test_toolsIdGet():
-    """Test for getting tool object using `tool_id`.
-    """
+    """Test for getting tool object using `tool_id`."""
     app = Flask(__name__)
     app.config['FOCA'] = Config(
         db=MongoConfig(**MONGO_CONFIG)
@@ -112,8 +110,7 @@ def test_toolsIdGet():
 
 
 def test_toolsIdGet_object_not_found():
-    """Test when requested tool_id is invalid.
-    """
+    """Test when requested tool_id is invalid."""
     with pytest.raises(NotFound):
         app = Flask(__name__)
         app.config['FOCA'] = Config(

@@ -9,9 +9,6 @@ from trs_filer.ga4gh.trs.endpoints.register_tools import (
     RegisterObject,
 )
 from trs_filer.errors.exceptions import NotFound
-import logging
-
-logger = logging.getLogger(__name__)
 
 
 @log_traffic
@@ -35,7 +32,6 @@ def toolsIdGet(
     obj = db_collection.find_one({"id": id})
 
     if not obj:
-        logger.info(f"Tool object mapping for id:{id} cannot be found.")
         raise NotFound
 
     del obj["_id"]
