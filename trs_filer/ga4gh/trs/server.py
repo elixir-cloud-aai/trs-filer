@@ -45,9 +45,28 @@ def toolsIdGet(
 @log_traffic
 def toolsIdVersionsGet(
     id: str
-) -> List:
-    """ List versions of a tool. """
-    return []  # pragma: no cover
+) -> List[Dict]:
+    """List versions of a tool.
+    Args:
+        id: A unique identifier of the tool.
+    Returns:
+        List of version dicts corresponding given tool id.
+    Raise:
+        NotFound if no object mapping with given id present.
+    """
+
+    db_collection = (
+        current_app.config['FOCA'].db.dbs['trsStore']
+        .collections['objects'].client
+    )
+
+    obj = db_collection.find_one({"id": id})
+
+    if not obj:
+        logger.info(f"Tool object mapping for id:{id} cannot be found.")
+        raise NotFound
+
+    return obj["versions"]
 
 
 @log_traffic
