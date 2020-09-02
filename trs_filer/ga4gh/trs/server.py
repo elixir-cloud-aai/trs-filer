@@ -47,19 +47,9 @@ def toolsIdVersionsGet(
         id: A unique identifier of the tool.
     Returns:
         List of version dicts corresponding given tool id.
-    Raise:
-        NotFound if no object mapping with given id present.
     """
 
-    db_collection = (
-        current_app.config['FOCA'].db.dbs['trsStore']
-        .collections['objects'].client
-    )
-
-    obj = db_collection.find_one({"id": id})
-
-    if not obj:
-        raise NotFound
+    obj = toolsIdGet.__wrapped__(id)
 
     return obj["versions"]
 
