@@ -2,7 +2,7 @@
 
 from random import choice
 import string
-from typing import Dict
+from typing import (Dict, Optional)
 
 from flask import (current_app, Request)
 from pymongo.errors import DuplicateKeyError
@@ -17,11 +17,13 @@ class RegisterObject:
     def __init__(
         self,
         request: Request,
+        id: Optional[str] = None,
     ) -> None:
         """Initialize tool data.
 
         Args:
             request: API request object.
+            id: Tool ID. Auto-generated if not provided.
 
         Attributes:
             tool_data: Request object data.
@@ -44,6 +46,8 @@ class RegisterObject:
                 constructing tool and version `url` properties.
         """
         self.tool_data = request.json
+        if id:
+            self.tool_data['id'] = id
         self.db_collection = (
             current_app.config['FOCA'].db.dbs['trsStore']
             .collections['objects'].client
@@ -85,11 +89,15 @@ class RegisterObject:
         # set unique ID, dependent values and register object
         while True:
 
-            # set random tool ID
-            self.tool_data['id'] = self.generate_id(
-                charset=self.tool_id_charset,
-                length=self.tool_id_length
-            )
+            # set random tool ID unless ID is provided
+            if 'id' not in self.tool_data:
+                replace = False
+                self.tool_data['id'] = self.generate_id(
+                    charset=self.tool_id_charset,
+                    length=self.tool_id_length
+                )
+            else:
+                replace = True
 
             # set tool self reference URL
             self.tool_data['url'] = (
@@ -101,11 +109,18 @@ class RegisterObject:
             if 'versions' in self.tool_data:
                 self.add_versions()
 
-            # insert tool into database
-            try:
-                self.db_collection.insert_one(self.tool_data)
-            except DuplicateKeyError:
-                continue
+            # update(insert) tool in(to) database
+            if replace:
+                self.db_collection.replace_one(
+                    filter={'id': self.tool_data['id']},
+                    replacement=self.tool_data,
+                    upsert=True,
+                )
+            else:
+                try:
+                    self.db_collection.insert_one(self.tool_data)
+                except DuplicateKeyError:
+                    continue
 
             logger.info(f"Created tool with id: {self.tool_data['id']}")
             break

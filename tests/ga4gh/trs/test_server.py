@@ -5,6 +5,7 @@ import pytest
 
 from trs_filer.ga4gh.trs.server import (
     postTool,
+    putTool,
     toolsIdGet,
     toolsIdVersionsGet,
 )
@@ -101,6 +102,21 @@ def test_postTool():
 
     with app.test_request_context(json=MOCK_REQUEST_DATA_1):
         res = postTool.__wrapped__()
+        assert isinstance(res, str)
+
+
+def test_putTool():
+    """Test `PUT /tools/{id}` endpoint."""
+    app = Flask(__name__)
+    app.config['FOCA'] = Config(
+        db=MongoConfig(**MONGO_CONFIG),
+        endpoints=ENDPOINT_CONFIG
+    )
+    app.config['FOCA'].db.dbs['trsStore'] \
+        .collections['objects'].client = mongomock.MongoClient().db.collection
+
+    with app.test_request_context(json=MOCK_REQUEST_DATA_1):
+        res = putTool.__wrapped__("TMP001")
         assert isinstance(res, str)
 
 

@@ -153,3 +153,23 @@ def postTool() -> Dict:
     tool_creator = RegisterObject(request=request)
     tool = tool_creator.register_object()
     return tool['id']
+
+
+@log_traffic
+def putTool(
+    id: str,
+) -> Dict:
+    """Add tool with a user-supplied ID.
+
+    Args:
+        id: Identifier of tool to be created/updated.
+
+    Returns:
+        Identifier of created/updated object.
+    """
+    tool_creator = RegisterObject(
+        request=request,
+        id=id,
+    )
+    tool = tool_creator.register_object()
+    return tool['id']
