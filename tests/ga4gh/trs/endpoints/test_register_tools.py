@@ -1,3 +1,5 @@
+"""Unit tests for `RegisterObject()` controller."""
+
 import string  # noqa: F401
 
 import pytest
