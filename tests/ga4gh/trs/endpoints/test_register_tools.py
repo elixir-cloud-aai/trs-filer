@@ -55,6 +55,7 @@ ENDPOINT_CONFIG_CHARSET_EXPRESSION = {
         },
     },
     "url_prefix": "http",
+    "external_host": "1.2.3.4",
     "external_port": 80,
     "api_path": "ga4gh/trs/v2",
 }
@@ -80,6 +81,7 @@ ENDPOINT_CONFIG_CHARSET_LITERAL = {
         },
     },
     "url_prefix": "http",
+    "external_host": "1.2.3.4",
     "external_port": 80,
     "api_path": "ga4gh/trs/v2",
 }
