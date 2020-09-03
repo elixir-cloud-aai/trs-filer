@@ -62,7 +62,7 @@ class RegisterObject:
             conf['tool_version']['meta_version']['init']
         )
         self.url_prefix = conf['url_prefix']
-        self.host_name = current_app.config['FOCA'].server.host
+        self.host_name = conf['external_host']
         self.external_port = conf['external_port']
         self.api_path = conf['api_path']
         # evaluate character set expression or interpret literal string as set
