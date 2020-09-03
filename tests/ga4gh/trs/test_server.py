@@ -13,6 +13,7 @@ from trs_filer.ga4gh.trs.server import (
     putTool,
     toolsIdGet,
     toolsIdVersionsGet,
+    toolsGet,
 )
 from trs_filer.errors.exceptions import NotFound
 
@@ -93,6 +94,13 @@ MOCK_REQUEST_DATA_1 = {
     ]
 }
 MOCK_ID = "mock_id"
+HEADER_CONFIG_1 = {
+    'next_page': None,
+    'last_page': None,
+    'self_link': None,
+    'current_offset': None,
+    'current_limit': None,
+}
 
 
 def test_postTool():
@@ -240,3 +248,49 @@ def test_toolsIdVersionsGet_object_not_found():
     with app.app_context():
         with pytest.raises(NotFound):
             toolsIdVersionsGet.__wrapped__("TMP002")
+
+
+def test_toolsGet():
+    """Test for getting filter based tool list(filters present)."""
+    app = Flask(__name__)
+    app.config['FOCA'] = Config(
+        db=MongoConfig(**MONGO_CONFIG)
+    )
+    app.config['FOCA'].db.dbs['trsStore'] \
+        .collections['objects'].client = mongomock.MongoClient().db.collection
+    temp_object = MOCK_REQUEST_DATA_1
+    temp_object['id'] = "TMP001"
+    temp_object['_id'] = app.config['FOCA'].db.dbs['trsStore'] \
+        .collections['objects'].client.insert_one(temp_object).inserted_id
+    del temp_object['_id']
+
+    with app.app_context():
+        res = toolsGet.__wrapped__(
+            id="TMP001",
+            toolname=temp_object['name'],
+            description=temp_object['description'],
+            organization=temp_object['organization'],
+            alias="630d31c3-381e-488d-b639-ce5d047a0142",
+            offset=0,
+            limit=1,
+        )
+        assert res == ([temp_object], '200', HEADER_CONFIG_1)
+
+
+def test_toolsGet_nofilters():
+    """Test for getting filter based tool list(no filters applied)."""
+    app = Flask(__name__)
+    app.config['FOCA'] = Config(
+        db=MongoConfig(**MONGO_CONFIG)
+    )
+    app.config['FOCA'].db.dbs['trsStore'] \
+        .collections['objects'].client = mongomock.MongoClient().db.collection
+    temp_object = MOCK_REQUEST_DATA_1
+    temp_object['id'] = "TMP001"
+    temp_object['_id'] = app.config['FOCA'].db.dbs['trsStore'] \
+        .collections['objects'].client.insert_one(temp_object).inserted_id
+    del temp_object['_id']
+
+    with app.app_context():
+        res = toolsGet.__wrapped__()
+        assert res == ([temp_object], '200', HEADER_CONFIG_1)

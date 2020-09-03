@@ -104,23 +104,19 @@ def toolsGet(
     if organization is not None:
         filter_list.append({"organization": organization})
 
-    if toolClass is not None:
-        filter_list.append({"toolClass": toolClass})
-
     if description is not None:
         filter_list.append({"description": description})
 
     if toolname is not None:
         filter_list.append({"name": toolname})
 
-    # add support for registry, name, author and checker.
+    # add support for registry, name, author, toolclass and checker.
 
-    # Apply filter
+    # Apply filters
     db_collection = (
         current_app.config['FOCA'].db.dbs['trsStore']
         .collections['objects'].client
     )
-
     if filter_list:
         records = db_collection.find(
             {"$and": filter_list},
@@ -133,18 +129,18 @@ def toolsGet(
     if alias is not None:
         records = [rec for rec in records if alias in rec["aliases"]]
 
-    if offset:
+    if offset is not None:
         records = records[offset:]
-    if limit:
+    if limit is not None:
         records = records[:limit]
 
-    # headers = {}
-    # headers['next_page'] = None
-    # headers['last_page'] = None
-    # headers['self_link'] = None
-    # headers['current_offset'] = None
-    # headers['current_limit'] = None
-    return records
+    headers = {}
+    headers['next_page'] = None
+    headers['last_page'] = None
+    headers['self_link'] = None
+    headers['current_offset'] = None
+    headers['current_limit'] = None
+    return records, '200', headers
 
 
 @log_traffic
