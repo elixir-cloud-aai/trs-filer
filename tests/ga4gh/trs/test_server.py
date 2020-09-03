@@ -4,7 +4,7 @@ import mongomock
 import pytest
 
 from trs_filer.ga4gh.trs.server import (
-    addTool,
+    postTool,
     toolsIdGet,
     toolsIdVersionsGet,
 )
@@ -29,14 +29,29 @@ MONGO_CONFIG = {
     },
 }
 ENDPOINT_CONFIG = {
-    "tools": {
-        "id_charset": 'string.digits',
-        "id_length": 6
+    "tool": {
+        "id": {
+            "charset": 'string.digits',
+            "length": 6,
+        },
+        "meta_version": {
+            "init": 1,
+            "increment": 1,
+        },
     },
-    "tool_versions": {
-        "id_charset": 'string.digits',
-        "id_length": 6
+    "tool_version": {
+        "id": {
+            "charset": 'string.digits',
+            "length": 6,
+        },
+        "meta_version": {
+            "init": 1,
+            "increment": 1,
+        },
     },
+    "url_prefix": "http",
+    "external_port": 80,
+    "api_path": "ga4gh/trs/v2",
 }
 MOCK_REQUEST_DATA_1 = {
     "aliases": [
@@ -71,21 +86,21 @@ MOCK_REQUEST_DATA_1 = {
         }
     ]
 }
+MOCK_ID = "mock_id"
 
 
-def test_addTool():
-    """Test add new tool object."""
+def test_postTool():
+    """Test `POST /tools` endpoint."""
     app = Flask(__name__)
     app.config['FOCA'] = Config(
         db=MongoConfig(**MONGO_CONFIG),
         endpoints=ENDPOINT_CONFIG
     )
-
     app.config['FOCA'].db.dbs['trsStore'] \
         .collections['objects'].client = mongomock.MongoClient().db.collection
 
     with app.test_request_context(json=MOCK_REQUEST_DATA_1):
-        res = addTool.__wrapped__()
+        res = postTool.__wrapped__()
         assert isinstance(res, str)
 
 
@@ -95,10 +110,8 @@ def test_toolsIdGet():
     app.config['FOCA'] = Config(
         db=MongoConfig(**MONGO_CONFIG)
     )
-
     app.config['FOCA'].db.dbs['trsStore'] \
         .collections['objects'].client = mongomock.MongoClient().db.collection
-
     temp_object = MOCK_REQUEST_DATA_1
     temp_object['id'] = "TMP001"
     temp_object['_id'] = app.config['FOCA'].db.dbs['trsStore'] \
@@ -112,23 +125,21 @@ def test_toolsIdGet():
 
 def test_toolsIdGet_object_not_found():
     """Test when requested tool_id is invalid."""
-    with pytest.raises(NotFound):
-        app = Flask(__name__)
-        app.config['FOCA'] = Config(
-            db=MongoConfig(**MONGO_CONFIG)
-        )
+    app = Flask(__name__)
+    app.config['FOCA'] = Config(
+        db=MongoConfig(**MONGO_CONFIG)
+    )
+    app.config['FOCA'].db.dbs['trsStore'] \
+        .collections['objects'].client = mongomock.MongoClient() \
+        .db.collection
+    temp_object = MOCK_REQUEST_DATA_1
+    temp_object['id'] = "TMP001"
+    temp_object['_id'] = app.config['FOCA'].db.dbs['trsStore'] \
+        .collections['objects'].client.insert_one(temp_object).inserted_id
+    del temp_object['_id']
 
-        app.config['FOCA'].db.dbs['trsStore'] \
-            .collections['objects'].client = mongomock.MongoClient() \
-            .db.collection
-
-        temp_object = MOCK_REQUEST_DATA_1
-        temp_object['id'] = "TMP001"
-        temp_object['_id'] = app.config['FOCA'].db.dbs['trsStore'] \
-            .collections['objects'].client.insert_one(temp_object).inserted_id
-        del temp_object['_id']
-
-        with app.app_context():
+    with app.app_context():
+        with pytest.raises(NotFound):
             toolsIdGet.__wrapped__("TMP002")
 
 
@@ -140,10 +151,8 @@ def test_toolsIdVersionsGet():
     app.config['FOCA'] = Config(
         db=MongoConfig(**MONGO_CONFIG)
     )
-
     app.config['FOCA'].db.dbs['trsStore'] \
         .collections['objects'].client = mongomock.MongoClient().db.collection
-
     temp_object = MOCK_REQUEST_DATA_1
     temp_object['id'] = "TMP001"
     temp_object['_id'] = app.config['FOCA'].db.dbs['trsStore'] \
@@ -157,21 +166,19 @@ def test_toolsIdVersionsGet():
 
 def test_toolsIdVersionsGet_object_not_found():
     """Test when requested tool_id is invalid."""
-    with pytest.raises(NotFound):
-        app = Flask(__name__)
-        app.config['FOCA'] = Config(
-            db=MongoConfig(**MONGO_CONFIG)
-        )
+    app = Flask(__name__)
+    app.config['FOCA'] = Config(
+        db=MongoConfig(**MONGO_CONFIG)
+    )
+    app.config['FOCA'].db.dbs['trsStore'] \
+        .collections['objects'].client = mongomock.MongoClient() \
+        .db.collection
+    temp_object = MOCK_REQUEST_DATA_1
+    temp_object['id'] = "TMP001"
+    temp_object['_id'] = app.config['FOCA'].db.dbs['trsStore'] \
+        .collections['objects'].client.insert_one(temp_object).inserted_id
+    del temp_object['_id']
 
-        app.config['FOCA'].db.dbs['trsStore'] \
-            .collections['objects'].client = mongomock.MongoClient() \
-            .db.collection
-
-        temp_object = MOCK_REQUEST_DATA_1
-        temp_object['id'] = "TMP001"
-        temp_object['_id'] = app.config['FOCA'].db.dbs['trsStore'] \
-            .collections['objects'].client.insert_one(temp_object).inserted_id
-        del temp_object['_id']
-
-        with app.app_context():
+    with app.app_context():
+        with pytest.raises(NotFound):
             toolsIdVersionsGet.__wrapped__("TMP002")

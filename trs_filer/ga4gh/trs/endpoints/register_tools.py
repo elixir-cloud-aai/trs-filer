@@ -1,21 +1,24 @@
-"""Controller for adding new objects."""
+"""Controller for registering new objects."""
 
-from packaging.version import (Version, InvalidVersion)
 from random import choice
 import string
-from typing import (Dict, List)
+from typing import Dict
 
 from flask import (current_app, Request)
 from pymongo.errors import DuplicateKeyError
 
 from trs_filer.app import logger
+from trs_filer.errors.exceptions import BadRequest
 
 
 class RegisterObject:
-    """ Tool creation class."""
+    """Class to register tools with the service."""
 
-    def __init__(self, request: Request) -> None:
-        """ Initialise the ToolPost object creation.
+    def __init__(
+        self,
+        request: Request,
+    ) -> None:
+        """Initialize tool data.
 
         Args:
             request: API request object.
@@ -23,40 +26,52 @@ class RegisterObject:
         Attributes:
             tool_data: Request object data.
             db_collection: Database collection storing tool objects.
-            id_charset: Allowed character set or expression evaluating to
+            tool_id_charset: Allowed character set or expression evaluating to
                 allowed character set for generating object identifiers.
-            id_charset_ver: Allowed character set or expression evaluating
+            tool_id_length: Length of generated object identifiers.
+            tool_meta_version_init: Initial value for tool meta version.
+            version_id_charset: Allowed character set or expression evaluating
                 to allowed character set for generating version identifiers.
-            id_length: Length of generated object identifiers.
-            id_length_ver: Length of generated version identifiers.
-            host_name: Name of host for generating TRS URL identifiers.
-
-        Returns:
-            None type.
+            version_id_length: Length of generated version identifiers.
+            versoin_meta_version_init: Initial value for version meta version.
+            url_prefix: URL scheme of application. For constructing tool and
+                version `url` properties.
+            host_name: Name of application host. For constructing tool and
+                version `url` properties.
+            external_port: Port at which application is served. For
+                constructing tool and version `url` properties.
+            api_path: Base path at which API endpoints can be reached. For
+                constructing tool and version `url` properties.
         """
         self.tool_data = request.json
         self.db_collection = (
             current_app.config['FOCA'].db.dbs['trsStore']
             .collections['objects'].client
         )
-
-        # configure attributes required for setting IDs and URLs
-        endpoint_conf = current_app.config['FOCA'].endpoints
-        self.id_charset = endpoint_conf['tools']['id_charset']
-        self.id_charset_ver = endpoint_conf['tool_versions']['id_charset']
-        self.id_length = int(endpoint_conf['tools']['id_length'])
-        self.id_length_ver = int(endpoint_conf['tool_versions']['id_length'])
+        conf = current_app.config['FOCA'].endpoints
+        self.tool_id_charset = conf['tool']['id']['charset']
+        self.tool_id_length = int(conf['tool']['id']['length'])
+        self.tool_meta_version_init = int(conf['tool']['meta_version']['init'])
+        self.version_id_charset = conf['tool_version']['id']['charset']
+        self.version_id_length = int(conf['tool_version']['id']['length'])
+        self.version_meta_version_init = int(
+            conf['tool_version']['meta_version']['init']
+        )
+        self.url_prefix = conf['url_prefix']
         self.host_name = current_app.config['FOCA'].server.host
-
+        self.external_port = conf['external_port']
+        self.api_path = conf['api_path']
         # evaluate character set expression or interpret literal string as set
         try:
-            self.id_charset = eval(self.id_charset)
+            self.tool_id_charset = eval(self.tool_id_charset)
         except Exception:
-            self.id_charset = ''.join(sorted(set(self.id_charset)))
+            self.tool_id_charset = ''.join(sorted(set(self.tool_id_charset)))
         try:
-            self.id_charset_ver = eval(self.id_charset_ver)
+            self.version_id_charset = eval(self.version_id_charset)
         except Exception:
-            self.id_charset_ver = ''.join(sorted(set(self.id_charset_ver)))
+            self.version_id_charset = ''.join(
+                sorted(set(self.version_id_charset))
+            )
 
     def register_object(self) -> Dict:
         """Register tool with TRS.
@@ -64,40 +79,78 @@ class RegisterObject:
         Returns:
             Tool object.
         """
+        # set tool meta version
+        self.tool_data['meta_version'] = str(self.tool_meta_version_init)
 
-        # set checker variable
-        if "checker_url" in self.tool_data:
-            self.tool_data['has_checker'] = True
-        else:
-            self.tool_data['has_checker'] = False
-
-        # set tool class (proper method needs to be added)
-        self.create_tool_class()
-
-        # set meta_version
-        self.update_meta_version()
-
-        # set unique ID/URL and register object
+        # set unique ID, dependent values and register object
         while True:
+
+            # set random tool ID
             self.tool_data['id'] = self.generate_id(
-                charset=self.id_charset,
-                length=self.id_length
+                charset=self.tool_id_charset,
+                length=self.tool_id_length
             )
+
+            # set tool self reference URL
             self.tool_data['url'] = (
-                f"{self.host_name}/tools/{self.tool_data['id']}"
+                f"{self.url_prefix}://{self.host_name}:{self.external_port}/"
+                f"{self.api_path}/tools/{self.tool_data['id']}"
             )
-            # update version information
+
+            # process version information
             if 'versions' in self.tool_data:
-                self.add_version_info()
+                self.add_versions()
+
             # insert tool into database
             try:
                 self.db_collection.insert_one(self.tool_data)
             except DuplicateKeyError:
                 continue
+
             logger.info(f"Created tool with id: {self.tool_data['id']}")
             break
 
         return self.tool_data
+
+    def add_versions(
+        self,
+    ) -> None:
+        """Adds version properties."""
+        # get list of available version IDs
+        version_list = [
+            v.get('id', None) for v in self.tool_data.get('versions', None)
+        ]
+
+        # ensure that all supplied version IDs are unique
+        if len(version_list) != len(set(version_list)):
+            raise BadRequest
+
+        for version in self.tool_data['versions']:
+
+            # set version meta version
+            version['meta_version'] = str(self.version_meta_version_init)
+
+            # generate random ID if not supplied
+            if 'id' not in version:
+
+                # set unique ID
+                while True:
+                    # set random version ID
+                    version['id'] = self.generate_id(
+                        charset=self.version_id_charset,
+                        length=self.version_id_length
+                    )
+
+                    # ensure that generated version has not been assigned
+                    if version['id'] not in version_list:
+                        break
+
+            # set version self reference URL
+            version['url'] = (
+                f"{self.url_prefix}://{self.host_name}:{self.external_port}/"
+                f"{self.api_path}/tools/{self.tool_data['id']}/versions/"
+                f"{version['id']}"
+            )
 
     def generate_id(
         self,
@@ -115,96 +168,3 @@ class RegisterObject:
             allowed characters.
         """
         return ''.join(choice(charset) for __ in range(length))
-
-    def create_tool_class(self) -> None:
-        """Create tool class.
-
-        Returns:
-            Generated tool class for the initialised tool object.
-        """
-        self.tool_data['toolclass'] = {
-            "description": "Temporary tool class.",
-            "id": "123456",
-            "name": "ToolClass"
-        }
-
-    def get_latest_meta_version(
-        self,
-        versions: List[str],
-    ) -> str:
-        """Sort and give the latest version from list of version strings.
-
-        Args:
-            versions: List of version strings.
-
-        Returns:
-            Latest version string from the list if semantic versioning, else
-            an empty string.
-        """
-        try:
-            versions_tuple = [
-                (Version(v), v) for v in versions
-            ]
-            versions_tuple.sort()
-            return versions_tuple[-1][1]
-        except InvalidVersion:
-            logger.warning(
-                    "Version strings do not appear to conform to semantic "
-                    "versioning specification."
-            )
-            return ""
-
-    def update_meta_version(self) -> None:
-        """Sets the latest vesion as `meta_version` property if not specified
-        by the user.
-        """
-        versions = self.tool_data.get("versions", None)
-        current_meta = self.tool_data.get("meta_version", None)
-
-        if current_meta:
-            self.tool_data["meta_version"] = current_meta
-        elif versions:
-            meta_versions = []
-            for sub_version in versions:
-                sub_version_meta = sub_version.get('meta_version', None)
-                if sub_version_meta:
-                    meta_versions.append(sub_version_meta)
-            if meta_versions:
-                self.tool_data['meta_version'] = self.get_latest_meta_version(
-                    versions=meta_versions
-                )
-            else:
-                self.tool_data['meta_version'] = ""
-        else:
-            self.tool_data['meta_version'] = ""
-
-    def add_version_info(
-        self,
-    ) -> None:
-        """Generates and adds version ID and URL information for each version.
-        """
-        version_list = []
-
-        for version in self.tool_data['versions']:
-            while True:
-                # set `verified` flag according to availability of verification
-                # source
-                if version.get('verified_source', None):
-                    version['verified'] = True
-                else:
-                    version['verified'] = False
-                # generate random version ID and set ID and URL accordingly
-                version['id'] = self.generate_id(
-                    charset=self.id_charset_ver,
-                    length=self.id_length_ver
-                )
-                version['url'] = (
-                    f"{self.host_name}/tools/{self.tool_data['id']}/"
-                    f"versions/{version['id']}"
-                )
-                # ensure that generated version has not been assigned
-                if version['id'] not in version_list:
-                    version_list.append(version)
-                    break
-
-        self.tool_data['versions'] = version_list

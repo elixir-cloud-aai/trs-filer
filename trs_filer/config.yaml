@@ -59,9 +59,20 @@ exceptions:
     exceptions: trs_filer.errors.exceptions.exceptions
 
 endpoints:
-    tools:
-        id_charset: string.ascii_uppercase + string.digits
-        id_length: 6
-    tool_versions:
-        id_charset: string.ascii_lowercase + string.digits
-        id_length: 6
+    tool:
+        id:
+            charset: string.ascii_uppercase + string.digits
+            length: 6
+        meta_version:
+            init: 1
+            increment: 1
+    tool_version:
+        id:
+            charset: string.ascii_lowercase + string.digits
+            length: 6
+        meta_version:
+            init: 1
+            increment: 1
+    url_prefix: http
+    external_port: 3888
+    api_path: ga4gh/trs/v2
