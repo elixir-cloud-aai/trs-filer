@@ -75,9 +75,76 @@ def toolsGet(
     description: Optional[str] = None,
     author: Optional[str] = None,
     checker: Optional[bool] = None,
+    limit: Optional[int] = None,
+    offset: Optional[int] = None,
 ) -> List:
-    """List all tools."""
-    return []  # pragma: no cover
+    """List all tools.
+    Args:
+        id: A unique identifier of the tool.
+        alias: Tool alias identifier.
+        toolClass: Tool sub class.
+        registry: The image registry that contains the image.
+        organization: The organization in the registry that published
+        the image.
+        name: Name of the image.
+        toolname: Name of the tool.
+        description: Description of the tool.
+        author: Author of the tool.
+        checker: Flag for identifying checker workflows.
+
+    Returns:
+        Returns a list of all tools if no filters applied.
+        Filters and returns tools if params provided.
+    """
+    filter_list = []
+
+    if id is not None:
+        filter_list.append({"id": id})
+
+    if organization is not None:
+        filter_list.append({"organization": organization})
+
+    if toolClass is not None:
+        filter_list.append({"toolClass": toolClass})
+
+    if description is not None:
+        filter_list.append({"description": description})
+
+    if toolname is not None:
+        filter_list.append({"name": toolname})
+
+    # add support for registry, name, author and checker.
+
+    # Apply filter
+    db_collection = (
+        current_app.config['FOCA'].db.dbs['trsStore']
+        .collections['objects'].client
+    )
+
+    if filter_list:
+        records = db_collection.find(
+            {"$and": filter_list},
+            {"_id": False}
+        )
+    else:
+        records = db_collection.find({}, {"_id": False})
+    records = list(records)
+
+    if alias is not None:
+        records = [rec for rec in records if alias in rec["aliases"]]
+
+    if offset:
+        records = records[offset:]
+    if limit:
+        records = records[:limit]
+
+    # headers = {}
+    # headers['next_page'] = None
+    # headers['last_page'] = None
+    # headers['self_link'] = None
+    # headers['current_offset'] = None
+    # headers['current_limit'] = None
+    return records
 
 
 @log_traffic
