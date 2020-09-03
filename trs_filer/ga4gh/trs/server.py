@@ -16,24 +16,23 @@ def toolsIdGet(
     id: str
 ) -> Dict:
     """List one specific tool, acts as an anchor for self references.
+
     Args:
         id: A unique identifier of the tool.
+
     Returns:
         Tool object dict corresponding given tool id.
+
     Raise:
         NotFound if no object mapping with given id present.
     """
-
     db_collection = (
         current_app.config['FOCA'].db.dbs['trsStore']
         .collections['objects'].client
     )
-
     obj = db_collection.find_one({"id": id})
-
     if not obj:
         raise NotFound
-
     del obj["_id"]
     return obj
 
@@ -43,14 +42,14 @@ def toolsIdVersionsGet(
     id: str
 ) -> List[Dict]:
     """List versions of a tool.
+
     Args:
         id: A unique identifier of the tool.
+
     Returns:
         List of version dicts corresponding given tool id.
     """
-
     obj = toolsIdGet.__wrapped__(id)
-
     return obj["versions"]
 
 
@@ -59,9 +58,7 @@ def toolsIdVersionsVersionIdGet(
     id: str,
     version_id: str,
 ) -> Dict:
-    """
-    List one specific tool version, acts
-    as an anchor for self references.
+    """List one specific tool version, acts as an anchor for self references.
     """
     return {}  # pragma: no cover
 
@@ -79,7 +76,7 @@ def toolsGet(
     author: Optional[str] = None,
     checker: Optional[bool] = None,
 ) -> List:
-    """ List all tools. """
+    """List all tools."""
     return []  # pragma: no cover
 
 
@@ -89,7 +86,7 @@ def toolsIdVersionsVersionIdTypeDescriptorGet(
     id: str,
     version_id: str,
 ) -> Dict:
-    """ Get the tool descriptor for the specified tool. """
+    """Get the tool descriptor for the specified tool."""
     return {}  # pragma: no cover
 
 
@@ -100,7 +97,7 @@ def toolsIdVersionsVersionIdTypeDescriptorRelativePathGet(
     version_id: str,
     relative_path: str,
 ) -> Dict:
-    """ Get additional tool descriptor files relative to the main file. """
+    """Get additional tool descriptor files relative to the main file."""
     return {}  # pragma: no cover
 
 
@@ -110,7 +107,7 @@ def toolsIdVersionsVersionIdTypeTestsGet(
     id: str,
     version_id: str,
 ) -> List:
-    """ Get a list of test JSONs. """
+    """Get a list of test JSONs."""
     return []  # pragma: no cover
 
 
@@ -121,7 +118,7 @@ def toolsIdVersionsVersionIdTypeFilesGet(
     version_id: str,
     format: Optional[str] = None,
 ) -> List:
-    """ Get a list of objects that contain the relative path and file type. """
+    """Get a list of objects that contain the relative path and file type."""
     return []  # pragma: no cover
 
 
@@ -130,25 +127,29 @@ def toolsIdVersionsVersionIdContainerfileGet(
     id: str,
     version_id: str,
 ) -> List:
-    """ Get the container specification(s) for the specified image. """
+    """Get the container specification(s) for the specified image."""
     return []  # pragma: no cover
 
 
 @log_traffic
 def toolClassesGet() -> List:
-    """ List all tool types. """
+    """List all tool types."""
     return []  # pragma: no cover
 
 
 @log_traffic
 def getServiceInfo() -> Dict:
-    """ Show information about this service. """
+    """Show information about this service."""
     return {}  # pragma: no cover
 
 
 @log_traffic
-def addTool() -> Dict:
-    """ Add new tool object to the database. """
-    tool_creator = RegisterObject(request)
+def postTool() -> Dict:
+    """Add tool with an auto-generated ID.
+
+    Returns:
+        Identifier of created object.
+    """
+    tool_creator = RegisterObject(request=request)
     tool = tool_creator.register_object()
     return tool['id']
