@@ -58,9 +58,28 @@ def toolsIdVersionsVersionIdGet(
     id: str,
     version_id: str,
 ) -> Dict:
-    """List one specific tool version, acts as an anchor for self references.
     """
-    return {}  # pragma: no cover
+    List one specific tool version, acts as an anchor for self references.
+
+    Args:
+        id: A unique identifier of the tool.
+        version_id: Specific version corresponding tool version.
+
+    Returns:
+        Specific version dict of the given tool.
+
+    Raises:
+        NotFound if no tool object present for give id mapping. Also, if
+        version with given id not found.
+    """
+
+    obj = toolsIdGet.__wrapped__(id)
+
+    for version in obj["versions"]:
+        if version['id'] == version_id:
+            return version
+
+    raise NotFound
 
 
 @log_traffic
