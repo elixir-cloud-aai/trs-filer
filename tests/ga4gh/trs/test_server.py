@@ -1,9 +1,14 @@
+"""Unit tests for endpoint controllers."""
+
+from copy import deepcopy
+
 from flask import Flask
 from foca.models.config import Config, MongoConfig
 import mongomock
 import pytest
 
 from trs_filer.ga4gh.trs.server import (
+    deleteTool,
     postTool,
     putTool,
     toolsIdGet,
@@ -118,6 +123,43 @@ def test_putTool():
     with app.test_request_context(json=MOCK_REQUEST_DATA_1):
         res = putTool.__wrapped__("TMP001")
         assert isinstance(res, str)
+
+
+def test_deleteTool():
+    """Test `DELETE /tools/{id}` endpoint."""
+    app = Flask(__name__)
+    app.config['FOCA'] = Config(
+        db=MongoConfig(**MONGO_CONFIG),
+        endpoints=ENDPOINT_CONFIG
+    )
+    data = deepcopy(MOCK_REQUEST_DATA_1)
+    data['id'] = MOCK_ID
+    app.config['FOCA'].db.dbs['trsStore'].collections['objects'] \
+        .client = mongomock.MongoClient().db.collection
+    app.config['FOCA'].db.dbs['trsStore'].collections['objects'] \
+        .client.insert_one(data).inserted_id
+    del data['_id']
+    with app.app_context():
+        res = deleteTool.__wrapped__(MOCK_ID)
+        assert res == MOCK_ID
+
+
+def test_deleteTool_NotFound():
+    """Test `DELETE /tools/{id}` endpoint with unavailable id."""
+    app = Flask(__name__)
+    app.config['FOCA'] = Config(
+        db=MongoConfig(**MONGO_CONFIG),
+        endpoints=ENDPOINT_CONFIG
+    )
+    data = deepcopy(MOCK_REQUEST_DATA_1)
+    app.config['FOCA'].db.dbs['trsStore'].collections['objects'] \
+        .client = mongomock.MongoClient().db.collection
+    app.config['FOCA'].db.dbs['trsStore'].collections['objects'] \
+        .client.insert_one(data).inserted_id
+    del data['_id']
+    with app.app_context():
+        with pytest.raises(NotFound):
+            deleteTool.__wrapped__(MOCK_ID)
 
 
 def test_toolsIdGet():

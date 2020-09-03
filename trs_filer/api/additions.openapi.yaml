@@ -1,5 +1,57 @@
 paths:
   "/tools/{id}":
+    delete:
+      summary: Delete a tool.
+      description: Delete an existing tool object.
+      operationId: deleteTool
+      tags:
+        - TRS-Filer
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: A unique identifier of the tool, scoped to this registry, for
+            example `123456`.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The tool was successfully deleted.
+          content:
+            application/json:
+              schema:
+                type: string
+                description: The previous identifier of the deleted tool.
+        '400':
+          description: The request is malformed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: The request is unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: The requester is not authorized to perform this action.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: The requested tool was not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: An unexpected error occurred.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
     put:
       summary: Create or update a tool.
       description: Create a tool object with a predefined unique ID. Overwrites

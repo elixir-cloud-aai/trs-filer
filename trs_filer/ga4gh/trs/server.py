@@ -173,3 +173,26 @@ def putTool(
     )
     tool = tool_creator.register_object()
     return tool['id']
+
+
+@log_traffic
+def deleteTool(
+    id: str,
+) -> str:
+    """Delete tool object.
+
+    Args:
+        id: Identifier of tool object to be deleted.
+
+    Returns:
+        Previous identifier of deleted object.
+    """
+    db_collection = (
+        current_app.config['FOCA'].db.dbs['trsStore']
+        .collections['objects'].client
+    )
+    del_obj = db_collection.delete_one({'id': id})
+    if not del_obj.deleted_count:
+        raise NotFound
+    else:
+        return id
