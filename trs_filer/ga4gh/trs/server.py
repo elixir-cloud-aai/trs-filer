@@ -73,13 +73,27 @@ def toolsIdVersionsVersionIdGet(
         version with given id not found.
     """
 
-    obj = toolsIdGet.__wrapped__(id)
+    db_collection = (
+        current_app.config['FOCA'].db.dbs['trsStore']
+        .collections['objects'].client
+    )
 
-    for version in obj["versions"]:
-        if version['id'] == version_id:
-            return version
+    filt = {}
+    filt['id'] = id
+    filt['versions'] = {
+        '$elemMatch': {
+            'id': version_id
+        },
+    }
+    req_version = db_collection.find_one(
+        filter=filt,
+        projection={"_id": False},
+    )
 
-    raise NotFound
+    if not req_version:
+        raise NotFound
+
+    return req_version['versions'][0]
 
 
 @log_traffic
