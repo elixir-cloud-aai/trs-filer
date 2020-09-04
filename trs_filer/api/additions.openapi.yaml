@@ -215,16 +215,12 @@ components:
           type: string
           description: Optional url to the checker tool that will exit successfully if
             this tool produced the expected result given test data.
-        meta_version:
-          type: string
-          description: The version of this tool in the registry. Iterates when fields like
-            the description, author, etc. are updated. 
         versions:
           description: A list of versions for this tool.
           type: array
           items:
-            $ref: "#/components/schemas/ToolVersionPost"
-    ToolVersionPost:
+            $ref: "#/components/schemas/ToolVersionRegister"
+    ToolVersionRegister:
       type: object
       description: A tool version describes a particular iteration of a tool as
         described by a reference to a specific image and/or documents.
@@ -251,15 +247,23 @@ components:
           description: This version of a tool is guaranteed to not change over time (for
             example, a  tool built from a tag in git as opposed to a branch). A
             production quality tool  is required to have a checksum
+        images:
+          description: All known docker images (and versions/hashes) used by this tool. If
+            the tool has to evaluate any of the docker images strings at
+            runtime, those ones cannot be reported here.
+          type: array
+          items:
+            $ref: "#/components/schemas/ImageData"
         descriptor_type:
           type: array
           description: The type (or types) of descriptors available.
           items:
             $ref: "#/components/schemas/DescriptorType"
-        meta_version:
-          type: string
-          description: The version of this tool version in the registry. Iterates when
-            fields like the description, author, etc. are updated.
+        containerfile:
+          type: boolean
+          description: Reports if this tool has a containerfile available. (For
+            Docker-based tools, this would indicate the presence of a
+            Dockerfile)
         verified:
           type: boolean
           description: Reports whether this tool has been verified by a specific
