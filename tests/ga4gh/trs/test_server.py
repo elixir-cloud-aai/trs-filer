@@ -70,9 +70,15 @@ MOCK_REQUEST_DATA_1 = {
     ],
     "checker_url": "string",
     "description": "string",
+    "has_checker": True,
     "meta_version": "0.0.0",
     "name": "string",
     "organization": "string",
+    "toolclass": {
+        "description": "string",
+        "id": "string",
+        "name": "string"
+    },
     "versions": [
         {
             "author": [
@@ -80,6 +86,25 @@ MOCK_REQUEST_DATA_1 = {
             ],
             "descriptor_type": [
                 "CWL"
+            ],
+            "id": "v1",
+            "images": [
+                {
+                    "checksum": [
+                        {
+                            "checksum": (
+                                "77af4d6b9913e693e8d0b4b294fa62ade6054e6b2f1f"
+                                "fb617ac955dd63fb0182"
+                            ),
+                            "type": "sha256"
+                        }
+                    ],
+                    "image_name": "string",
+                    "image_type": "Docker",
+                    "registry_host": "string",
+                    "size": 0,
+                    "updated": "string"
+                }
             ],
             "included_apps": [
                 "https://bio.tools/tool/mytum.de/SNAP2/1",
@@ -321,13 +346,19 @@ def test_toolsGet():
 
     with app.app_context():
         res = toolsGet.__wrapped__(
+            limit=1,
+            offset=0,
             id="TMP001",
-            toolname=temp_object['name'],
+            checker=True,
+            name="string",
+            author="string",
+            registry="string",
+            toolname="string",
+            toolClass="string",
+            descriptorType="CWL",
             description=temp_object['description'],
             organization=temp_object['organization'],
             alias="630d31c3-381e-488d-b639-ce5d047a0142",
-            offset=0,
-            limit=1,
         )
         assert res == ([temp_object], '200', HEADER_CONFIG_1)
 

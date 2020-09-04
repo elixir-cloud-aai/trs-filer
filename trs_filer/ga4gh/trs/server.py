@@ -162,7 +162,7 @@ def toolsGet(
             },
         }
     if toolname is not None:
-        filt['toolname'] = toolname
+        filt['name'] = toolname
     if description is not None:
         filt['description'] = description
     if author:
