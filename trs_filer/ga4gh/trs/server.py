@@ -121,6 +121,7 @@ def toolsGet(
     Returns:
         List of all tools consistent with all filters, if specified.
     """
+    # set filters
     filt = {}
     if id is not None:
         filt['id'] = id
@@ -155,7 +156,7 @@ def toolsGet(
             '$elemMatch': {
                 'images': {
                     '$elemMatch': {
-                        'image_name': registry,
+                        'image_name': name,
                     },
                 },
             },
@@ -175,15 +176,7 @@ def toolsGet(
     if checker is not None:
         filt['has_checker'] = checker
 
-    import logging
-    logger = logging.getLogger(__name__)
-    logger.warning(filt)
-
-    # add support for
-    # name: [versions].[images].image_name
-    # registry: [versions].[images].registry_host
-
-    # Apply filters
+    # fetch data
     db_collection = (
         current_app.config['FOCA'].db.dbs['trsStore']
         .collections['objects'].client
@@ -193,7 +186,7 @@ def toolsGet(
         projection={"_id": False},
     )
 
-    # TODO: dummy headers; implement pagination later
+    # TODO: create dummy headers; implement pagination later
     headers = {}
     headers['next_page'] = None
     headers['last_page'] = None
