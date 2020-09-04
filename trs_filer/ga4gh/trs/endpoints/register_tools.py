@@ -1,5 +1,6 @@
 """Controller for registering new objects."""
 
+import logging
 from random import choice
 import string
 from typing import (Dict, Optional)
@@ -7,8 +8,9 @@ from typing import (Dict, Optional)
 from flask import (current_app, Request)
 from pymongo.errors import DuplicateKeyError
 
-from trs_filer.app import logger
 from trs_filer.errors.exceptions import BadRequest
+
+logger = logging.getLogger(__name__)
 
 
 class RegisterObject:

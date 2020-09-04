@@ -1,9 +1,6 @@
-import logging
 import os
 
 from foca.foca import foca
-
-logger = logging.getLogger(__name__)
 
 
 def main():
