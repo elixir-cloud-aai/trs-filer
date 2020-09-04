@@ -11,9 +11,10 @@ from trs_filer.ga4gh.trs.server import (
     deleteTool,
     postTool,
     putTool,
+    toolsGet,
     toolsIdGet,
     toolsIdVersionsGet,
-    toolsGet,
+    toolsIdVersionsVersionIdGet,
 )
 from trs_filer.errors.exceptions import NotFound
 
@@ -57,6 +58,7 @@ ENDPOINT_CONFIG = {
         },
     },
     "url_prefix": "http",
+    "external_host": "1.2.3.4",
     "external_port": 80,
     "api_path": "ga4gh/trs/v2",
 }
@@ -190,7 +192,7 @@ def test_toolsIdGet():
 
 
 def test_toolsIdGet_object_not_found():
-    """Test when requested tool_id is invalid."""
+    """Test when requested `tool_id` is invalid."""
     app = Flask(__name__)
     app.config['FOCA'] = Config(
         db=MongoConfig(**MONGO_CONFIG)
@@ -231,7 +233,7 @@ def test_toolsIdVersionsGet():
 
 
 def test_toolsIdVersionsGet_object_not_found():
-    """Test when requested tool_id is invalid."""
+    """Test when requested `tool_id` is invalid."""
     app = Flask(__name__)
     app.config['FOCA'] = Config(
         db=MongoConfig(**MONGO_CONFIG)
@@ -248,6 +250,59 @@ def test_toolsIdVersionsGet_object_not_found():
     with app.app_context():
         with pytest.raises(NotFound):
             toolsIdVersionsGet.__wrapped__("TMP002")
+
+
+def test_toolsIdVersionsVersionIdGet():
+    """Test for getting a specific version with given `version_id` from tool
+    object associated with given `tool_id`.
+    """
+    app = Flask(__name__)
+    app.config['FOCA'] = Config(
+        db=MongoConfig(**MONGO_CONFIG)
+    )
+    app.config['FOCA'].db.dbs['trsStore'] \
+        .collections['objects'].client = mongomock.MongoClient().db.collection
+    temp_object = MOCK_REQUEST_DATA_1
+    temp_object['id'] = "TMP001"
+
+    version_counter = 0
+    for ver in range(0, len(temp_object["versions"])):
+        temp_object["versions"][ver]['id'] = str(version_counter)
+        version_counter = version_counter + 1
+
+    temp_object['_id'] = app.config['FOCA'].db.dbs['trsStore'] \
+        .collections['objects'].client.insert_one(temp_object).inserted_id
+    del temp_object['_id']
+
+    with app.app_context():
+        res = toolsIdVersionsVersionIdGet.__wrapped__("TMP001", str(0))
+        assert res == temp_object["versions"][0]
+
+
+def test_toolsIdVersionsVersionIdGet_object_not_found():
+    """Test when requested `tool_id` is valid but `version_id` is invalid."""
+    app = Flask(__name__)
+    app.config['FOCA'] = Config(
+        db=MongoConfig(**MONGO_CONFIG)
+    )
+    app.config['FOCA'].db.dbs['trsStore'] \
+        .collections['objects'].client = mongomock.MongoClient() \
+        .db.collection
+    temp_object = MOCK_REQUEST_DATA_1
+    temp_object['id'] = "TMP001"
+
+    version_counter = 0
+    for ver in range(0, len(temp_object["versions"])):
+        temp_object["versions"][ver]['id'] = str(version_counter)
+        version_counter = version_counter + 1
+
+    temp_object['_id'] = app.config['FOCA'].db.dbs['trsStore'] \
+        .collections['objects'].client.insert_one(temp_object).inserted_id
+    del temp_object['_id']
+
+    with app.app_context():
+        with pytest.raises(NotFound):
+            toolsIdVersionsVersionIdGet.__wrapped__("TMP001", str(99))
 
 
 def test_toolsGet():

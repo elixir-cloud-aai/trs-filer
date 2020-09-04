@@ -1,6 +1,6 @@
 """"Controllers for TRS endpoints."""
 
-from typing import (Optional, Dict, List)
+from typing import (Optional, Dict, List, Tuple)
 
 from flask import (request, current_app)
 from foca.utils.logging import log_traffic
@@ -58,9 +58,28 @@ def toolsIdVersionsVersionIdGet(
     id: str,
     version_id: str,
 ) -> Dict:
-    """List one specific tool version, acts as an anchor for self references.
     """
-    return {}  # pragma: no cover
+    List one specific tool version, acts as an anchor for self references.
+
+    Args:
+        id: A unique identifier of the tool.
+        version_id: Specific version corresponding tool version.
+
+    Returns:
+        Specific version dict of the given tool.
+
+    Raises:
+        NotFound if no tool object present for give id mapping. Also, if
+        version with given id not found.
+    """
+
+    obj = toolsIdGet.__wrapped__(id)
+
+    for version in obj["versions"]:
+        if version['id'] == version_id:
+            return version
+
+    raise NotFound
 
 
 @log_traffic
@@ -68,6 +87,7 @@ def toolsGet(
     id: Optional[str] = None,
     alias: Optional[str] = None,
     toolClass: Optional[str] = None,
+    descriptorType: Optional[str] = None,
     registry: Optional[str] = None,
     organization: Optional[str] = None,
     name: Optional[str] = None,
@@ -77,70 +97,111 @@ def toolsGet(
     checker: Optional[bool] = None,
     limit: Optional[int] = None,
     offset: Optional[int] = None,
-) -> List:
+) -> Tuple[List, str, Dict]:
     """List all tools.
+
+    Filter parameters to subset the tools list can be specified. Filter
+    parameters are additive.
+
     Args:
-        id: A unique identifier of the tool.
-        alias: Tool alias identifier.
-        toolClass: Tool sub class.
-        registry: The image registry that contains the image.
-        organization: The organization in the registry that published
-        the image.
-        name: Name of the image.
-        toolname: Name of the tool.
-        description: Description of the tool.
-        author: Author of the tool.
-        checker: Flag for identifying checker workflows.
+        id: Return only entries with given identifier.
+        alias: Return only entries with the given alias.
+        toolClass: Return only entries with the given subclass name.
+        descriptorType: Return only entries with the given descriptor type.
+        registry: Return only entries from the given registry.
+        organization: Return only entries from the given organization.
+        name: Return only entries with the given image name.
+        toolname: Return only entries with the given tool name.
+        description: Return only entries with the given description.
+        author: Return only entries from the given author.
+        checker: Return only checker workflows.
+        limit: Number of records when paginating results.
+        offset: Start index when paginating results.
 
     Returns:
-        Returns a list of all tools if no filters applied.
-        Filters and returns tools if params provided.
+        List of all tools consistent with all filters, if specified.
     """
-    filter_list = []
-
+    filt = {}
     if id is not None:
-        filter_list.append({"id": id})
-
+        filt['id'] = id
+    if alias is not None:
+        filt['aliases'] = {
+            '$in': [alias],
+        }
+    if toolClass is not None:
+        filt['toolclass.name'] = toolClass
+    if descriptorType:
+        filt['versions'] = {
+            '$elemMatch': {
+                'descriptor_type': {
+                    '$in': [descriptorType],
+                },
+            },
+        }
+    if registry is not None:
+        filt['versions'] = {
+            '$elemMatch': {
+                'images': {
+                    '$elemMatch': {
+                        'registry_host': registry,
+                    },
+                },
+            },
+        }
     if organization is not None:
-        filter_list.append({"organization": organization})
-
-    if description is not None:
-        filter_list.append({"description": description})
-
+        filt['organization'] = organization
+    if name is not None:
+        filt['versions'] = {
+            '$elemMatch': {
+                'images': {
+                    '$elemMatch': {
+                        'image_name': registry,
+                    },
+                },
+            },
+        }
     if toolname is not None:
-        filter_list.append({"name": toolname})
+        filt['toolname'] = toolname
+    if description is not None:
+        filt['description'] = description
+    if author:
+        filt['versions'] = {
+            '$elemMatch': {
+                'author': {
+                    '$in': [author],
+                },
+            },
+        }
+    if checker is not None:
+        filt['has_checker'] = checker
 
-    # add support for registry, name, author, toolclass and checker.
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.warning(filt)
+
+    # add support for
+    # name: [versions].[images].image_name
+    # registry: [versions].[images].registry_host
 
     # Apply filters
     db_collection = (
         current_app.config['FOCA'].db.dbs['trsStore']
         .collections['objects'].client
     )
-    if filter_list:
-        records = db_collection.find(
-            {"$and": filter_list},
-            {"_id": False}
-        )
-    else:
-        records = db_collection.find({}, {"_id": False})
-    records = list(records)
+    records = db_collection.find(
+        filter=filt,
+        projection={"_id": False},
+    )
 
-    if alias is not None:
-        records = [rec for rec in records if alias in rec["aliases"]]
-
-    if offset is not None:
-        records = records[offset:]
-    if limit is not None:
-        records = records[:limit]
-
+    # TODO: dummy headers; implement pagination later
     headers = {}
     headers['next_page'] = None
     headers['last_page'] = None
     headers['self_link'] = None
     headers['current_offset'] = None
     headers['current_limit'] = None
-    return records, '200', headers
+
+    return list(records), '200', headers
 
 
 @log_traffic
