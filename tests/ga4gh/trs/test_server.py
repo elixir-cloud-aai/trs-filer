@@ -15,6 +15,7 @@ from trs_filer.ga4gh.trs.server import (
     toolsIdGet,
     toolsIdVersionsGet,
     toolsIdVersionsVersionIdGet,
+    toolsIdVersionsVersionIdTypeDescriptorGet,
 )
 from trs_filer.errors.exceptions import NotFound
 
@@ -88,6 +89,44 @@ MOCK_REQUEST_DATA_1 = {
                 "CWL"
             ],
             "id": "v1",
+            "images": [
+                {
+                    "checksum": [
+                        {
+                            "checksum": (
+                                "77af4d6b9913e693e8d0b4b294fa62ade6054e6b2f1f"
+                                "fb617ac955dd63fb0182"
+                            ),
+                            "type": "sha256"
+                        }
+                    ],
+                    "image_name": "string",
+                    "image_type": "Docker",
+                    "registry_host": "string",
+                    "size": 0,
+                    "updated": "string"
+                }
+            ],
+            "included_apps": [
+                "https://bio.tools/tool/mytum.de/SNAP2/1",
+                "https://bio.tools/bioexcel_seqqc"
+            ],
+            "is_production": True,
+            "meta_version": "string",
+            "name": "string",
+            "signed": True,
+            "verified_source": [
+                "string"
+            ]
+        },
+        {
+            "author": [
+                "string"
+            ],
+            "descriptor_type": [
+                "CWL"
+            ],
+            "id": "v2",
             "images": [
                 {
                     "checksum": [
@@ -380,3 +419,32 @@ def test_toolsGet_nofilters():
     with app.app_context():
         res = toolsGet.__wrapped__()
         assert res == ([temp_object], '200', HEADER_CONFIG_1)
+
+
+def test_toolsIdVersionsVersionIdTypeDescriptorGet():
+    """ Test for getting filter based tool descriptor. """
+
+    app = Flask(__name__)
+    app.config['FOCA'] = Config(
+        db=MongoConfig(**MONGO_CONFIG)
+    )
+    app.config['FOCA'].db.dbs['trsStore'] \
+        .collections['objects'].client = mongomock.MongoClient().db.collection
+    temp_object = MOCK_REQUEST_DATA_1
+
+    version_counter = 0
+    for ver in range(0, len(temp_object['versions'])):
+        temp_object['versions'][ver]['id'] = str(version_counter)
+        version_counter = version_counter + 1
+
+    temp_object['id'] = "TMP001"
+    temp_object['versions'][1]['descriptor_type'] = 'CWL'
+
+    app.config['FOCA'].db.dbs['trsStore'].collections['objects'].client \
+        .insert_one(temp_object).inserted_id
+
+    with app.app_context():
+        res = toolsIdVersionsVersionIdTypeDescriptorGet\
+                .__wrapped__("CWL", "TMP001", "1")
+
+        assert res == "CWL"

@@ -202,9 +202,54 @@ def toolsIdVersionsVersionIdTypeDescriptorGet(
     type: str,
     id: str,
     version_id: str,
-) -> Dict:
-    """Get the tool descriptor for the specified tool."""
-    return {}  # pragma: no cover
+) -> str:
+    """ Returns the descriptor for the specified tool (examples include CWL,
+        WDL, Nextflow, or Galaxy documents).
+
+    Args:
+        type: The output type of the descriptor. 
+        id: A unique identifier of the tool.
+        version_id: Specific version corresponding tool version.
+
+    Returns:
+        The descriptor for the specified tool.
+
+    Raises:
+        NotFound if no tool object present for give id mapping. Also, if
+        version with given id not found.
+    """
+
+    # fetch data
+    db_collection = (
+        current_app.config['FOCA'].db.dbs['trsStore']
+        .collections['objects'].client
+    )
+
+    _filter = {}
+    _filter["id"] = id
+    _filter["versions"] = {
+               "$elemMatch": {
+                    "id": version_id,
+                },
+            }
+
+    res = db_collection.find_one(
+            filter=_filter,
+            projection={
+                "versions": {
+                    "$elemMatch": {
+                        "descriptor_type": type,
+                    },
+                },
+                "_id": 0,
+                "versions.descriptor_type": 1,
+            },
+        )
+
+    if res:
+        return res['versions'][0]['descriptor_type'][0]
+    
+    raise NotFound
 
 
 @log_traffic
