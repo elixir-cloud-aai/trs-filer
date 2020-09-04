@@ -17,4 +17,4 @@ services:
         image: mongo:3.6
         restart: unless-stopped
         ports:
-            - "24017:27017"
+            - "27017:27017"
