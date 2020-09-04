@@ -7,13 +7,13 @@ services:
             context: .
             dockerfile: Dockerfile
         restart: unless-stopped
-        links: 
+        links:
             - mongodb
         command: bash -c "cd /app/trs_filer; python app.py"
         ports:
             - "8080:8080"
 
-    mongodb: 
+    mongodb:
         image: mongo:3.6
         restart: unless-stopped
         ports:

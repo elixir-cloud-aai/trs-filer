@@ -11,6 +11,7 @@ from trs_filer.ga4gh.trs.server import (
     deleteTool,
     postTool,
     putTool,
+    toolsGet,
     toolsIdGet,
     toolsIdVersionsGet,
     toolsIdVersionsVersionIdGet,
@@ -69,9 +70,15 @@ MOCK_REQUEST_DATA_1 = {
     ],
     "checker_url": "string",
     "description": "string",
+    "has_checker": True,
     "meta_version": "0.0.0",
     "name": "string",
     "organization": "string",
+    "toolclass": {
+        "description": "string",
+        "id": "string",
+        "name": "string"
+    },
     "versions": [
         {
             "author": [
@@ -79,6 +86,25 @@ MOCK_REQUEST_DATA_1 = {
             ],
             "descriptor_type": [
                 "CWL"
+            ],
+            "id": "v1",
+            "images": [
+                {
+                    "checksum": [
+                        {
+                            "checksum": (
+                                "77af4d6b9913e693e8d0b4b294fa62ade6054e6b2f1f"
+                                "fb617ac955dd63fb0182"
+                            ),
+                            "type": "sha256"
+                        }
+                    ],
+                    "image_name": "string",
+                    "image_type": "Docker",
+                    "registry_host": "string",
+                    "size": 0,
+                    "updated": "string"
+                }
             ],
             "included_apps": [
                 "https://bio.tools/tool/mytum.de/SNAP2/1",
@@ -95,6 +121,13 @@ MOCK_REQUEST_DATA_1 = {
     ]
 }
 MOCK_ID = "mock_id"
+HEADER_CONFIG_1 = {
+    'next_page': None,
+    'last_page': None,
+    'self_link': None,
+    'current_offset': None,
+    'current_limit': None,
+}
 
 
 def test_postTool():
@@ -295,3 +328,55 @@ def test_toolsIdVersionsVersionIdGet_object_not_found():
     with app.app_context():
         with pytest.raises(NotFound):
             toolsIdVersionsVersionIdGet.__wrapped__("TMP001", str(99))
+
+
+def test_toolsGet():
+    """Test for getting filter based tool list(filters present)."""
+    app = Flask(__name__)
+    app.config['FOCA'] = Config(
+        db=MongoConfig(**MONGO_CONFIG)
+    )
+    app.config['FOCA'].db.dbs['trsStore'] \
+        .collections['objects'].client = mongomock.MongoClient().db.collection
+    temp_object = MOCK_REQUEST_DATA_1
+    temp_object['id'] = "TMP001"
+    temp_object['_id'] = app.config['FOCA'].db.dbs['trsStore'] \
+        .collections['objects'].client.insert_one(temp_object).inserted_id
+    del temp_object['_id']
+
+    with app.app_context():
+        res = toolsGet.__wrapped__(
+            limit=1,
+            offset=0,
+            id="TMP001",
+            checker=True,
+            name="string",
+            author="string",
+            registry="string",
+            toolname="string",
+            toolClass="string",
+            descriptorType="CWL",
+            description=temp_object['description'],
+            organization=temp_object['organization'],
+            alias="630d31c3-381e-488d-b639-ce5d047a0142",
+        )
+        assert res == ([temp_object], '200', HEADER_CONFIG_1)
+
+
+def test_toolsGet_nofilters():
+    """Test for getting filter based tool list(no filters applied)."""
+    app = Flask(__name__)
+    app.config['FOCA'] = Config(
+        db=MongoConfig(**MONGO_CONFIG)
+    )
+    app.config['FOCA'].db.dbs['trsStore'] \
+        .collections['objects'].client = mongomock.MongoClient().db.collection
+    temp_object = MOCK_REQUEST_DATA_1
+    temp_object['id'] = "TMP001"
+    temp_object['_id'] = app.config['FOCA'].db.dbs['trsStore'] \
+        .collections['objects'].client.insert_one(temp_object).inserted_id
+    del temp_object['_id']
+
+    with app.app_context():
+        res = toolsGet.__wrapped__()
+        assert res == ([temp_object], '200', HEADER_CONFIG_1)

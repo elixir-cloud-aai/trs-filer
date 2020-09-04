@@ -1,6 +1,6 @@
 """"Controllers for TRS endpoints."""
 
-from typing import (Optional, Dict, List)
+from typing import (Optional, Dict, List, Tuple)
 
 from flask import (request, current_app)
 from foca.utils.logging import log_traffic
@@ -87,6 +87,7 @@ def toolsGet(
     id: Optional[str] = None,
     alias: Optional[str] = None,
     toolClass: Optional[str] = None,
+    descriptorType: Optional[str] = None,
     registry: Optional[str] = None,
     organization: Optional[str] = None,
     name: Optional[str] = None,
@@ -94,9 +95,106 @@ def toolsGet(
     description: Optional[str] = None,
     author: Optional[str] = None,
     checker: Optional[bool] = None,
-) -> List:
-    """List all tools."""
-    return []  # pragma: no cover
+    limit: Optional[int] = None,
+    offset: Optional[int] = None,
+) -> Tuple[List, str, Dict]:
+    """List all tools.
+
+    Filter parameters to subset the tools list can be specified. Filter
+    parameters are additive.
+
+    Args:
+        id: Return only entries with given identifier.
+        alias: Return only entries with the given alias.
+        toolClass: Return only entries with the given subclass name.
+        descriptorType: Return only entries with the given descriptor type.
+        registry: Return only entries from the given registry.
+        organization: Return only entries from the given organization.
+        name: Return only entries with the given image name.
+        toolname: Return only entries with the given tool name.
+        description: Return only entries with the given description.
+        author: Return only entries from the given author.
+        checker: Return only checker workflows.
+        limit: Number of records when paginating results.
+        offset: Start index when paginating results.
+
+    Returns:
+        List of all tools consistent with all filters, if specified.
+    """
+    # set filters
+    filt = {}
+    if id is not None:
+        filt['id'] = id
+    if alias is not None:
+        filt['aliases'] = {
+            '$in': [alias],
+        }
+    if toolClass is not None:
+        filt['toolclass.name'] = toolClass
+    if descriptorType:
+        filt['versions'] = {
+            '$elemMatch': {
+                'descriptor_type': {
+                    '$in': [descriptorType],
+                },
+            },
+        }
+    if registry is not None:
+        filt['versions'] = {
+            '$elemMatch': {
+                'images': {
+                    '$elemMatch': {
+                        'registry_host': registry,
+                    },
+                },
+            },
+        }
+    if organization is not None:
+        filt['organization'] = organization
+    if name is not None:
+        filt['versions'] = {
+            '$elemMatch': {
+                'images': {
+                    '$elemMatch': {
+                        'image_name': name,
+                    },
+                },
+            },
+        }
+    if toolname is not None:
+        filt['name'] = toolname
+    if description is not None:
+        filt['description'] = description
+    if author:
+        filt['versions'] = {
+            '$elemMatch': {
+                'author': {
+                    '$in': [author],
+                },
+            },
+        }
+    if checker is not None:
+        filt['has_checker'] = checker
+
+    # fetch data
+    db_collection = (
+        current_app.config['FOCA'].db.dbs['trsStore']
+        .collections['objects'].client
+    )
+    records = db_collection.find(
+        filter=filt,
+        projection={"_id": False},
+    )
+
+    # TODO: create dummy headers; implement pagination later
+    headers = {}
+    headers['next_page'] = None
+    headers['last_page'] = None
+    headers['self_link'] = None
+    headers['current_offset'] = None
+    headers['current_limit'] = None
+
+    return list(records), '200', headers
 
 
 @log_traffic
