@@ -13,6 +13,7 @@ from trs_filer.ga4gh.trs.server import (
     putTool,
     toolsGet,
     toolsIdGet,
+    getServiceInfo,
     toolsIdVersionsGet,
     toolsIdVersionsVersionIdGet,
 )
@@ -27,6 +28,7 @@ COLLECTION_CONFIG = {
 DB_CONFIG = {
     'collections': {
         'objects': COLLECTION_CONFIG,
+        'service_info': COLLECTION_CONFIG,
     },
 }
 MONGO_CONFIG = {
@@ -35,6 +37,26 @@ MONGO_CONFIG = {
     'dbs': {
         'trsStore': DB_CONFIG,
     },
+}
+SERVICE_INFO_CONFIG = {
+    "contactUrl": "mailto:support@example.com",
+    "createdAt": "2019-06-04T12:58:19Z",
+    "description": "This service provides...",
+    "documentationUrl": "https://docs.myservice.example.com",
+    "environment": "test",
+    "id": "org.ga4gh.myservice",
+    "name": "My project",
+    "organization": {
+        "name": "My organization",
+        "url": "https://example.com"
+    },
+    "type": {
+        "artifact": "beacon",
+        "group": "org.ga4gh",
+        "version": "1.0.0"
+    },
+    "updatedAt": "2019-06-04T12:58:19Z",
+    "version": "1.0.0"
 }
 ENDPOINT_CONFIG = {
     "tool": {
@@ -61,6 +83,7 @@ ENDPOINT_CONFIG = {
     "external_host": "1.2.3.4",
     "external_port": 80,
     "api_path": "ga4gh/trs/v2",
+    "service_info": deepcopy(SERVICE_INFO_CONFIG),
 }
 MOCK_REQUEST_DATA_1 = {
     "aliases": [
@@ -380,3 +403,19 @@ def test_toolsGet_nofilters():
     with app.app_context():
         res = toolsGet.__wrapped__()
         assert res == ([temp_object], '200', HEADER_CONFIG_1)
+
+
+def test_getServiceInfo():
+    """Test for getting service info config."""
+    app = Flask(__name__)
+    app.config['FOCA'] = Config(
+        db=MongoConfig(**MONGO_CONFIG),
+        endpoints=ENDPOINT_CONFIG,
+    )
+
+    app.config['FOCA'].db.dbs['trsStore'].collections['service_info'] \
+        .client = mongomock.MongoClient().db.collection
+
+    with app.app_context():
+        res = getServiceInfo.__wrapped__()
+        assert res == SERVICE_INFO_CONFIG

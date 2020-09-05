@@ -8,6 +8,9 @@ from foca.utils.logging import log_traffic
 from trs_filer.ga4gh.trs.endpoints.register_tools import (
     RegisterObject,
 )
+from trs_filer.ga4gh.trs.endpoints.service_info import (
+    RegisterService,
+)
 from trs_filer.errors.exceptions import NotFound
 
 
@@ -256,8 +259,16 @@ def toolClassesGet() -> List:
 
 @log_traffic
 def getServiceInfo() -> Dict:
-    """Show information about this service."""
-    return {}  # pragma: no cover
+    """Show information about this service.
+
+    Returns:
+        Service info details for the given tool.
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info("passing")
+    service_class = RegisterService()
+    return service_class.get_service_info()
 
 
 @log_traffic

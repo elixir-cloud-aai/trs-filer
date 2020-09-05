@@ -18,6 +18,12 @@ db:
                               id: 1
                           options:
                             'unique': True
+                service_info:
+                    indexes:
+                        - keys:
+                              id: 1
+                          options:
+                            'unique': True
 
 api:
     specs:
@@ -77,3 +83,20 @@ endpoints:
     external_host: 1.2.3.4
     external_port: 3888
     api_path: ga4gh/trs/v2
+    service_info:
+        id: "TEMPID1"
+        name: "TEMP_STUB"
+        type:
+            group: "TEMP_GROUP"
+            artifact: "TEMP_ARTIFACT"
+            version: "v1"
+        description: "Description of service."
+        organization:
+            name: "Parent organization"
+            url: "parent/abc"
+        contactUrl: "contact/abc"
+        documentationUrl: "docs/abc"
+        createdAt: "2020-01-01"
+        updatedAt: "2020-01-01"
+        environment: "ENV"
+        version: "0.0.0"
