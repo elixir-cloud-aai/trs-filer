@@ -15,6 +15,7 @@ from trs_filer.ga4gh.trs.server import (
     toolsIdGet,
     toolsIdVersionsGet,
     toolsIdVersionsVersionIdGet,
+    postToolVersions,
 )
 from trs_filer.errors.exceptions import NotFound
 
@@ -128,6 +129,28 @@ HEADER_CONFIG_1 = {
     'current_offset': None,
     'current_limit': None,
 }
+MOCK_REQUEST_DATA_VERSION_UPDATE = [
+    {
+        "id": "new",
+        "author": [
+            "string"
+        ],
+        "descriptor_type": [
+            "CWL"
+        ],
+        "included_apps": [
+            "https://bio.tools/tool/mytum.de/SNAP2/1",
+            "https://bio.tools/bioexcel_seqqc"
+        ],
+        "is_production": True,
+        "meta_version": "string",
+        "name": "string",
+        "signed": True,
+        "verified_source": [
+            "string"
+        ]
+    }
+]
 
 
 def test_postTool():
@@ -380,3 +403,24 @@ def test_toolsGet_nofilters():
     with app.app_context():
         res = toolsGet.__wrapped__()
         assert res == ([temp_object], '200', HEADER_CONFIG_1)
+
+
+def test_postToolVersions():
+    """Test for updating versions for a give `tool_id`."""
+    app = Flask(__name__)
+    app.config['FOCA'] = Config(
+        db=MongoConfig(**MONGO_CONFIG),
+        endpoints=ENDPOINT_CONFIG,
+    )
+    app.config['FOCA'].db.dbs['trsStore'].collections['objects'] \
+        .client = mongomock.MongoClient().db.collection
+
+    mock_resp = deepcopy(MOCK_REQUEST_DATA_1)
+    mock_resp["id"] = "TMP001"
+
+    app.config['FOCA'].db.dbs['trsStore'] \
+        .collections['objects'].client.insert_one(mock_resp)
+
+    with app.test_request_context(json=MOCK_REQUEST_DATA_VERSION_UPDATE):
+        res = postToolVersions.__wrapped__("TMP001")
+        assert isinstance(res, str)

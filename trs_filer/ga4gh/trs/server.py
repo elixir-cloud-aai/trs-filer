@@ -7,6 +7,7 @@ from foca.utils.logging import log_traffic
 
 from trs_filer.ga4gh.trs.endpoints.register_tools import (
     RegisterObject,
+    RegisterToolVersion,
 )
 from trs_filer.errors.exceptions import NotFound
 
@@ -313,3 +314,36 @@ def deleteTool(
         raise NotFound
     else:
         return id
+
+
+@log_traffic
+def postToolVersions(
+    id: str,
+) -> str:
+    """Update tool version list.
+
+    Args:
+        id: Identifier of tool object to be updated.
+
+    Returns:
+        Identifier of the object updated.
+    """
+    version_controller = RegisterToolVersion(
+        id=id,
+        append=True,
+        request=request,
+    )
+    set_versions = version_controller.create_update_versions()
+
+    db_collection = (
+        current_app.config['FOCA'].db.dbs['trsStore']
+        .collections['objects'].client
+    )
+    db_collection.update_one(
+        {'id': id},
+        {
+            '$set': {'versions': set_versions}
+        },
+        upsert=False,
+    )
+    return id

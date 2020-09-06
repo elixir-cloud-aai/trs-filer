@@ -1,8 +1,10 @@
-"""Unit tests for `RegisterObject()` controller."""
+"""Unit tests for `RegisterObject()`, `RegisterToolVersion` controller."""
 
 import string  # noqa: F401
 
 import pytest
+import mongomock
+from copy import deepcopy
 from pymongo.errors import DuplicateKeyError
 
 from flask import Flask
@@ -11,7 +13,8 @@ from unittest.mock import MagicMock
 from addict import Dict
 
 from trs_filer.ga4gh.trs.endpoints.register_tools import (
-    RegisterObject
+    RegisterObject,
+    RegisterToolVersion,
 )
 from trs_filer.errors.exceptions import BadRequest
 
@@ -172,6 +175,28 @@ MOCK_REQUEST_DATA_SAME_VERSION_ID = {
         },
     ]
 }
+MOCK_REQUEST_DATA_VERSION_UPDATE = [
+    {
+        "id": "new",
+        "author": [
+            "string"
+        ],
+        "descriptor_type": [
+            "CWL"
+        ],
+        "included_apps": [
+            "https://bio.tools/tool/mytum.de/SNAP2/1",
+            "https://bio.tools/bioexcel_seqqc"
+        ],
+        "is_production": True,
+        "meta_version": "string",
+        "name": "string",
+        "signed": True,
+        "verified_source": [
+            "string"
+        ]
+    }
+]
 
 
 def test_generate_id():
@@ -241,3 +266,33 @@ def test_create_tool_duplicate_version_id_provided():
     with app.app_context():
         with pytest.raises(BadRequest):
             RegisterObject(request_data).register_object()
+
+
+def test_old_version_update_without_id_expression():
+    """Test for create_update_versions in case of old version update
+    from POST.
+    """
+    app = Flask(__name__)
+    app.config['FOCA'] = Config(
+        db=MongoConfig(**MONGO_CONFIG),
+        endpoints=ENDPOINT_CONFIG_CHARSET_LITERAL,
+    )
+    app.config['FOCA'].db.dbs['trsStore'].collections['objects'] \
+        .client = mongomock.MongoClient().db.collection
+
+    mock_resp = deepcopy(MOCK_REQUEST_DATA_VALID)
+    mock_resp["id"] = "TMP001"
+    mock_resp["versions"][0]["id"] = "old"
+
+    app.config['FOCA'].db.dbs['trsStore'] \
+        .collections['objects'].client.insert_one(mock_resp)
+
+    request_data = Dict()
+    request_data.json = MOCK_REQUEST_DATA_VERSION_UPDATE
+    with app.app_context():
+        version_class = RegisterToolVersion(
+            append=True,
+            id="TMP001",
+            request=request_data,
+        )
+        assert isinstance(version_class.create_update_versions(), list)
