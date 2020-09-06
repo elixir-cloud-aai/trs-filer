@@ -1,5 +1,107 @@
 paths:
+  /tools:
+    post:
+      summary: Add a tool.
+      description: Create a tool object with a randomly generated unique ID.
+      operationId: postTool
+      tags:
+        - TRS-Filer
+      requestBody:
+        description: Tool (meta)data to add.
+        required: true
+        content:
+          application/json:
+            schema:
+              x-body-name: tool
+              $ref: '#/components/schemas/ToolRegister'
+      responses:
+        '200':
+          description: The tool was successfully created.
+          content:
+            application/json:
+              schema:
+                description: Tool identifier.
+                type: string
+        '400':
+          description: The request is malformed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: The request is unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: The requester is not authorized to perform this action.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: An unexpected error occurred.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   "/tools/{id}":
+    put:
+      summary: Add or update a tool.
+      description: Create a tool object with a predefined ID. Overwrites any
+        existing tool object with the same ID.
+      operationId: putTool
+      tags:
+        - TRS-Filer
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: A unique identifier of the tool, scoped to this registry,
+            for example `123456`.
+          schema:
+            type: string
+      requestBody:
+        description: Tool (meta)data to add.
+        required: true
+        content:
+          application/json:
+            schema:
+              x-body-name: tool
+              $ref: '#/components/schemas/ToolRegister'
+      responses:
+        '200':
+          description: The tool was successfully created/updated.
+          content:
+            application/json:
+              schema:
+                description: Tool identifier.
+                type: string
+        '400':
+          description: The request is malformed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: The request is unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: The requester is not authorized to perform this action.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: An unexpected error occurred.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
     delete:
       summary: Delete a tool.
       description: Delete an existing tool object.
@@ -10,8 +112,8 @@ paths:
         - name: id
           in: path
           required: true
-          description: A unique identifier of the tool, scoped to this registry, for
-            example `123456`.
+          description: A unique identifier of the tool, scoped to this registry,
+            for example `123456`.
           schema:
             type: string
       responses:
@@ -21,7 +123,7 @@ paths:
             application/json:
               schema:
                 type: string
-                description: The previous identifier of the deleted tool.
+                description: Identifier of deleted tool.
         '400':
           description: The request is malformed.
           content:
@@ -52,35 +154,36 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-    put:
-      summary: Create or update a tool.
-      description: Create a tool object with a predefined unique ID. Overwrites
-        any existing tool object with the same ID.
-      operationId: putTool
+  "/tools/{id}/versions":
+    post:
+      summary: Add or update a tool version.
+      description: Create or update a tool version object.
+      operationId: postToolVersion
       tags:
         - TRS-Filer
       parameters:
         - name: id
           in: path
           required: true
-          description: A unique identifier of the tool, scoped to this registry, for
-            example `123456`.
+          description: A unique identifier of the tool, scoped to this registry,
+            for example `123456`.
           schema:
             type: string
       requestBody:
-        description: Tool (meta)data to add.
+        description: Tool version (meta)data to add.
         required: true
         content:
           application/json:
             schema:
-              x-body-name: tool
-              $ref: '#/components/schemas/ToolRegister'
+              x-body-name: tool_version
+              $ref: '#/components/schemas/ToolVersionRegister'
       responses:
         '200':
-          description: The tool was successfully created/updated.
+          description: The tool version was successfully created.
           content:
             application/json:
               schema:
+                description: Tool version identifier.
                 type: string
         '400':
           description: The request is malformed.
@@ -106,27 +209,35 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /tools:
-    post:
-      summary: Create a tool.
-      description: Create a tool object with a randomly generated unique ID.
-      operationId: postTool
+  "/tools/{id}/versions/{version_id}":
+    delete:
+      summary: Delete a tool version.
+      description: Delete an existing tool version object.
+      operationId: deleteToolVersion
       tags:
         - TRS-Filer
-      requestBody:
-        description: Tool (meta)data to add.
-        required: true
-        content:
-          application/json:
-            schema:
-              x-body-name: tool
-              $ref: '#/components/schemas/ToolRegister'
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: A unique identifier of the tool, scoped to this registry,
+            for example `123456`.
+          schema:
+            type: string
+        - name: version_id
+          in: path
+          required: true
+          description: An identifier of the tool version for this particular
+            tool registry, for example `v1`.
+          schema:
+            type: string
       responses:
         '200':
-          description: The tool was successfully created.
+          description: The tool version was successfully deleted.
           content:
             application/json:
               schema:
+                description: Identifier of deleted tool version.
                 type: string
         '400':
           description: The request is malformed.
@@ -142,6 +253,12 @@ paths:
                 $ref: '#/components/schemas/Error'
         '403':
           description: The requester is not authorized to perform this action.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: The requested tool was not found.
           content:
             application/json:
               schema:
@@ -172,9 +289,9 @@ components:
             accomplish.
     ToolRegister:
       type: object
-      description: A tool (or described tool) is defined as a tuple of a descriptor
-        file (which potentially consists of multiple files), a set of container
-        images, and a set of instructions for creating those images.
+      description: A tool (or described tool) is defined as a tuple of a
+        descriptor file (which potentially consists of multiple files), a set of
+        container images, and a set of instructions for creating those images.
       required:
         - organization
         - toolclass
@@ -190,13 +307,10 @@ components:
             - bio.tools:630d31c3-381e-488d-b639-ce5d047a0142
           description: >-
             Support for this parameter is optional for tool registries that
-            support aliases.
-
-            A list of strings that can be used to identify this tool which could be  straight up URLs. 
-
-            This can be used to expose alternative ids (such as GUIDs) for a tool
-
-            for registries. Can be used to match tools across registries.
+            support aliases. A list of strings that can be used to identify
+            this tool which could be straight up URLs. This can be used to
+            expose alternative ids (such as GUIDs) for a tool for registries.
+            Can be used to match tools across registries.
         organization:
           type: string
           description: The organization that published the image.
@@ -213,8 +327,9 @@ components:
           description: Whether this tool has a checker tool associated with it.
         checker_url:
           type: string
-          description: Optional url to the checker tool that will exit successfully if
-            this tool produced the expected result given test data.
+          description: Optional url to the checker tool that will exit
+            successfully if this tool produced the expected result given test
+            data.
         versions:
           description: A list of versions for this tool.
           type: array
@@ -229,28 +344,28 @@ components:
           type: array
           items:
             type: string
-          description: Contact information for the author of this version of the tool in
-            the registry. (More complex authorship information is handled by the
-            descriptor).
+          description: Contact information for the author of this version of
+            the tool in the registry. (More complex authorship information is
+            handled by the descriptor).
         name:
           type: string
           description: The name of the version.
         id:
           type: string
-          description: A unique identifier of the version of this tool for this particular
-            tool registry. If not provided, will be auto-generated by the implementation.
-            Note that a `BadRequest` will be returned if multiple versions with the same
-            `id` properties are provided.
+          description: A unique identifier of the version of this tool for this
+            particular tool registry. If not provided, will be auto-generated
+            by the implementation. Note that a `BadRequest` will be returned if
+            multiple versions with the same `id` properties are provided.
           example: v1
         is_production:
           type: boolean
-          description: This version of a tool is guaranteed to not change over time (for
-            example, a  tool built from a tag in git as opposed to a branch). A
-            production quality tool  is required to have a checksum
+          description: This version of a tool is guaranteed to not change over
+            time (for example, a  tool built from a tag in git as opposed to a
+            branch). A production quality tool  is required to have a checksum.
         images:
-          description: All known docker images (and versions/hashes) used by this tool. If
-            the tool has to evaluate any of the docker images strings at
-            runtime, those ones cannot be reported here.
+          description: All known docker images (and versions/hashes) used by
+            this tool. If the tool has to evaluate any of the docker images
+            strings at runtime, those ones cannot be reported here.
           type: array
           items:
             $ref: "#/components/schemas/ImageData"
@@ -263,23 +378,24 @@ components:
           type: boolean
           description: Reports if this tool has a containerfile available. (For
             Docker-based tools, this would indicate the presence of a
-            Dockerfile)
+            Dockerfile).
         verified:
           type: boolean
-          description: Reports whether this tool has been verified by a specific
-            organization or individual.
+          description: Reports whether this tool has been verified by a
+            specific organization or individual.
         verified_source:
           type: array
           items:
             type: string
-          description: Source of metadata that can support a verified tool, such as an
-            email or URL.
+          description: Source of metadata that can support a verified tool,
+            such as an email or URL.
         signed:
           type: boolean
-          description: Reports whether this version of the tool has been signed.
+          description: Reports whether this version of the tool has been
+            signed.
         included_apps:
-          description: An array of IDs for the applications that are stored inside this
-            tool.
+          description: An array of IDs for the applications that are stored
+            inside this tool.
           example:
             - https://bio.tools/tool/mytum.de/SNAP2/1
             - https://bio.tools/bioexcel_seqqc
