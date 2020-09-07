@@ -15,6 +15,8 @@ from trs_filer.ga4gh.trs.server import (
     toolsIdGet,
     toolsIdVersionsGet,
     toolsIdVersionsVersionIdGet,
+    postToolClass,
+    toolClassesGet,
 )
 from trs_filer.errors.exceptions import NotFound
 
@@ -27,6 +29,7 @@ COLLECTION_CONFIG = {
 DB_CONFIG = {
     'collections': {
         'objects': COLLECTION_CONFIG,
+        'toolclasses': COLLECTION_CONFIG,
     },
 }
 MONGO_CONFIG = {
@@ -50,6 +53,16 @@ ENDPOINT_CONFIG = {
     "tool_version": {
         "id": {
             "charset": 'string.digits',
+            "length": 6,
+        },
+        "meta_version": {
+            "init": 1,
+            "increment": 1,
+        },
+    },
+    "toolclass": {
+        "id": {
+            "charset": '0123456789',
             "length": 6,
         },
         "meta_version": {
@@ -127,6 +140,11 @@ HEADER_CONFIG_1 = {
     'self_link': None,
     'current_offset': None,
     'current_limit': None,
+}
+MOCK_REQUEST_DATA_VALID_TOOLCLASS = {
+    "description": "string",
+    "id": "string",
+    "name": "string"
 }
 
 
@@ -379,4 +397,62 @@ def test_toolsGet_nofilters():
 
     with app.app_context():
         res = toolsGet.__wrapped__()
+        assert res == ([temp_object], '200', HEADER_CONFIG_1)
+
+
+def test_postToolClass():
+    """Test `POST /toolClasses` endpoint."""
+    app = Flask(__name__)
+    app.config['FOCA'] = Config(
+        db=MongoConfig(**MONGO_CONFIG),
+        endpoints=ENDPOINT_CONFIG
+    )
+    app.config['FOCA'].db.dbs['trsStore'] \
+        .collections['toolclasses'].client = \
+        mongomock.MongoClient().db.collection
+
+    with app.test_request_context(json=MOCK_REQUEST_DATA_VALID_TOOLCLASS):
+        res = postToolClass.__wrapped__()
+        assert isinstance(res, str)
+
+
+def test_toolClassesGet():
+    """Test for getting filter based toolClass list(filter id present)."""
+    app = Flask(__name__)
+    app.config['FOCA'] = Config(
+        db=MongoConfig(**MONGO_CONFIG)
+    )
+    app.config['FOCA'].db.dbs['trsStore'] \
+        .collections['toolclasses'].client = \
+        mongomock.MongoClient().db.collection
+    temp_object = MOCK_REQUEST_DATA_VALID_TOOLCLASS
+    temp_object['id'] = "TMP001"
+    temp_object['_id'] = app.config['FOCA'].db.dbs['trsStore'] \
+        .collections['toolclasses'].client.insert_one(temp_object).inserted_id
+    del temp_object['_id']
+
+    with app.app_context():
+        res = toolClassesGet.__wrapped__(
+            id="TMP001",
+        )
+        assert res == ([temp_object], '200', HEADER_CONFIG_1)
+
+
+def test_toolClassesGet_nofilters():
+    """Test for getting filter based tool list(no filters applied)."""
+    app = Flask(__name__)
+    app.config['FOCA'] = Config(
+        db=MongoConfig(**MONGO_CONFIG)
+    )
+    app.config['FOCA'].db.dbs['trsStore'] \
+        .collections['toolclasses'].client = \
+        mongomock.MongoClient().db.collection
+    temp_object = MOCK_REQUEST_DATA_VALID_TOOLCLASS
+    temp_object['id'] = "TMP001"
+    temp_object['_id'] = app.config['FOCA'].db.dbs['trsStore'] \
+        .collections['toolclasses'].client.insert_one(temp_object).inserted_id
+    del temp_object['_id']
+
+    with app.app_context():
+        res = toolClassesGet.__wrapped__()
         assert res == ([temp_object], '200', HEADER_CONFIG_1)

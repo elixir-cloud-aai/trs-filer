@@ -11,21 +11,22 @@ logger = logging.getLogger(__name__)
 
 
 class RegisterToolClass:
-    """Class to register tools with the service."""
+    """Class to register toolClasses with the service."""
 
     def __init__(
         self,
         request: Request,
         id: Optional[str] = None,
     ) -> None:
-        """Initialize tool data.
+        """Initialize toolClass data.
 
         Args:
             request: API request object.
             id: ToolClass ID. Auto-generated if not provided.
 
         Attributes:
-            description: A longer explanation of what this class is and what it can accomplish.
+            description: A longer explanation of what this class is and what
+            it can accomplish.
 
             id: The unique identifier for the class.
 
@@ -53,10 +54,10 @@ class RegisterToolClass:
                 sorted(set(self.toolclass_id_charset)))
 
     def register_toolclass(self) -> Dict:
-        """Register tool with TRS.
+        """Register toolClass with TRS.
 
         Returns:
-            Tool object.
+            ToolClass object.
         """
 
         # set unique ID, dependent values and register object
@@ -72,12 +73,6 @@ class RegisterToolClass:
             else:
                 replace = True
 
-            # set toolclass self reference URL
-            self.toolclass_data['url'] = (
-                f"{self.url_prefix}://{self.host_name}:{self.external_port}/"
-                f"{self.api_path}/toolClasses/{self.toolclass_data['id']}"
-            )
-
             # update(insert) toolclass in(to) database
             if replace:
                 self.db_collection_toolclass.replace_one(
@@ -92,7 +87,8 @@ class RegisterToolClass:
                 except DuplicateKeyError:
                     continue
 
-            logger.info(f"Created toolClass with id: {self.toolclass_data['id']}")
+            logger.info(
+                f"Created toolClass with id: {self.toolclass_data['id']}")
             break
 
         return self.toolclass_data
