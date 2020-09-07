@@ -152,6 +152,52 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /toolClasses:
+    post:
+      summary: Create a toolClass.
+      description: Create a toolClass object with a randomly generated unique ID.
+      operationId: postToolClass
+      tags:
+        - TRS-Filer
+      requestBody:
+        description: ToolClass (meta)data to add.
+        required: true
+        content:
+          application/json:
+            schema:
+              x-body-name: tool
+              $ref: '#/components/schemas/ToolClass'
+      responses:
+        '200':
+          description: The tool was successfully created.
+          content:
+            application/json:
+              schema:
+                type: string
+        '400':
+          description: The request is malformed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: The request is unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: The requester is not authorized to perform this action.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: An unexpected error occurred.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 components:
   schemas:
     ToolClass:

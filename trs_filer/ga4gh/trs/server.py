@@ -8,6 +8,9 @@ from foca.utils.logging import log_traffic
 from trs_filer.ga4gh.trs.endpoints.register_tools import (
     RegisterObject,
 )
+from trs_filer.ga4gh.trs.endpoints.register_tool_classes import (
+    RegisterToolClass
+)
 from trs_filer.errors.exceptions import NotFound
 
 
@@ -249,9 +252,39 @@ def toolsIdVersionsVersionIdContainerfileGet(
 
 
 @log_traffic
-def toolClassesGet() -> List:
+def toolClassesGet(
+    id: Optional[str] = None,
+    name: Optional[str] = None,
+    description: Optional[str] = None,
+) -> List:
     """List all tool types."""
-    return []  # pragma: no cover
+    filt = {}
+    if id is not None:
+        filt['id'] = id
+    if description is not None:
+        filt['description'] = description
+    if name is not None:
+        filt['name'] = name
+
+    # fetch data
+    db_collection_class = (
+        current_app.config['FOCA'].db.dbs['trsStore']
+        .collections['toolclasses'].client
+    )
+    records = db_collection_class.find(
+        filter=filt,
+        projection={"_id": False},
+    )
+
+    # TODO: create dummy headers; implement pagination later
+    headers = {}
+    headers['next_page'] = None
+    headers['last_page'] = None
+    headers['self_link'] = None
+    headers['current_offset'] = None
+    headers['current_limit'] = None
+
+    return list(records), '200', headers
 
 
 @log_traffic
@@ -313,3 +346,14 @@ def deleteTool(
         raise NotFound
     else:
         return id
+
+@log_traffic
+def postToolClass() -> Dict:
+    """Add toolClass with an auto-generated ID.
+
+    Returns:
+        Identifier of created object.
+    """
+    tool_class_creator = RegisterToolClass(request=request)
+    tool_class = tool_class_creator.register_toolclass()
+    return tool_class['id']

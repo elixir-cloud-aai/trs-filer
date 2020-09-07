@@ -18,6 +18,12 @@ db:
                               id: 1
                           options:
                             'unique': True
+                toolclasses:
+                    indexes:
+                        - keys:
+                              id: 1
+                          options:
+                            'unique': True
 
 api:
     specs:
@@ -67,6 +73,13 @@ endpoints:
             init: 1
             increment: 1
     tool_version:
+        id:
+            charset: string.ascii_lowercase + string.digits
+            length: 6
+        meta_version:
+            init: 1
+            increment: 1
+    toolclass:
         id:
             charset: string.ascii_lowercase + string.digits
             length: 6
