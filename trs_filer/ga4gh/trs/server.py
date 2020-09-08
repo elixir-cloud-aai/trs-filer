@@ -78,22 +78,23 @@ def toolsIdVersionsVersionIdGet(
         .collections['objects'].client
     )
 
-    filt = {}
-    filt['id'] = id
-    filt['versions'] = {
-        '$elemMatch': {
-            'id': version_id
+    proj = {
+        '_id': False,
+        'versions': {
+            '$elemMatch': {
+                'id': version_id,
+            },
         },
     }
-    req_version = db_collection.find_one(
-        filter=filt,
-        projection={"_id": False},
+    data = db_collection.find_one(
+        filter={'id': id},
+        projection=proj,
     )
 
-    if not req_version:
+    if not data:
         raise NotFound
 
-    return req_version['versions'][0]
+    return data['versions'][0]
 
 
 @log_traffic
