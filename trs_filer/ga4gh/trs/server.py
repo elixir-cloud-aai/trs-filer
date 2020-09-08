@@ -90,11 +90,10 @@ def toolsIdVersionsVersionIdGet(
         filter={'id': id},
         projection=proj,
     )
-
-    if not data:
+    try:
+        return data['versions'][0]
+    except (KeyError, TypeError):
         raise NotFound
-
-    return data['versions'][0]
 
 
 @log_traffic
