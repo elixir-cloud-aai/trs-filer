@@ -216,6 +216,11 @@ components:
           type: string
           description: A longer explanation of what this class is and what it can
             accomplish.
+        no_validation:
+          type: boolean
+          description: If true, tool classes are added to the database on the fly whenever someone adds a tool.
+            If false, tool class id is first validated with the existing tool class ids in the database and a
+            BadRequest is generated if the id is not present.
     ToolRegister:
       type: object
       description: A tool (or described tool) is defined as a tuple of a descriptor

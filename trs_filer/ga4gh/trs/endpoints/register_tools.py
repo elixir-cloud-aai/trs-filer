@@ -9,6 +9,9 @@ from flask import (current_app, Request)
 from pymongo.errors import DuplicateKeyError
 
 from trs_filer.errors.exceptions import BadRequest
+from trs_filer.ga4gh.trs.endpoints.register_tool_classes import (
+    RegisterToolClass
+)
 
 logger = logging.getLogger(__name__)
 
@@ -106,6 +109,30 @@ class RegisterObject:
                 f"{self.url_prefix}://{self.host_name}:{self.external_port}/"
                 f"{self.api_path}/tools/{self.tool_data['id']}"
             )
+
+            no_validation = self.tool_data.get('toolclass', None)
+            no_validation_value = no_validation.get('no_validation', None)
+
+            # Add the ToolClass in database if not there or raise a BadRequest
+            if no_validation_value:
+                del self.tool_data['toolclass']['no_validation']
+                tool_class_creator = RegisterToolClass(
+                    toolClass_data=self.tool_data['toolclass'],
+                    id=self.tool_data['toolclass']['id'])
+                tool_class_creator.register_toolclass()
+
+            else:
+                self.db_collection_class = (
+                    current_app.config['FOCA'].db.dbs['trsStore']
+                    .collections['toolclasses'].client
+                )
+                data = self.db_collection_class.find_one(
+                    filter={'id': self.tool_data['toolclass']['id']},
+                    projection={'_id': False},
+                )
+
+                if data is None:
+                    raise BadRequest
 
             # process version information
             if 'versions' in self.tool_data:

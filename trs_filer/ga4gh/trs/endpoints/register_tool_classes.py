@@ -3,7 +3,7 @@
 import logging
 from random import choice
 import string
-from typing import (Dict, Optional)
+from typing import (Dict, Optional, List)
 from pymongo.errors import DuplicateKeyError
 from flask import (current_app, Request)
 
@@ -15,7 +15,8 @@ class RegisterToolClass:
 
     def __init__(
         self,
-        request: Request,
+        request: Optional[Request] = None,
+        toolClass_data: Optional[List] = None,
         id: Optional[str] = None,
     ) -> None:
         """Initialize toolClass data.
@@ -32,7 +33,11 @@ class RegisterToolClass:
 
             name: A short friendly name for the class.
         """
-        self.toolclass_data = request.json
+        if toolClass_data is not None:
+            self.toolclass_data = toolClass_data
+        if request:
+            self.toolclass_data = request.json
+
         if id:
             self.toolclass_data['id'] = id
         self.db_collection_toolclass = (
@@ -75,6 +80,7 @@ class RegisterToolClass:
 
             # update(insert) toolclass in(to) database
             if replace:
+
                 self.db_collection_toolclass.replace_one(
                     filter={'id': self.toolclass_data['id']},
                     replacement=self.toolclass_data,

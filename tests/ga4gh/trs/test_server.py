@@ -90,7 +90,8 @@ MOCK_REQUEST_DATA_1 = {
     "toolclass": {
         "description": "string",
         "id": "string",
-        "name": "string"
+        "name": "string",
+        "no_validation": True
     },
     "versions": [
         {
@@ -156,7 +157,11 @@ def test_postTool():
         endpoints=ENDPOINT_CONFIG
     )
     app.config['FOCA'].db.dbs['trsStore'] \
-        .collections['objects'].client = mongomock.MongoClient().db.collection
+        .collections['objects'].client = \
+        mongomock.MongoClient().db.collection
+    app.config['FOCA'].db.dbs['trsStore'] \
+        .collections['toolclasses'].client = \
+        mongomock.MongoClient().db.collection
 
     with app.test_request_context(json=MOCK_REQUEST_DATA_1):
         res = postTool.__wrapped__()
@@ -172,6 +177,9 @@ def test_putTool():
     )
     app.config['FOCA'].db.dbs['trsStore'] \
         .collections['objects'].client = mongomock.MongoClient().db.collection
+    app.config['FOCA'].db.dbs['trsStore'] \
+        .collections['toolclasses'].client = \
+        mongomock.MongoClient().db.collection
 
     with app.test_request_context(json=MOCK_REQUEST_DATA_1):
         res = putTool.__wrapped__("TMP001")
@@ -417,7 +425,7 @@ def test_postToolClass():
 
 
 def test_toolClassesGet():
-    """Test for getting filter based toolClass list(filter id present)."""
+    """Test for getting filter based toolClass list(filters present)."""
     app = Flask(__name__)
     app.config['FOCA'] = Config(
         db=MongoConfig(**MONGO_CONFIG)
@@ -434,6 +442,8 @@ def test_toolClassesGet():
     with app.app_context():
         res = toolClassesGet.__wrapped__(
             id="TMP001",
+            name="string",
+            description="string"
         )
         assert res == ([temp_object], '200', HEADER_CONFIG_1)
 

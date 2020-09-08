@@ -50,6 +50,11 @@ MOCK_REQUEST_DATA_VALID = {
     "name": "string"
 }
 
+MOCK_REQUEST_DATA_VALID_NO_ID = {
+    "description": "string",
+    "name": "string"
+}
+
 
 def test_generate_id():
     """Test for generate_id method."""
@@ -64,7 +69,27 @@ def test_generate_id():
         assert isinstance(RegisterToolClass(request_data).generate_id(), str)
 
 
-def test_create_tool_duplicate_key():
+def test_create_toolclass_with_random_id():
+    """Test for valid duplicate key error."""
+    app = Flask(__name__)
+    app.config['FOCA'] = Config(
+        db=MongoConfig(**MONGO_CONFIG),
+        endpoints=ENDPOINT_CONFIG_CHARSET_LITERAL,
+    )
+
+    app.config['FOCA'].db.dbs['trsStore'] \
+        .collections['toolclasses'].client = MagicMock()
+
+    request_data = Dict()
+    request_data.json = MOCK_REQUEST_DATA_VALID_NO_ID
+    with app.app_context():
+        assert isinstance(
+            RegisterToolClass(request_data).register_toolclass()['id'],
+            str,
+        )
+
+
+def test_create_toolclass_duplicate_key():
     """Test for valid duplicate key error."""
     app = Flask(__name__)
     app.config['FOCA'] = Config(
