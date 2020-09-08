@@ -17,6 +17,7 @@ from trs_filer.ga4gh.trs.server import (
     toolsIdVersionsVersionIdGet,
     postToolClass,
     toolClassesGet,
+    putToolClass,
 )
 from trs_filer.errors.exceptions import NotFound
 
@@ -466,3 +467,20 @@ def test_toolClassesGet_nofilters():
     with app.app_context():
         res = toolClassesGet.__wrapped__()
         assert res == ([temp_object], '200', HEADER_CONFIG_1)
+
+
+def test_putToolClass():
+    """Test `PUT /toolClasses/{id}` endpoint."""
+    app = Flask(__name__)
+    app.config['FOCA'] = Config(
+        db=MongoConfig(**MONGO_CONFIG),
+        endpoints=ENDPOINT_CONFIG
+    )
+
+    app.config['FOCA'].db.dbs['trsStore'] \
+        .collections['toolclasses'].client = \
+        mongomock.MongoClient().db.collection
+
+    with app.test_request_context(json=MOCK_REQUEST_DATA_VALID_TOOLCLASS):
+        res = putToolClass.__wrapped__("TMP001")
+        assert isinstance(res, str)
