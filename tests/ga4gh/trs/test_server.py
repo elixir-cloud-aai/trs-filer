@@ -25,9 +25,16 @@ INDEX_CONFIG = {
 COLLECTION_CONFIG = {
     'indexes': [INDEX_CONFIG],
 }
+FILE_INDEX_CONFIG = {
+    'keys': [('tool_id', 1)]
+}
+FILES_CONFIG = {
+    'indexes': [FILE_INDEX_CONFIG],
+}
 DB_CONFIG = {
     'collections': {
         'objects': COLLECTION_CONFIG,
+        'files': FILES_CONFIG,
     },
 }
 MONGO_CONFIG = {

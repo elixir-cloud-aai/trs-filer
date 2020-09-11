@@ -96,6 +96,7 @@ class RegisterObject:
                 version_controller = RegisterToolVersion(
                     version_data=self.tool_data['versions'],
                     id=self.tool_data['id'],
+                    replace=replace,
                 )
                 self.tool_data['versions'] = version_controller \
                     .create_update_versions()
@@ -143,6 +144,7 @@ class RegisterToolVersion:
         id: str,
         request: Optional[Request] = None,
         version_data: Optional[List] = None,
+        replace: bool = False,
         append: bool = False,
     ) -> None:
         """Initialize tool data.
@@ -174,6 +176,9 @@ class RegisterToolVersion:
                 constructing tool and version `url` properties.
             api_path: Base path at which API endpoints can be reached. For
                 constructing tool and version `url` properties.
+            tool_version_files_map: Map between tool_version and corresponding
+                file information.
+            replace: Identifier of an existing tool_object.
         """
         self.append = append
         self.tool_id = id
@@ -186,6 +191,10 @@ class RegisterToolVersion:
         self.db_collection = (
             current_app.config['FOCA'].db.dbs['trsStore']
             .collections['objects'].client
+        )
+        self.db_collection_files = (
+            current_app.config['FOCA'].db.dbs['trsStore']
+            .collections['files'].client
         )
         conf = current_app.config['FOCA'].endpoints
         self.version_id_charset = conf['tool_version']['id']['charset']
@@ -204,6 +213,9 @@ class RegisterToolVersion:
             self.version_id_charset = ''.join(
                 sorted(set(self.version_id_charset))
             )
+        self.version_files_map = {}
+        self.version_files_map[self.tool_id] = {}
+        self.replace = replace
 
     def add_versions(
         self,
@@ -225,6 +237,8 @@ class RegisterToolVersion:
         # ensure that all supplied version IDs are unique
         if len(version_list) != len(set(version_list)):
             raise BadRequest
+
+        flag_files = False
 
         for version in versions:
 
@@ -252,6 +266,15 @@ class RegisterToolVersion:
                 f"{self.api_path}/tools/{self.tool_id}/versions/"
                 f"{version['id']}"
             )
+
+            if 'files' in version:
+                flag_files = True
+                self.version_files_map[self.tool_id][
+                    version['id']
+                ] = self.check_file_data(version)
+                version.pop('files', None)
+        if flag_files:
+            self.create_file_mappings()
         return versions
 
     def generate_id(
@@ -271,7 +294,7 @@ class RegisterToolVersion:
         """
         return ''.join(choice(charset) for __ in range(length))
 
-    def create_update_versions(self):
+    def create_update_versions(self, replace: bool = False):
         """Create/Updates version list.
 
         Returns:
@@ -286,3 +309,34 @@ class RegisterToolVersion:
             if old_version:
                 self.version_data = old_version+self.version_data
         return self.add_versions(self.version_data)
+
+    def check_file_data(self, version_data):
+        data_files = version_data['files']
+        for _file in data_files:
+            if 'fileWrapper' in _file:
+                data = _file['fileWrapper']
+                if 'url' not in data and 'content' not in data:
+                    logger.error(
+                        "FileWrapper must contain at least one of url or"
+                        " content."
+                    )
+                    raise BadRequest
+                if version_data['is_production']:
+                    if 'checksum' not in data or not data['checksum']:
+                        logger.error("Please include checksum information.")
+                        raise BadRequest
+        return version_data['files']
+
+    def create_file_mappings(self):
+        if self.version_files_map and self.tool_id in self.version_files_map:
+            if self.replace:
+                self.db_collection_files.replace_one(
+                    filter={'tool_id': self.tool_id},
+                    replacement=self.version_files_map[self.tool_id],
+                    upsert=True,
+                )
+            else:
+                try:
+                    self.db_collection_files.insert_one(self.version_files_map)
+                except DuplicateKeyError:
+                    logger.error("Tool id already present.")

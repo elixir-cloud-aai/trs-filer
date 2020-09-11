@@ -18,6 +18,12 @@ db:
                               id: 1
                           options:
                             'unique': True
+                files:
+                    indexes:
+                        - keys:
+                              tool_id: 1
+                          options:
+                            'unique': True
 
 api:
     specs:
