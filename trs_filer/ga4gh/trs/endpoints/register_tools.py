@@ -164,6 +164,7 @@ class RegisterToolVersion:
             version_data: New version list with which old version list will be
                 updated/replaced.
             db_collection: Database collection storing tool objects.
+            db_collection_files: Database collection storing tool files.
             version_id_charset: Allowed character set or expression evaluating
                 to allowed character set for generating version identifiers.
             version_id_length: Length of generated version identifiers.
@@ -294,7 +295,7 @@ class RegisterToolVersion:
         """
         return ''.join(choice(charset) for __ in range(length))
 
-    def create_update_versions(self, replace: bool = False):
+    def create_update_versions(self) -> List[Dict]:
         """Create/Updates version list.
 
         Returns:
@@ -310,7 +311,21 @@ class RegisterToolVersion:
                 self.version_data = old_version+self.version_data
         return self.add_versions(self.version_data)
 
-    def check_file_data(self, version_data):
+    def check_file_data(
+        self,
+        version_data: Dict
+    ) -> List[Dict]:
+        """Validates file data corresponding a version.
+
+        Args:
+            version_data: version specific data.
+
+        Returns:
+            List of validated file objects.
+
+        Raises:
+            BadRequest if data not validated.
+        """
         data_files = version_data['files']
         for _file in data_files:
             if 'fileWrapper' in _file:
@@ -327,7 +342,10 @@ class RegisterToolVersion:
                         raise BadRequest
         return version_data['files']
 
-    def create_file_mappings(self):
+    def create_file_mappings(self) -> None:
+        """Create file objcts for every versions of a particular tool
+        object.
+        """
         if self.version_files_map and self.tool_id in self.version_files_map:
             if self.replace:
                 self.db_collection_files.replace_one(
