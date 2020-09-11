@@ -140,9 +140,9 @@ class RegisterToolVersion:
 
     def __init__(
         self,
+        id: str,
         request: Optional[Request] = None,
         version_data: Optional[List] = None,
-        id: Optional[str] = None,
         append: bool = False,
     ) -> None:
         """Initialize tool data.
@@ -176,7 +176,7 @@ class RegisterToolVersion:
                 constructing tool and version `url` properties.
         """
         self.append = append
-        self.tool_id = id if id else None
+        self.tool_id = id
 
         if version_data is not None:
             self.version_data = version_data
