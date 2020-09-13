@@ -258,9 +258,50 @@ def toolsIdVersionsVersionIdTypeFilesGet(
 def toolsIdVersionsVersionIdContainerfileGet(
     id: str,
     version_id: str,
-) -> List:
-    """Get the container specification(s) for the specified image."""
-    return []  # pragma: no cover
+) -> List[Dict]:
+    """Get the container specification(s) for the specified image.
+    Args:
+        id: Unique identifier of the tool.
+        version_id:  Identifier of the tool version for this particular tool.
+
+    Returns:
+        List of wrapped container files objects.
+    """
+
+    tool_version_specs = toolsIdVersionsVersionIdGet.__wrapped__(
+        id=id, version_id=version_id
+    )
+
+    filt = {
+        'tool_id': id,
+        'version_id': version_id,
+        'files.toolFile.file_type': 'CONTAINERFILE'
+    }
+
+    if 'containerfile' in tool_version_specs:
+        container_check = tool_version_specs['containerfile']
+    else:
+        container_check = False
+
+    if tool_version_specs and container_check:
+        db_collection_files = (
+            current_app.config['FOCA'].db.dbs['trsStore']
+            .collections['files'].client
+        )
+        data = db_collection_files.find_one(
+            filter=filt,
+        )
+
+        if 'files' in data:
+            data = data['files']
+            ret_array = []
+            for _d in data:
+                if 'fileWrapper' in _d and 'toolFile' in _d:
+                    if _d['toolFile']['file_type'] == 'CONTAINERFILE':
+                        ret_array.append(_d['fileWrapper'])
+            return ret_array
+
+    raise NotFound
 
 
 @log_traffic
