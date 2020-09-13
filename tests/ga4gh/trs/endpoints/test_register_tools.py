@@ -296,7 +296,7 @@ def test_create_tool_duplicate_key():
         .collections['files'].client = MagicMock()
     mock = MagicMock(side_effect=[DuplicateKeyError(''), None])
     app.config['FOCA'].db.dbs['trsStore'] \
-        .collections['files'].client.insert_one = mock
+        .collections['files'].client.insert_many = mock
 
     request_data = Dict()
     temp_data = deepcopy(MOCK_REQUEST_DATA_VALID)

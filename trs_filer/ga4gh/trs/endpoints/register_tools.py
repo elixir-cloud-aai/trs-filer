@@ -347,14 +347,44 @@ class RegisterToolVersion:
         object.
         """
         if self.version_files_map and self.tool_id in self.version_files_map:
+            db_data_format = self.get_data_db_format(
+                self.version_files_map[self.tool_id], self.tool_id
+            )
             if self.replace:
-                self.db_collection_files.replace_one(
-                    filter={'tool_id': self.tool_id},
-                    replacement=self.version_files_map[self.tool_id],
-                    upsert=True,
-                )
+                for data_doc in db_data_format:
+                    self.db_collection_files.replace_one(
+                        filter={
+                            'tool_id': data_doc['tool_id'],
+                            'versions_id': data_doc['version_id'],
+                        },
+                        replacement=data_doc,
+                    )
             else:
                 try:
-                    self.db_collection_files.insert_one(self.version_files_map)
+                    self.db_collection_files.insert_many(db_data_format)
                 except DuplicateKeyError:
                     logger.error("Tool id already present.")
+
+    def get_data_db_format(
+        self,
+        version_dict_map: Dict,
+        tool_id: str
+    ) -> List[Dict]:
+        """Convert file data in the format required by files database.
+
+        Args:
+            version_dict_map: List of version mappings with corresponding file
+                object list.
+            tool_id: Id of tool for which the files need to be added.
+
+        Returns:
+            List of documents to be added/updated in the files database.
+        """
+        updated_data_arr = []
+        for v in version_dict_map:
+            tmp_dict = {}
+            tmp_dict['tool_id'] = tool_id
+            tmp_dict['version_id'] = v
+            tmp_dict['files'] = version_dict_map[v]
+            updated_data_arr.append(tmp_dict)
+        return updated_data_arr
