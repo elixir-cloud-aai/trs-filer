@@ -355,7 +355,7 @@ class RegisterToolVersion:
                     self.db_collection_files.replace_one(
                         filter={
                             'tool_id': data_doc['tool_id'],
-                            'versions_id': data_doc['version_id'],
+                            'version_id': data_doc['version_id'],
                         },
                         replacement=data_doc,
                     )
