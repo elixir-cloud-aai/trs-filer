@@ -12,6 +12,7 @@ from trs_filer.ga4gh.trs.endpoints.register_objects import (
 )
 from trs_filer.errors.exceptions import (
     BadRequest,
+    InternalServerError,
     NotFound,
 )
 
@@ -329,8 +330,16 @@ def deleteTool(
         current_app.config['FOCA'].db.dbs['trsStore']
         .collections['tools'].client
     )
+    db_coll_files = (
+        current_app.config['FOCA'].db.dbs['trsStore']
+        .collections['files'].client
+    )
     del_obj_tools = db_coll_tools.delete_one({'id': id})
-    if del_obj_tools.deleted_count:
+    del_obj_files = db_coll_files.delete_one({'id': id})
+    if (
+        del_obj_tools.deleted_count and
+        del_obj_files.deleted_count
+    ):
         return id
     else:
         raise NotFound
@@ -376,6 +385,10 @@ def deleteToolVersion(
         current_app.config['FOCA'].db.dbs['trsStore']
         .collections['tools'].client
     )
+    db_coll_files = (
+        current_app.config['FOCA'].db.dbs['trsStore']
+        .collections['files'].client
+    )
     # do not allow deleting the last version
     # TODO: race condition
     versions = toolsIdVersionsGet.__wrapped__(id)
@@ -385,7 +398,7 @@ def deleteToolVersion(
             raise BadRequest
         else:
             raise NotFound
-    db_coll_tools.update_one(
+    del_ver_tools = db_coll_tools.update_one(
         filter={
             'id': id,
             'versions.id': version_id,
@@ -396,4 +409,21 @@ def deleteToolVersion(
             },
         },
     )
-    return version_id
+    del_ver_files = db_coll_files.update_one(
+        filter={
+            'id': id,
+            'versions.id': version_id,
+        },
+        update={
+            '$pull': {
+                'versions': {'id': version_id},
+            },
+        },
+    )
+    if (
+        del_ver_tools.modified_count and
+        del_ver_files.modified_count
+    ):
+        return version_id
+    else:
+        raise InternalServerError
