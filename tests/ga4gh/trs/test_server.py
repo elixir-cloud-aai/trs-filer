@@ -20,6 +20,7 @@ from trs_filer.ga4gh.trs.server import (
 )
 from trs_filer.errors.exceptions import (
     BadRequest,
+    InternalServerError,
     NotFound,
 )
 
@@ -29,9 +30,16 @@ INDEX_CONFIG = {
 COLLECTION_CONFIG = {
     'indexes': [INDEX_CONFIG],
 }
+FILE_INDEX_CONFIG = {
+    'keys': [('id', 1)]
+}
+FILES_CONFIG = {
+    'indexes': [FILE_INDEX_CONFIG],
+}
 DB_CONFIG = {
     'collections': {
         'tools': COLLECTION_CONFIG,
+        'files': FILES_CONFIG,
     },
 }
 MONGO_CONFIG = {
@@ -164,6 +172,8 @@ def test_postTool():
     )
     app.config['FOCA'].db.dbs['trsStore'] \
         .collections['tools'].client = mongomock.MongoClient().db.collection
+    app.config['FOCA'].db.dbs['trsStore'] \
+        .collections['files'].client = mongomock.MongoClient().db.collection
 
     with app.test_request_context(json=MOCK_REQUEST_DATA_1):
         res = postTool.__wrapped__()
@@ -179,6 +189,8 @@ def test_putTool():
     )
     app.config['FOCA'].db.dbs['trsStore'] \
         .collections['tools'].client = mongomock.MongoClient().db.collection
+    app.config['FOCA'].db.dbs['trsStore'] \
+        .collections['files'].client = mongomock.MongoClient().db.collection
 
     with app.test_request_context(json=MOCK_REQUEST_DATA_1):
         res = putTool.__wrapped__("TMP001")
@@ -196,7 +208,11 @@ def test_deleteTool():
     data['id'] = MOCK_ID
     app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
         .client = mongomock.MongoClient().db.collection
+    app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
+        .client = mongomock.MongoClient().db.collection
     app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
+        .client.insert_one(data).inserted_id
+    app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
         .client.insert_one(data).inserted_id
     del data['_id']
     with app.app_context():
@@ -214,7 +230,11 @@ def test_deleteTool_NotFound():
     data = deepcopy(MOCK_REQUEST_DATA_1)
     app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
         .client = mongomock.MongoClient().db.collection
+    app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
+        .client = mongomock.MongoClient().db.collection
     app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
+        .client.insert_one(data).inserted_id
+    app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
         .client.insert_one(data).inserted_id
     del data['_id']
     with app.app_context():
@@ -416,12 +436,16 @@ def test_postToolVersion():
     )
     app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
         .client = mongomock.MongoClient().db.collection
+    app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
+        .client = mongomock.MongoClient().db.collection
 
     mock_resp = deepcopy(MOCK_REQUEST_DATA_1)
     mock_resp["id"] = "TMP001"
 
     app.config['FOCA'].db.dbs['trsStore'] \
         .collections['tools'].client.insert_one(mock_resp)
+    app.config['FOCA'].db.dbs['trsStore'] \
+        .collections['files'].client.insert_one(mock_resp)
 
     with app.test_request_context(json=MOCK_REQUEST_DATA_VERSION_UPDATE):
         res = postToolVersion.__wrapped__("TMP001")
@@ -441,7 +465,11 @@ def test_deleteToolVersion():
 
     app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
         .client = mongomock.MongoClient().db.collection
+    app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
+        .client = mongomock.MongoClient().db.collection
     app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
+        .client.insert_one(data).inserted_id
+    app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
         .client.insert_one(data).inserted_id
     del data['_id']
     with app.app_context():
@@ -492,6 +520,32 @@ def test_deleteToolVersion_BadRequest():
     del data['_id']
     with app.app_context():
         with pytest.raises(BadRequest):
+            deleteToolVersion.__wrapped__(
+                id=MOCK_ID,
+                version_id=data['versions'][0]['id'],
+            )
+
+
+def test_deleteToolVersion_InternalServerError():
+    """Test for `DELETE /tools/{id}/versions/{version_id}` endpoint."""
+    app = Flask(__name__)
+    app.config['FOCA'] = Config(
+        db=MongoConfig(**MONGO_CONFIG),
+        endpoints=ENDPOINT_CONFIG
+    )
+    data = deepcopy(MOCK_REQUEST_DATA_1)
+    data['id'] = MOCK_ID
+    data['versions'].append(MOCK_REQUEST_DATA_VERSION_UPDATE)
+
+    app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
+        .client = mongomock.MongoClient().db.collection
+    app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
+        .client = mongomock.MongoClient().db.collection
+    app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
+        .client.insert_one(data).inserted_id
+    del data['_id']
+    with app.app_context():
+        with pytest.raises(InternalServerError):
             deleteToolVersion.__wrapped__(
                 id=MOCK_ID,
                 version_id=data['versions'][0]['id'],

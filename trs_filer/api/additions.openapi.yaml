@@ -402,3 +402,17 @@ components:
           type: array
           items:
             type: string
+        files:
+          description: Properties and (pointers to) contents of files
+            associated with a tool.
+          type: array
+          items:
+            $ref: "#/components/schemas/Files"
+    Files:
+      type: object
+      description: Properties and (a pointer to the) contents of a file.
+      properties:
+        toolFile:
+          $ref: '#/components/schemas/ToolFile'
+        fileWrapper:
+          $ref: '#/components/schemas/FileWrapper'

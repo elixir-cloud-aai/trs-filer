@@ -10,15 +10,15 @@ import mongomock
 from pymongo.errors import DuplicateKeyError
 import pytest
 
-from trs_filer.ga4gh.trs.endpoints.register_objects import (
-    RegisterTool,
-    RegisterToolVersion,
-    generate_id,
-)
 from trs_filer.errors.exceptions import (
     BadRequest,
     InternalServerError,
     NotFound,
+)
+from trs_filer.ga4gh.trs.endpoints.register_objects import (
+    RegisterTool,
+    RegisterToolVersion,
+    generate_id,
 )
 
 MOCK_ID = "mock_id"
@@ -29,9 +29,16 @@ INDEX_CONFIG = {
 COLLECTION_CONFIG = {
     'indexes': [INDEX_CONFIG],
 }
+FILE_INDEX_CONFIG = {
+    'keys': [('id', 1)]
+}
+FILES_CONFIG = {
+    'indexes': [FILE_INDEX_CONFIG],
+}
 DB_CONFIG = {
     'collections': {
         'tools': COLLECTION_CONFIG,
+        'files': FILES_CONFIG,
     },
 }
 MONGO_CONFIG = {
@@ -245,6 +252,52 @@ MOCK_REQUEST_DATA_VERSION_UPDATE_2 = {
         "string"
     ]
 }
+MOCK_CORRECT_FILE_DATA = [
+    {
+        "fileWrapper": {
+            "checksum": [
+                {
+                    "checksum": "ea2a5db69bd20a42976838790bc29294df3af02b",
+                    "type": "sha1"
+                }
+            ],
+            "content": "string",
+            "url": "sfdlmedl"
+        },
+        "toolFile": {
+            "file_type": "TEST_FILE",
+            "path": "string"
+        }
+    },
+]
+MOCK_INCORRECT_FILE_DATA_MISSING = [
+    {
+        "fileWrapper": {
+            "checksum": [
+                {
+                    "checksum": "ea2a5db69bd20a42976838790bc29294df3af02b",
+                    "type": "sha1"
+                }
+            ],
+        },
+        "toolFile": {
+            "file_type": "TEST_FILE",
+            "path": "string"
+        }
+    },
+]
+MOCK_INCORRECT_FILE_DATA_MISSING_1 = [
+    {
+        "fileWrapper": {
+            "content": "string",
+            "url": "sfdlmedl"
+        },
+        "toolFile": {
+            "file_type": "TEST_FILE",
+            "path": "string"
+        }
+    },
+]
 
 
 def test_generate_id_literal():
@@ -269,6 +322,7 @@ def test_process_metadata_literal_charset():
     )
 
     temp_data = deepcopy(MOCK_REQUEST_DATA_VALID)
+    temp_data['versions'][0]['files'] = MOCK_CORRECT_FILE_DATA
     data = temp_data
     with app.app_context():
         tool = RegisterTool(data)
@@ -293,7 +347,14 @@ def test_create_tool_duplicate_key():
     app.config['FOCA'].db.dbs['trsStore'] \
         .collections['tools'].client.insert_one = mock
 
+    app.config['FOCA'].db.dbs['trsStore'] \
+        .collections['files'].client = MagicMock()
+    mock = MagicMock(side_effect=[DuplicateKeyError(''), None])
+    app.config['FOCA'].db.dbs['trsStore'] \
+        .collections['files'].client.insert_many = mock
+
     temp_data = deepcopy(MOCK_REQUEST_DATA_VALID)
+    temp_data['versions'][0]['files'] = MOCK_CORRECT_FILE_DATA
     data = temp_data
     with app.app_context():
         tool = RegisterTool(data)
@@ -331,20 +392,121 @@ def test_update_tool():
         db=MongoConfig(**MONGO_CONFIG),
         endpoints=ENDPOINT_CONFIG_CHARSET_LITERAL,
     )
+    app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
+        .client = mongomock.MongoClient().db.collection
+    app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
+        .client = mongomock.MongoClient().db.collection
+
     mock_resp = deepcopy(MOCK_REQUEST_DATA_VALID)
     mock_resp["id"] = MOCK_ID
     mock_resp["versions"][0]["id"] = "old"
 
-    app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
-        .client = mongomock.MongoClient().db.collection
     app.config['FOCA'].db.dbs['trsStore'] \
         .collections['tools'].client.insert_one(mock_resp)
+    app.config['FOCA'].db.dbs['trsStore'] \
+        .collections['files'].client.insert_one(mock_resp)
 
     data = MOCK_REQUEST_DATA_VALID
     with app.app_context():
         tool = RegisterTool(data, id=MOCK_ID)
         tool.register_metadata()
         assert isinstance(tool.data, dict)
+
+
+def test_create_tool_valid_file_data():
+    """Test for creating valid tool with file data."""
+    app = Flask(__name__)
+    app.config['FOCA'] = Config(
+        db=MongoConfig(**MONGO_CONFIG),
+        endpoints=ENDPOINT_CONFIG_CHARSET_EXPRESSION,
+    )
+
+    app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
+        .client = mongomock.MongoClient().db.collection
+    app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
+        .client = mongomock.MongoClient().db.collection
+
+    temp_data = deepcopy(MOCK_REQUEST_DATA_VALID)
+    temp_data['versions'][0]['files'] = MOCK_CORRECT_FILE_DATA
+    data = temp_data
+    with app.app_context():
+        tool = RegisterTool(data)
+        tool.register_metadata()
+        assert isinstance(
+            tool.data['id'],
+            str,
+        )
+
+
+def test_create_tool_invalid_file_data():
+    """Test for creating tool with url/content missing in file data."""
+    app = Flask(__name__)
+    app.config['FOCA'] = Config(
+        db=MongoConfig(**MONGO_CONFIG),
+        endpoints=ENDPOINT_CONFIG_CHARSET_EXPRESSION,
+    )
+
+    app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
+        .client = mongomock.MongoClient().db.collection
+    app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
+        .client = mongomock.MongoClient().db.collection
+
+    temp_data = deepcopy(MOCK_REQUEST_DATA_VALID)
+    temp_data['versions'][0]['files'] = MOCK_INCORRECT_FILE_DATA_MISSING
+    data = temp_data
+    with app.app_context():
+        with pytest.raises(BadRequest):
+            tool = RegisterTool(data)
+            tool.register_metadata()
+
+
+def test_create_tool_invalid_file_data_nochechecksum():
+    """Test for valid tool formation when checksum absent in file data."""
+    app = Flask(__name__)
+    app.config['FOCA'] = Config(
+        db=MongoConfig(**MONGO_CONFIG),
+        endpoints=ENDPOINT_CONFIG_CHARSET_EXPRESSION,
+    )
+
+    app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
+        .client = mongomock.MongoClient().db.collection
+    app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
+        .client = mongomock.MongoClient().db.collection
+
+    temp_data = deepcopy(MOCK_REQUEST_DATA_VALID)
+    temp_data['versions'][0]['files'] = MOCK_INCORRECT_FILE_DATA_MISSING_1
+    data = temp_data
+    with app.app_context():
+        with pytest.raises(BadRequest):
+            tool = RegisterTool(data)
+            tool.register_metadata()
+
+
+def test_create_tool_replace_files():
+    """Test for tool file data replacement."""
+    app = Flask(__name__)
+    app.config['FOCA'] = Config(
+        db=MongoConfig(**MONGO_CONFIG),
+        endpoints=ENDPOINT_CONFIG_CHARSET_EXPRESSION,
+    )
+
+    app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
+        .client = mongomock.MongoClient().db.collection
+    app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
+        .client = MagicMock()
+    app.config['FOCA'].db.dbs['trsStore'] \
+        .collections['files'].client.replace_one = MagicMock()
+
+    temp_data = deepcopy(MOCK_REQUEST_DATA_VALID)
+    temp_data['versions'][0]['files'] = MOCK_CORRECT_FILE_DATA
+    data = temp_data
+    with app.app_context():
+        tool = RegisterTool(data, MOCK_ID)
+        tool.register_metadata()
+        assert isinstance(
+            tool.data['id'],
+            str,
+        )
 
 
 def test_update_tool_version():
@@ -356,6 +518,8 @@ def test_update_tool_version():
     )
     app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
         .client = mongomock.MongoClient().db.collection
+    app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
+        .client = mongomock.MongoClient().db.collection
 
     mock_resp = deepcopy(MOCK_REQUEST_DATA_VALID)
     mock_resp["id"] = MOCK_ID
@@ -363,6 +527,8 @@ def test_update_tool_version():
 
     app.config['FOCA'].db.dbs['trsStore'] \
         .collections['tools'].client.insert_one(mock_resp)
+    app.config['FOCA'].db.dbs['trsStore'] \
+        .collections['files'].client.insert_one(mock_resp)
 
     data = MOCK_REQUEST_DATA_VERSION_UPDATE
     with app.app_context():
@@ -380,6 +546,8 @@ def test_update_tool_inf_loop():
     )
     app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
         .client = mongomock.MongoClient().db.collection
+    app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
+        .client = mongomock.MongoClient().db.collection
 
     mock_resp = deepcopy(MOCK_REQUEST_DATA_VALID)
     mock_resp["id"] = MOCK_ID_2
@@ -387,6 +555,8 @@ def test_update_tool_inf_loop():
 
     app.config['FOCA'].db.dbs['trsStore'] \
         .collections['tools'].client.insert_one(mock_resp)
+    app.config['FOCA'].db.dbs['trsStore'] \
+        .collections['files'].client.insert_one(mock_resp)
 
     data = MOCK_REQUEST_DATA_VALID
     with app.app_context():
@@ -407,6 +577,8 @@ def test_update_version_inf_loop():
     )
     app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
         .client = mongomock.MongoClient().db.collection
+    app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
+        .client = mongomock.MongoClient().db.collection
 
     mock_resp = deepcopy(MOCK_REQUEST_DATA_VALID)
     mock_resp["id"] = MOCK_ID_2
@@ -414,6 +586,8 @@ def test_update_version_inf_loop():
 
     app.config['FOCA'].db.dbs['trsStore'] \
         .collections['tools'].client.insert_one(mock_resp)
+    app.config['FOCA'].db.dbs['trsStore'] \
+        .collections['files'].client.insert_one(mock_resp)
 
     data = MOCK_REQUEST_DATA_VERSION_UPDATE_2
     with app.app_context():
