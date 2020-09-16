@@ -12,7 +12,13 @@ db:
     dbs:
         trsStore:
             collections:
-                objects:
+                tools:
+                    indexes:
+                        - keys:
+                              id: 1
+                          options:
+                            'unique': True
+                files:
                     indexes:
                         - keys:
                               id: 1
@@ -72,7 +78,7 @@ endpoints:
         meta_version:
             init: 1
             increment: 1
-    tool_version:
+    version:
         id:
             charset: string.ascii_lowercase + string.digits
             length: 6
