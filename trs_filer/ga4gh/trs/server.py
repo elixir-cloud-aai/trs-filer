@@ -6,14 +6,17 @@ from typing import (Optional, Dict, List, Tuple)
 from flask import (request, current_app)
 from foca.utils.logging import log_traffic
 
-from trs_filer.ga4gh.trs.endpoints.register_objects import (
-    RegisterTool,
-    RegisterToolVersion,
-)
 from trs_filer.errors.exceptions import (
     BadRequest,
     InternalServerError,
     NotFound,
+)
+from trs_filer.ga4gh.trs.endpoints.register_objects import (
+    RegisterTool,
+    RegisterToolVersion,
+)
+from trs_filer.ga4gh.trs.endpoints.service_info import (
+    RegisterServiceInfo,
 )
 
 logger = logging.getLogger(__name__)
@@ -278,8 +281,25 @@ def toolClassesGet() -> List:
 
 @log_traffic
 def getServiceInfo() -> Dict:
-    """Show information about this service."""
-    return {}  # pragma: no cover
+    """Show information about this service.
+
+    Returns:
+        Service info details for the given tool.
+    """
+    service_info = RegisterServiceInfo()
+    return service_info.get_service_info()
+
+
+@log_traffic
+def postServiceInfo() -> Tuple[None, str, Dict]:
+    """Show information about this service.
+
+    Returns:
+        Service info details for the given tool.
+    """
+    service_info = RegisterServiceInfo()
+    headers = service_info.set_service_info_from_app_context(data=request.json)
+    return None, '201', headers
 
 
 @log_traffic
