@@ -57,10 +57,10 @@ class RegisterTool:
         self.id_charset = conf['tool']['id']['charset']
         self.id_length = int(conf['tool']['id']['length'])
         self.meta_version_init = int(conf['tool']['meta_version']['init'])
-        self.url_prefix = conf['url_prefix']
-        self.host_name = conf['external_host']
-        self.external_port = conf['external_port']
-        self.api_path = conf['api_path']
+        self.url_prefix = conf['service']['url_prefix']
+        self.host_name = conf['service']['external_host']
+        self.external_port = conf['service']['external_port']
+        self.api_path = conf['service']['api_path']
         self.db_coll_tools = (
             current_app.config['FOCA'].db.dbs['trsStore']
             .collections['tools'].client
@@ -207,10 +207,10 @@ class RegisterToolVersion:
         self.id_charset = conf['version']['id']['charset']
         self.id_length = int(conf['version']['id']['length'])
         self.meta_version_init = int(conf['version']['meta_version']['init'])
-        self.url_prefix = conf['url_prefix']
-        self.host_name = conf['external_host']
-        self.external_port = conf['external_port']
-        self.api_path = conf['api_path']
+        self.url_prefix = conf['service']['url_prefix']
+        self.host_name = conf['service']['external_host']
+        self.external_port = conf['service']['external_port']
+        self.api_path = conf['service']['api_path']
         self.files = {}
         self.db_coll_tools = (
             current_app.config['FOCA'].db.dbs['trsStore']

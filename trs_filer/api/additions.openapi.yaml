@@ -1,4 +1,46 @@
 paths:
+  /service-info:
+    post:
+      summary: Register service info.
+      description: Create or update the service info.
+      operationId: postServiceInfo
+      tags:
+        - TRS-Filer
+      requestBody:
+        description: Service info to add.
+        required: true
+        content:
+          application/json:
+            schema:
+              x-body-name: service_info
+              $ref: '#/components/schemas/Service'
+      responses:
+        '201':
+          description: The service info was successfully created.
+        '400':
+          description: The request is malformed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: The request is unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: The requester is not authorized to perform this action.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: An unexpected error occurred.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /tools:
     post:
       summary: Add a tool.

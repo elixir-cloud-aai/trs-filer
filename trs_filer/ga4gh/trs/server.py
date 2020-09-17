@@ -16,7 +16,7 @@ from trs_filer.ga4gh.trs.endpoints.register_objects import (
     RegisterToolVersion,
 )
 from trs_filer.ga4gh.trs.endpoints.service_info import (
-    RegisterService,
+    RegisterServiceInfo,
 )
 
 logger = logging.getLogger(__name__)
@@ -286,11 +286,20 @@ def getServiceInfo() -> Dict:
     Returns:
         Service info details for the given tool.
     """
-    import logging
-    logger = logging.getLogger(__name__)
-    logger.info("passing")
-    service_class = RegisterService()
-    return service_class.get_service_info()
+    service_info = RegisterServiceInfo()
+    return service_info.get_service_info()
+
+
+@log_traffic
+def postServiceInfo() -> Tuple[None, str, Dict]:
+    """Show information about this service.
+
+    Returns:
+        Service info details for the given tool.
+    """
+    service_info = RegisterServiceInfo()
+    headers = service_info.set_service_info_from_app_context(data=request.json)
+    return None, '201', headers
 
 
 @log_traffic
