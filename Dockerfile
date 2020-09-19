@@ -17,3 +17,5 @@ RUN cd /app \
   && python setup.py develop \
   && cd / \
   && chmod g+w /app/trs_filer/api/
+
+CMD ["bash", "-c", "cd /app/trs_filer; python app.py"]
