@@ -129,6 +129,7 @@ class RegisterTool:
             for version in self.data['versions']:
                 version_proc = RegisterToolVersion(
                     id=self.data['id'],
+                    version_id=version.get('id', None),
                     data=version,
                 )
                 version_proc.process_metadata()
@@ -206,6 +207,7 @@ class RegisterToolVersion:
         self,
         data: Dict,
         id: str,
+        version_id: str = None,
     ) -> None:
         """Initialize tool version data.
 
@@ -213,6 +215,7 @@ class RegisterToolVersion:
             data: Version metadata consistent with the `ToolVersionRegister`
                 schema.
             id: Tool identifer.
+            version_id: Version identifier.
 
         Attributes:
             data: Version metadata.
@@ -237,6 +240,7 @@ class RegisterToolVersion:
         """
         conf = current_app.config['FOCA'].endpoints
         self.data = data
+        self.data['id'] = None if version_id is None else version_id
         self.id = id
         self.replace = True
         self.id_charset = conf['version']['id']['charset']
@@ -268,7 +272,7 @@ class RegisterToolVersion:
         self.data['meta_version'] = str(self.meta_version_init)
 
         # set random ID unless ID is provided
-        if 'id' not in self.data:
+        if self.data['id'] is None:
             self.replace = False
             self.data['id'] = generate_id(
                 charset=self.id_charset,

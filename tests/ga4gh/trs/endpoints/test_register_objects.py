@@ -50,7 +50,7 @@ class TestRegisterTool:
 
         data = deepcopy(MOCK_TOOL)
         with app.app_context():
-            tool = RegisterTool(data)
+            tool = RegisterTool(data=data)
             assert tool.data['description'] == MOCK_TOOL['description']
             assert tool.data['id'] is None
 
@@ -64,7 +64,7 @@ class TestRegisterTool:
 
         data = deepcopy(MOCK_TOOL)
         with app.app_context():
-            tool = RegisterTool(data)
+            tool = RegisterTool(data=data)
             tool.process_metadata()
             assert isinstance(tool.id_charset, str)
 
@@ -147,7 +147,7 @@ class TestRegisterTool:
         data = deepcopy(MOCK_TOOL_DUPLICATE_VERSION_IDS)
         with app.app_context():
             with pytest.raises(BadRequest):
-                tool = RegisterTool(data)
+                tool = RegisterTool(data=data)
                 tool.register_metadata()
 
     def test_create_tool_invalid_file_data_no_content_or_url_BadRequest(self):
@@ -171,7 +171,7 @@ class TestRegisterTool:
         data = temp_data
         with app.app_context():
             with pytest.raises(BadRequest):
-                tool = RegisterTool(data)
+                tool = RegisterTool(data=data)
                 tool.register_metadata()
 
     def test_create_tool_invalid_file_data_no_checksum_BadRequest(self):
@@ -194,7 +194,7 @@ class TestRegisterTool:
         data['versions'][0]['files'] = MOCK_FILES_CHECKSUM_MISSING
         with app.app_context():
             with pytest.raises(BadRequest):
-                tool = RegisterTool(data)
+                tool = RegisterTool(data=data)
                 tool.register_metadata()
 
     def test_register_metadata_with_tool_class_validation(self):
@@ -215,7 +215,7 @@ class TestRegisterTool:
 
         data = deepcopy(MOCK_TOOL_VERSION_ID)
         with app.app_context():
-            tool = RegisterTool(data)
+            tool = RegisterTool(data=data)
             tool.register_metadata()
             assert isinstance(tool.data['id'], str)
 
@@ -239,7 +239,7 @@ class TestRegisterTool:
         data['toolclass']['id'] = MOCK_ID + MOCK_ID
         with app.app_context():
             with pytest.raises(BadRequest):
-                tool = RegisterTool(data)
+                tool = RegisterTool(data=data)
                 tool.register_metadata()
 
     def test_register_metadata_tool_duplicate_key(self):
@@ -262,7 +262,7 @@ class TestRegisterTool:
         temp_data = deepcopy(MOCK_TOOL)
         data = temp_data
         with app.app_context():
-            tool = RegisterTool(data)
+            tool = RegisterTool(data=data)
             tool.register_metadata()
             assert isinstance(tool.data['id'], str)
 
@@ -345,7 +345,7 @@ class TestRegisterToolVersion:
 
         data = deepcopy(MOCK_VERSION_NO_ID)
         with app.app_context():
-            version = RegisterToolVersion(data, id=MOCK_ID)
+            version = RegisterToolVersion(data=data, id=MOCK_ID)
             version.register_metadata()
             assert isinstance(version.data, dict)
 
@@ -363,7 +363,11 @@ class TestRegisterToolVersion:
 
         data = deepcopy(MOCK_VERSION_NO_ID)
         with app.app_context():
-            version = RegisterToolVersion(data, id=MOCK_ID)
+            version = RegisterToolVersion(
+                data=data,
+                id=MOCK_ID,
+                version_id=MOCK_ID,
+            )
             version.register_metadata()
             assert isinstance(version.data, dict)
 
@@ -387,7 +391,7 @@ class TestRegisterToolVersion:
 
         data = deepcopy(MOCK_VERSION_ID)
         with app.app_context():
-            version = RegisterToolVersion(data, id=MOCK_ID)
+            version = RegisterToolVersion(data=data, id=MOCK_ID)
             version.register_metadata()
             assert isinstance(version.data, dict)
 
@@ -415,9 +419,9 @@ class TestRegisterToolVersion:
         data = deepcopy(MOCK_VERSION_NO_ID)
         with app.app_context():
             with pytest.raises(InternalServerError):
-                version = RegisterToolVersion(data, id=MOCK_ID)
+                version = RegisterToolVersion(data=data, id=MOCK_ID)
                 version.register_metadata()
-                version = RegisterToolVersion(data, id=MOCK_ID)
+                version = RegisterToolVersion(data=data, id=MOCK_ID)
                 version.register_metadata()
 
     def test_register_metadata_tool_na(self):
@@ -437,5 +441,5 @@ class TestRegisterToolVersion:
         data = deepcopy(MOCK_VERSION_NO_ID)
         with app.app_context():
             with pytest.raises(NotFound):
-                version = RegisterToolVersion(data, id=MOCK_ID)
+                version = RegisterToolVersion(data=data, id=MOCK_ID)
                 version.register_metadata()

@@ -405,6 +405,28 @@ def postToolVersion(
 
 
 @log_traffic
+def putToolVersion(
+    id: str,
+    version_id: str,
+) -> str:
+    """Add/replace tool version with a user-supplied ID.
+
+    Args:
+        id: Identifier of tool to be modified.
+
+    Returns:
+        Identifier of created tool version.
+    """
+    version = RegisterToolVersion(
+        id=id,
+        version_id=version_id,
+        data=request.json,
+    )
+    version.register_metadata()
+    return version.data['id']
+
+
+@log_traffic
 def deleteToolVersion(
     id: str,
     version_id: str,
