@@ -32,7 +32,7 @@ def toolsIdGet(
     """List one specific tool, acts as an anchor for self references.
 
     Args:
-        id: A unique identifier of the tool.
+        id: Tool identifier.
 
     Returns:
         Tool object dict corresponding given tool id.
@@ -58,7 +58,7 @@ def toolsIdVersionsGet(
     """List versions of a tool.
 
     Args:
-        id: A unique identifier of the tool.
+        id: Tool identifier.
 
     Returns:
         List of version dicts corresponding given tool id.
@@ -76,8 +76,8 @@ def toolsIdVersionsVersionIdGet(
     List one specific tool version, acts as an anchor for self references.
 
     Args:
-        id: A unique identifier of the tool.
-        version_id: Specific version corresponding tool version.
+        id: Tool identifier.
+        version_id: Tool version identifier.
 
     Returns:
         Specific version dict of the given tool.
@@ -86,12 +86,10 @@ def toolsIdVersionsVersionIdGet(
         NotFound if no tool object present for give id mapping. Also, if
         version with given id not found.
     """
-
     db_coll_tools = (
         current_app.config['FOCA'].db.dbs['trsStore']
         .collections['tools'].client
     )
-
     proj = {
         '_id': False,
         'versions': {
@@ -132,7 +130,7 @@ def toolsGet(
     parameters are additive.
 
     Args:
-        id: Return only entries with given identifier.
+        id: Return only entries with the given identifier.
         alias: Return only entries with the given alias.
         toolClass: Return only entries with the given subclass name.
         descriptorType: Return only entries with the given descriptor type.
@@ -271,30 +269,64 @@ def toolsIdVersionsVersionIdTypeFilesGet(
 def toolsIdVersionsVersionIdContainerfileGet(
     id: str,
     version_id: str,
-) -> List:
-    """Get the container specification(s) for the specified image."""
-    return []  # pragma: no cover
+) -> List[Dict]:
+    """Get the container specification(s) for the specified tool version.
+
+    Args:
+        id: Tool identifier.
+        version_id:  Tool version identifier.
+
+    Returns:
+        List of wrapped containerfile objects.
+    """
+    db_coll_files = (
+        current_app.config['FOCA'].db.dbs['trsStore']
+        .collections['files'].client
+    )
+    proj = {
+        '_id': False,
+        'versions': {
+            '$elemMatch': {
+                'id': version_id,
+                'files': {
+                    '$elemMatch': {
+                        'toolFile.file_type': 'CONTAINERFILE',
+                    },
+                },
+            },
+        },
+    }
+    data = db_coll_files.find_one(
+        filter={'id': id},
+        projection=proj,
+    )
+    try:
+        data = data['versions'][0]
+        ret = [
+            d['fileWrapper'] for d in data['files']
+            if d['toolFile']['file_type'] == 'CONTAINERFILE'
+        ]
+    except (IndexError, KeyError, TypeError):
+        raise NotFound
+    return ret
 
 
 @log_traffic
 def toolClassesGet(
-    id: Optional[str] = None,
-    name: Optional[str] = None,
-    description: Optional[str] = None,
 ) -> List:
-    """List all tool types."""
-    filt = {}
+    """List all tool classes.
 
-    # fetch data
+    Returns:
+        List of tool class objects.
+    """
     db_collection_class = (
         current_app.config['FOCA'].db.dbs['trsStore']
         .collections['toolclasses'].client
     )
     records = db_collection_class.find(
-        filter=filt,
+        filter={},
         projection={"_id": False},
     )
-
     return list(records)
 
 
@@ -303,7 +335,7 @@ def getServiceInfo() -> Dict:
     """Show information about this service.
 
     Returns:
-        Service info details for the given tool.
+        An empty 201 response with headers.
     """
     service_info = RegisterServiceInfo()
     return service_info.get_service_info()
@@ -314,7 +346,7 @@ def postServiceInfo() -> Tuple[None, str, Dict]:
     """Show information about this service.
 
     Returns:
-        Service info details for the given tool.
+        An empty 201 response with headers.
     """
     service_info = RegisterServiceInfo()
     headers = service_info.set_service_info_from_app_context(data=request.json)
@@ -413,6 +445,7 @@ def putToolVersion(
 
     Args:
         id: Identifier of tool to be modified.
+        id: Identifier of tool to be created/updated.
 
     Returns:
         Identifier of created tool version.
@@ -462,10 +495,7 @@ def deleteToolVersion(
             raise NotFound
 
     del_ver_tools = db_coll_tools.update_one(
-        filter={
-            'id': id,
-            'versions.id': version_id,
-        },
+        filter={'id': id},
         update={
             '$pull': {
                 'versions': {'id': version_id},
@@ -473,10 +503,7 @@ def deleteToolVersion(
         },
     )
     del_ver_files = db_coll_files.update_one(
-        filter={
-            'id': id,
-            'versions.id': version_id,
-        },
+        filter={'id': id},
         update={
             '$pull': {
                 'versions': {'id': version_id},

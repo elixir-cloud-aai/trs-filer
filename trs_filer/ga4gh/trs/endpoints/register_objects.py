@@ -292,6 +292,15 @@ class RegisterToolVersion:
             'files': [],
         }
         if 'files' in self.data:
+            # Set `containerfile` property
+            self.data['containerfile'] = False
+            for f in self.data['files']:
+                try:
+                    if f['toolFile']['file_type'] == "CONTAINERFILE":
+                        self.data['containerfile'] = True
+                        break
+                except KeyError:
+                    continue
             self.process_files()
 
     def process_files(self) -> None:
