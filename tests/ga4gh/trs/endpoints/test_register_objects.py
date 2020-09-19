@@ -325,6 +325,21 @@ class TestRegisterToolVersion:
             tool.process_metadata()
             assert isinstance(tool.id_charset, str)
 
+    def test_process_metadata_empty_file_object(self):
+        """Test for processing metadata with one empty file object."""
+        app = Flask(__name__)
+        app.config['FOCA'] = Config(
+            db=MongoConfig(**MONGO_CONFIG),
+            endpoints=ENDPOINT_CONFIG_CHARSET_LITERAL,
+        )
+
+        data = deepcopy(MOCK_VERSION_NO_ID)
+        data['files'][0] = {}
+        with app.app_context():
+            tool = RegisterToolVersion(data=data, id=MOCK_ID)
+            tool.process_metadata()
+            assert isinstance(tool.id_charset, str)
+
     def test_register_metadata(self):
         """Test for creating a version with a randomly assigned identifier."""
         app = Flask(__name__)

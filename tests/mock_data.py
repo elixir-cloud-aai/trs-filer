@@ -56,15 +56,15 @@ SERVICE_INFO_CONFIG = {
     "name": "My project",
     "organization": {
         "name": "My organization",
-        "url": "https://example.com"
+        "url": "https://example.com",
     },
     "type": {
         "artifact": "beacon",
         "group": "org.ga4gh",
-        "version": "1.0.0"
+        "version": "1.0.0",
     },
     "updatedAt": "2019-06-04T12:58:19Z",
-    "version": "1.0.0"
+    "version": "1.0.0",
 }
 TOOL_CLASS_CONFIG = deepcopy(TOOL_VERSION_CONFIG)
 TOOL_CLASS_CONFIG['validation'] = False
@@ -105,35 +105,44 @@ MOCK_FILES = [
         "fileWrapper": {
             "checksum": [
                 {
-                    "checksum": "ea2a5db69bd20a42976838790bc29294df3af02b",
-                    "type": "sha1"
+                    "checksum": "checksum",
+                    "type": "sha1",
                 }
             ],
-            "content": "string",
-            "url": "sfdlmedl"
+            "content": "content",
+            "url": "url",
         },
         "toolFile": {
             "file_type": "TEST_FILE",
-            "path": "string"
+            "path": "path",
         }
     },
     {
         "fileWrapper": {
             "checksum": [
                 {
-                    "checksum": "ea2a5db69bd20a42976838790bc29294df3af02b",
-                    "type": "sha2"
+                    "checksum": "checksum",
+                    "type": "sha2",
                 }
             ],
-            "content": "string",
-            "url": "sfdlmedl"
+            "content": "content",
+            "url": "url",
         },
         "toolFile": {
             "file_type": "CONTAINERFILE",
-            "path": "string"
+            "path": "path",
         }
-    }
+    },
 ]
+MOCK_FILES_DB_ENTRY = {
+    "id": MOCK_ID,
+    "versions": [
+        {
+            "id": MOCK_ID,
+            "files": MOCK_FILES,
+        }
+    ],
+}
 MOCK_FILES_CONTENT_URL_MISSING = deepcopy(MOCK_FILES)
 del MOCK_FILES_CONTENT_URL_MISSING[0]['fileWrapper']['content']
 del MOCK_FILES_CONTENT_URL_MISSING[0]['fileWrapper']['url']
@@ -143,10 +152,7 @@ MOCK_IMAGES = [
     {
         "checksum": [
             {
-                "checksum": (
-                    "77af4d6b9913e693e8d0b4b294fa62ade6054e6b2f1f"
-                    "fb617ac955dd63fb0182"
-                ),
+                "checksum": "checksums",
                 "type": "sha256"
             }
         ],
@@ -154,7 +160,7 @@ MOCK_IMAGES = [
         "image_type": "Docker",
         "registry_host": "registry_host",
         "size": 0,
-        "updated": "updated"
+        "updated": "updated",
     }
 ]
 MOCK_VERSION_NO_ID = {
@@ -174,7 +180,7 @@ MOCK_VERSION_NO_ID = {
     "name": "name",
     "signed": True,
     "verified_source": [
-        "verified_source"
+        "verified_source",
     ]
 }
 MOCK_VERSION_ID = deepcopy(MOCK_VERSION_NO_ID)
