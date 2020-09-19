@@ -16,6 +16,7 @@ from tests.mock_data import (
     MOCK_VERSION_ID,
     MONGO_CONFIG,
     SERVICE_INFO_CONFIG,
+    MOCK_FILES,
 )
 from trs_filer.ga4gh.trs.server import (
     deleteTool,
@@ -31,6 +32,7 @@ from trs_filer.ga4gh.trs.server import (
     toolsIdGet,
     toolsIdVersionsGet,
     toolsIdVersionsVersionIdGet,
+    toolsIdVersionsVersionIdContainerfileGet,
     postToolClass,
     toolClassesGet,
     putToolClass,
@@ -768,4 +770,89 @@ def test_deleteToolClass_BadRequest():
         with pytest.raises(BadRequest):
             deleteToolClass.__wrapped__(
                 id=MOCK_ID,
+            )
+
+
+# GET /tools/{id}/versions/{version_id}/containerfile
+def test_toolsIdVersionsVersionIdContainerfileGet():
+    """Test for getting all container files for a given tool version when
+    given `tool_id` and `tool_version_id` when no files present.
+    """
+    app = Flask(__name__)
+    app.config['FOCA'] = Config(
+        db=MongoConfig(**MONGO_CONFIG)
+    )
+    app.config['FOCA'].db.dbs['trsStore'] \
+        .collections['tools'].client = mongomock.MongoClient().db.collection
+    app.config['FOCA'].db.dbs['trsStore'] \
+        .collections['files'].client = mongomock.MongoClient().db.collection
+
+    mock_resp = deepcopy(MOCK_TOOL_VERSION_ID)
+    mock_resp['id'] = MOCK_ID
+    mock_resp['versions'][0]['containerfile'] = True
+
+    app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
+        .client.insert_one(mock_resp)
+    app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
+        .client.insert_one(mock_resp)
+
+    with app.app_context():
+        res = toolsIdVersionsVersionIdContainerfileGet.__wrapped__(
+            id=MOCK_ID, version_id=MOCK_ID
+        )
+        assert res == [MOCK_FILES[1]["fileWrapper"]]
+
+
+def test_toolsIdVersionsVersionIdContainerfileGet_NotFound():
+    """Test for getting all container files for a given tool version when
+    given `tool_id` and `tool_version_id` when no files present.
+    """
+    app = Flask(__name__)
+    app.config['FOCA'] = Config(
+        db=MongoConfig(**MONGO_CONFIG)
+    )
+    app.config['FOCA'].db.dbs['trsStore'] \
+        .collections['tools'].client = mongomock.MongoClient().db.collection
+    app.config['FOCA'].db.dbs['trsStore'] \
+        .collections['files'].client = mongomock.MongoClient().db.collection
+
+    mock_resp = deepcopy(MOCK_TOOL_VERSION_ID)
+    mock_resp['id'] = MOCK_ID
+    mock_resp['versions'][0]['containerfile'] = True
+
+    app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
+        .client.insert_one(mock_resp)
+
+    with app.app_context():
+        with pytest.raises(NotFound):
+            toolsIdVersionsVersionIdContainerfileGet.__wrapped__(
+                id=MOCK_ID, version_id=MOCK_ID
+            )
+
+
+def test_toolsIdVersionsVersionIdContainerfileGet_NoContainerSpecs():
+    """Test for getting all container files for a given tool version when
+    given `tool_id` and `tool_version_id` when container spec is setFalse.
+    """
+    app = Flask(__name__)
+    app.config['FOCA'] = Config(
+        db=MongoConfig(**MONGO_CONFIG)
+    )
+    app.config['FOCA'].db.dbs['trsStore'] \
+        .collections['tools'].client = mongomock.MongoClient().db.collection
+    app.config['FOCA'].db.dbs['trsStore'] \
+        .collections['files'].client = mongomock.MongoClient().db.collection
+
+    mock_resp = deepcopy(MOCK_TOOL_VERSION_ID)
+    mock_resp['id'] = MOCK_ID
+
+    app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
+        .client.insert_one(mock_resp)
+    app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
+        .client.insert_one(mock_resp)
+
+    with app.app_context():
+        with pytest.raises(NotFound):
+            toolsIdVersionsVersionIdContainerfileGet.__wrapped__(
+                id=MOCK_ID, version_id=MOCK_ID
             )

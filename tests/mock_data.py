@@ -117,6 +117,22 @@ MOCK_FILES = [
             "path": "string"
         }
     },
+    {
+        "fileWrapper": {
+            "checksum": [
+                {
+                    "checksum": "ea2a5db69bd20a42976838790bc29294df3af02b",
+                    "type": "sha2"
+                }
+            ],
+            "content": "string",
+            "url": "sfdlmedl"
+        },
+        "toolFile": {
+            "file_type": "CONTAINERFILE",
+            "path": "string"
+        }
+    }
 ]
 MOCK_FILES_CONTENT_URL_MISSING = deepcopy(MOCK_FILES)
 del MOCK_FILES_CONTENT_URL_MISSING[0]['fileWrapper']['content']
