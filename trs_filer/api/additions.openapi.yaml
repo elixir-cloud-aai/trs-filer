@@ -13,7 +13,7 @@ paths:
           application/json:
             schema:
               x-body-name: service_info
-              $ref: '#/components/schemas/Service'
+              $ref: '#/components/schemas/ServiceRegister'
       responses:
         '201':
           description: The service info was successfully created.
@@ -466,11 +466,200 @@ paths:
                 $ref: '#/components/schemas/Error'
 components:
   schemas:
+    ChecksumRegister:
+      type: object
+      required:
+        - checksum
+        - type
+      additionalProperties: false
+      properties:
+        checksum:
+          type: string
+          description: "The hex-string encoded checksum for the data. "
+        type:
+          type: string
+          description: >-
+            The digest method used to create the checksum.
+
+            The value (e.g. `sha-256`) SHOULD be listed as `Hash Name String` in the https://github.com/ga4gh-discovery/ga4gh-checksum/blob/master/hash-alg.csv[GA4GH Checksum Hash Algorithm Registry].
+
+            Other values MAY be used, as long as implementors are aware of the issues discussed in https://tools.ietf.org/html/rfc6920#section-9.4[RFC6920].
+
+            GA4GH may provide more explicit guidance for use of non-IANA-registered algorithms in the future.
+    FilesRegister:
+      type: object
+      description: Properties and (a pointer to the) contents of a file.
+      additionalProperties: false
+      properties:
+        toolFile:
+          $ref: '#/components/schemas/ToolFileRegister'
+        fileWrapper:
+          $ref: '#/components/schemas/FileWrapperRegister'
+    FileWrapperRegister:
+      type: object
+      description: >
+        A file provides content for one of
+
+        - A tool descriptor is a metadata document that describes one or more tools.
+
+        - A tool document that describes how to test with one or more sample test
+
+        JSON.
+
+        - A containerfile is a document that describes how to build a particular
+
+        container image. Examples include Dockerfiles for creating Docker images
+
+        and Singularity recipes for Singularity images
+      additionalProperties: false
+      properties:
+        content:
+          type: string
+          description: The content of the file itself. One of url or content is required.
+        checksum:
+          type: array
+          items:
+            $ref: "#/components/schemas/ChecksumRegister"
+          description: "A production (immutable) tool version is required to have a
+            hashcode. Not required otherwise, but might be useful to detect
+            changes. "
+          example:
+            - checksum: ea2a5db69bd20a42976838790bc29294df3af02b
+              type: sha1
+        url:
+          type: string
+          description: Optional url to the underlying content, should include version
+            information, and can include a git hash.  Note that this URL should
+            resolve to the raw unwrapped content that would otherwise be
+            available in content. One of url or content is required.
+    ImageDataRegister:
+      type: object
+      description: Describes one container image.
+      additionalProperties: false
+      properties:
+        registry_host:
+          type: string
+          description: A docker registry or a URL to a Singularity registry. Used along
+            with image_name to locate a specific image.
+        image_name:
+          type: string
+          description: Used in conjunction with a registry_url if provided to locate images.
+        size:
+          type: integer
+          description: Size of the container in bytes.
+        updated:
+          type: string
+          description: Last time the container was updated.
+        checksum:
+          type: array
+          items:
+            $ref: "#/components/schemas/ChecksumRegister"
+          description: A production (immutable) tool version is required to have a
+            hashcode. Not required otherwise, but might be useful to detect
+            changes.  This exposes the hashcode for specific image versions to
+            verify that the container version pulled is actually the version
+            that was indexed by the registry.
+          example:
+            - checksum: 77af4d6b9913e693e8d0b4b294fa62ade6054e6b2f1ffb617ac955dd63fb0182
+              type: sha256
+        image_type:
+          $ref: "#/components/schemas/ImageType"
+    ServiceRegister:
+      description: 'GA4GH service'
+      type: object
+      required:
+        - id
+        - name
+        - type
+        - organization
+        - version
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          description: 'Unique ID of this service. Reverse domain name notation is recommended, though not required. The identifier should attempt to be globally unique so it can be used in downstream aggregator services e.g. Service Registry.'
+          example: 'org.ga4gh.myservice'
+        name:
+          type: string
+          description: 'Name of this service. Should be human readable.'
+          example: 'My project'
+        type:
+          $ref: '#/components/schemas/ServiceTypeRegister'
+        description:
+          type: string
+          description: 'Description of the service. Should be human readable and provide information about the service.'
+          example: 'This service provides...'
+        organization:
+          type: object
+          description: 'Organization providing the service'
+          required:
+            - name
+            - url
+          properties:
+            name:
+              type: string
+              description: 'Name of the organization responsible for the service'
+              example: 'My organization'
+            url:
+              type: string
+              format: uri
+              description: 'URL of the website of the organization (RFC 3986 format)'
+              example: 'https://example.com'
+        contactUrl:
+          type: string
+          format: uri
+          description: 'URL of the contact for the provider of this service, e.g. a link to a contact form (RFC 3986 format), or an email (RFC 2368 format).'
+          example: 'mailto:support@example.com'
+        documentationUrl:
+          type: string
+          format: uri
+          description: 'URL of the documentation of this service (RFC 3986 format). This should help someone learn how to use your service, including any specifics required to access data, e.g. authentication.'
+          example: 'https://docs.myservice.example.com'
+        createdAt:
+          type: string
+          format: date-time
+          description: 'Timestamp describing when the service was first deployed and available (RFC 3339 format)'
+          example: '2019-06-04T12:58:19Z'
+        updatedAt:
+          type: string
+          format: date-time
+          description: 'Timestamp describing when the service was last updated (RFC 3339 format)'
+          example: '2019-06-04T12:58:19Z'
+        environment:
+          type: string
+          description: 'Environment the service is running in. Use this to distinguish between production, development and testing/staging deployments. Suggested values are prod, test, dev, staging. However this is advised and not enforced.'
+          example: 'test'
+        version:
+          type: string
+          description: 'Version of the service being described. Semantic versioning is recommended, but other identifiers, such as dates or commit hashes, are also allowed. The version should be changed whenever the service is updated.'
+          example: '1.0.0'
+    ServiceTypeRegister:
+      description: 'Type of a GA4GH service'
+      type: object
+      required:
+        - group
+        - artifact
+        - version
+      additionalProperties: false
+      properties:
+        group:
+          type: string
+          description: 'Namespace in reverse domain name format. Use `org.ga4gh` for implementations compliant with official GA4GH specifications. For services with custom APIs not standardized by GA4GH, or implementations diverging from official GA4GH specifications, use a different namespace (e.g. your organization''s reverse domain name).'
+          example: 'org.ga4gh'
+        artifact:
+          type: string
+          description: 'Name of the API or GA4GH specification implemented. Official GA4GH types should be assigned as part of standards approval process. Custom artifacts are supported.'
+          example: 'beacon'
+        version:
+          type: string
+          description: 'Version of the API or specification. GA4GH specifications use semantic versioning.'
+          example: '1.0.0'
     ToolClassRegister:
       type: object
       description: Describes a class (type) of tool allowing us to categorize
         workflows, tasks, and maybe even other entities (such as services)
         separately.
+      additionalProperties: false
       properties:
         name:
           type: string
@@ -479,6 +668,39 @@ components:
           type: string
           description: A longer explanation of what this class is and what it can
             accomplish.
+    ToolClassRegisterId:
+      type: object
+      description: Describes a class (type) of tool allowing us to categorize
+        workflows, tasks, and maybe even other entities (such as services)
+        separately.
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          description: The unique identifier for the class.
+        name:
+          type: string
+          description: A short friendly name for the class.
+        description:
+          type: string
+          description: A longer explanation of what this class is and what it can
+            accomplish.
+    ToolFileRegister:
+      type: object
+      additionalProperties: false
+      properties:
+        path:
+          type: string
+          description: Relative path of the file.  A descriptor's path can be used with
+            the GA4GH .../{type}/descriptor/{relative_path} endpoint.
+        file_type:
+          type: string
+          enum:
+            - TEST_FILE
+            - PRIMARY_DESCRIPTOR
+            - SECONDARY_DESCRIPTOR
+            - CONTAINERFILE
+            - OTHER
     ToolRegister:
       type: object
       description: A tool (or described tool) is defined as a tuple of a
@@ -489,6 +711,7 @@ components:
         - organization
         - toolclass
         - versions
+      additionalProperties: false
       properties:
         aliases:
           type: array
@@ -511,7 +734,7 @@ components:
           type: string
           description: The name of the tool.
         toolclass:
-          $ref: "#/components/schemas/ToolClass"
+          $ref: "#/components/schemas/ToolClassRegisterId"
         description:
           type: string
           description: The description of the tool.
@@ -527,11 +750,14 @@ components:
           description: A list of versions for this tool.
           type: array
           items:
-            $ref: "#/components/schemas/ToolVersionRegister"
+            anyOf:
+              - $ref: "#/components/schemas/ToolVersionRegister"
+              - $ref: "#/components/schemas/ToolVersionRegisterId"
     ToolVersionRegister:
       type: object
       description: A tool version describes a particular iteration of a tool as
         described by a reference to a specific image and/or documents.
+      additionalProperties: false
       properties:
         author:
           type: array
@@ -543,13 +769,6 @@ components:
         name:
           type: string
           description: The name of the version.
-        id:
-          type: string
-          description: A unique identifier of the version of this tool for this
-            particular tool registry. If not provided, will be auto-generated
-            by the implementation. Note that a `BadRequest` will be returned if
-            multiple versions with the same `id` properties are provided.
-          example: v1
         is_production:
           type: boolean
           description: This version of a tool is guaranteed to not change over
@@ -561,7 +780,7 @@ components:
             strings at runtime, those ones cannot be reported here.
           type: array
           items:
-            $ref: "#/components/schemas/ImageData"
+            $ref: "#/components/schemas/ImageDataRegister"
         descriptor_type:
           type: array
           description: The type (or types) of descriptors available.
@@ -600,12 +819,80 @@ components:
             associated with a tool.
           type: array
           items:
-            $ref: "#/components/schemas/Files"
-    Files:
+            $ref: "#/components/schemas/FilesRegister"
+    ToolVersionRegisterId:
       type: object
-      description: Properties and (a pointer to the) contents of a file.
+      description: A tool version describes a particular iteration of a tool as
+        described by a reference to a specific image and/or documents.
+      required:
+        - id
+      additionalProperties: false
       properties:
-        toolFile:
-          $ref: '#/components/schemas/ToolFile'
-        fileWrapper:
-          $ref: '#/components/schemas/FileWrapper'
+        author:
+          type: array
+          items:
+            type: string
+          description: Contact information for the author of this version of
+            the tool in the registry. (More complex authorship information is
+            handled by the descriptor).
+        name:
+          type: string
+          description: The name of the version.
+        is_production:
+          type: boolean
+          description: This version of a tool is guaranteed to not change over
+            time (for example, a  tool built from a tag in git as opposed to a
+            branch). A production quality tool  is required to have a checksum.
+        images:
+          description: All known docker images (and versions/hashes) used by
+            this tool. If the tool has to evaluate any of the docker images
+            strings at runtime, those ones cannot be reported here.
+          type: array
+          items:
+            $ref: "#/components/schemas/ImageDataRegister"
+        descriptor_type:
+          type: array
+          description: The type (or types) of descriptors available.
+          items:
+            $ref: "#/components/schemas/DescriptorType"
+        containerfile:
+          type: boolean
+          description: Reports if this tool has a containerfile available. (For
+            Docker-based tools, this would indicate the presence of a
+            Dockerfile).
+        verified:
+          type: boolean
+          description: Reports whether this tool has been verified by a
+            specific organization or individual.
+        verified_source:
+          type: array
+          items:
+            type: string
+          description: Source of metadata that can support a verified tool,
+            such as an email or URL.
+        signed:
+          type: boolean
+          description: Reports whether this version of the tool has been
+            signed.
+        included_apps:
+          description: An array of IDs for the applications that are stored
+            inside this tool.
+          example:
+            - https://bio.tools/tool/mytum.de/SNAP2/1
+            - https://bio.tools/bioexcel_seqqc
+          type: array
+          items:
+            type: string
+        files:
+          description: Properties and (pointers to) contents of files
+            associated with a tool.
+          type: array
+          items:
+            $ref: "#/components/schemas/FilesRegister"
+        id:
+          type: string
+          description: A unique identifier of the version of this tool for this
+            particular tool registry. If not provided, will be auto-generated
+            by the implementation. Note that a `BadRequest` will be returned if
+            multiple versions with the same `id` properties are provided.
+          example: v1
