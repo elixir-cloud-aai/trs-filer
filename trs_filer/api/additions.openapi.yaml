@@ -848,11 +848,6 @@ components:
           description: The type (or types) of descriptors available.
           items:
             $ref: "#/components/schemas/DescriptorType"
-        containerfile:
-          type: boolean
-          description: Reports if this tool has a containerfile available. (For
-            Docker-based tools, this would indicate the presence of a
-            Dockerfile).
         verified:
           type: boolean
           description: Reports whether this tool has been verified by a
@@ -917,11 +912,6 @@ components:
           description: The type (or types) of descriptors available.
           items:
             $ref: "#/components/schemas/DescriptorType"
-        containerfile:
-          type: boolean
-          description: Reports if this tool has a containerfile available. (For
-            Docker-based tools, this would indicate the presence of a
-            Dockerfile).
         verified:
           type: boolean
           description: Reports whether this tool has been verified by a
