@@ -100,8 +100,8 @@ paths:
         - name: id
           in: path
           required: true
-          description: A unique identifier of the tool, scoped to this registry,
-            for example `123456`.
+          description: A unique identifier of the tool, scoped to this
+            registry, for example `123456`.
           schema:
             type: string
       requestBody:
@@ -154,8 +154,8 @@ paths:
         - name: id
           in: path
           required: true
-          description: A unique identifier of the tool, scoped to this registry,
-            for example `123456`.
+          description: A unique identifier of the tool, scoped to this
+            registry, for example `123456`.
           schema:
             type: string
       responses:
@@ -207,8 +207,8 @@ paths:
         - name: id
           in: path
           required: true
-          description: A unique identifier of the tool, scoped to this registry,
-            for example `123456`.
+          description: A unique identifier of the tool, scoped to this
+            registry, for example `123456`.
           schema:
             type: string
       requestBody:
@@ -262,8 +262,8 @@ paths:
         - name: id
           in: path
           required: true
-          description: A unique identifier of the tool, scoped to this registry,
-            for example `123456`.
+          description: A unique identifier of the tool, scoped to this
+            registry, for example `123456`.
           schema:
             type: string
         - name: version_id
@@ -311,17 +311,167 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /toolClasses:
+    post:
+      summary: Create a tool class.
+      description: Create a tool class with a randomly generated unique ID.
+      operationId: postToolClass
+      tags:
+        - TRS-Filer
+      requestBody:
+        description: Tool class (meta)data to add.
+        required: true
+        content:
+          application/json:
+            schema:
+              x-body-name: tool_class
+              $ref: '#/components/schemas/ToolClassRegister'
+      responses:
+        '200':
+          description: The tool class was successfully created.
+          content:
+            application/json:
+              schema:
+                type: string
+        '400':
+          description: The request is malformed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: The request is unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: The requester is not authorized to perform this action.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: An unexpected error occurred.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  "/toolClasses/{id}":
+    delete:
+      summary: Delete a tool class.
+      description: Delete an existing tool object.
+      operationId: deleteToolClass
+      tags:
+        - TRS-Filer
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: A unique identifier of the tool class, scoped to this
+            registry, for example `123456`.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The tool class was successfully deleted.
+          content:
+            application/json:
+              schema:
+                description: Identifier of deleted tool version.
+                type: string
+        '400':
+          description: The request is malformed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: The request is unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: The requester is not authorized to perform this action.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: The requested tool was not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: An unexpected error occurred.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    put:
+      summary: Create or update a tool class.
+      description: Create a tool class with a predefined unique ID. Overwrites
+        any existing tool object with the same ID.
+      operationId: putToolClass
+      tags:
+        - TRS-Filer
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: A unique identifier of the tool class, scoped to this
+            registry, for example `123456`.
+          schema:
+            type: string
+      requestBody:
+        description: Tool class (meta)data to add.
+        required: true
+        content:
+          application/json:
+            schema:
+              x-body-name: tool_class
+              $ref: '#/components/schemas/ToolClassRegister'
+      responses:
+        '200':
+          description: The tool class was successfully created/updated.
+          content:
+            application/json:
+              schema:
+                type: string
+        '400':
+          description: The request is malformed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: The request is unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: The requester is not authorized to perform this action.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: An unexpected error occurred.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 components:
   schemas:
-    ToolClass:
+    ToolClassRegister:
       type: object
       description: Describes a class (type) of tool allowing us to categorize
         workflows, tasks, and maybe even other entities (such as services)
         separately.
       properties:
-        id:
-          type: string
-          description: The unique identifier for the class.
         name:
           type: string
           description: A short friendly name for the class.
@@ -332,8 +482,9 @@ components:
     ToolRegister:
       type: object
       description: A tool (or described tool) is defined as a tuple of a
-        descriptor file (which potentially consists of multiple files), a set of
-        container images, and a set of instructions for creating those images.
+        descriptor file (which potentially consists of multiple files), a set
+        of container images, and a set of instructions for creating those
+        images.
       required:
         - organization
         - toolclass
