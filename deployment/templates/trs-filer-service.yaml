@@ -1,15 +1,15 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ .Values.trs_filer.appName }}
+  name: trs-filer
 spec:
   ports:
-  - name: {{ .Values.trs_filer.appName }}
+  - name: trs-filer
     port: 8080
     protocol: TCP
     targetPort: 8080
   selector:
-    app: {{ .Values.trs_filer.appName }}
+    app: trs-filer
   sessionAffinity: None
   type: ClusterIP
 status:
