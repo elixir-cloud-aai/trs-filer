@@ -26,6 +26,7 @@ from trs_filer.ga4gh.trs.server import (
     postTool,
     postToolVersion,
     putTool,
+    putToolVersion,
     toolsGet,
     toolsIdGet,
     toolsIdVersionsGet,
@@ -351,7 +352,6 @@ def test_putTool():
         assert res == MOCK_ID
 
 
-# PUT /tools/{id}
 def test_putTool_update():
     """Test for updating an existing tool."""
     app = Flask(__name__)
@@ -448,6 +448,59 @@ def test_postToolVersion():
 
     with app.test_request_context(json=deepcopy(MOCK_VERSION_ID)):
         res = postToolVersion.__wrapped__(id=MOCK_ID)
+        assert isinstance(res, str)
+
+
+# PUT /tools/{id}/versions/{version_id}
+def test_putToolVersion():
+    """Test for creating a tool version; identifier provided by user."""
+    app = Flask(__name__)
+    app.config['FOCA'] = Config(
+        db=MongoConfig(**MONGO_CONFIG),
+        endpoints=ENDPOINT_CONFIG,
+    )
+    mock_resp = {}
+    mock_resp["id"] = MOCK_ID
+    app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
+        .client = mongomock.MongoClient().db.collection
+    app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
+        .client = mongomock.MongoClient().db.collection
+    app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
+        .client.insert_one(mock_resp)
+    app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
+        .client.insert_one(mock_resp)
+
+    with app.test_request_context(json=deepcopy(MOCK_VERSION_ID)):
+        res = putToolVersion.__wrapped__(
+            id=MOCK_ID,
+            version_id=MOCK_ID,
+        )
+        assert isinstance(res, str)
+
+
+def test_putToolVersion_update():
+    """Test for updating an existing tool version."""
+    app = Flask(__name__)
+    app.config['FOCA'] = Config(
+        db=MongoConfig(**MONGO_CONFIG),
+        endpoints=ENDPOINT_CONFIG,
+    )
+    mock_resp = MOCK_TOOL_VERSION_ID
+    mock_resp["id"] = MOCK_ID
+    app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
+        .client = mongomock.MongoClient().db.collection
+    app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
+        .client = mongomock.MongoClient().db.collection
+    app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
+        .client.insert_one(mock_resp)
+    app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
+        .client.insert_one(mock_resp)
+
+    with app.test_request_context(json=deepcopy(MOCK_VERSION_ID)):
+        res = putToolVersion.__wrapped__(
+            id=MOCK_ID,
+            version_id=MOCK_ID,
+        )
         assert isinstance(res, str)
 
 
