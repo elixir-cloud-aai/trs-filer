@@ -198,8 +198,8 @@ paths:
                 $ref: '#/components/schemas/Error'
   "/tools/{id}/versions":
     post:
-      summary: Add or update a tool version.
-      description: Create or update a tool version object.
+      summary: Add a tool version.
+      description: Create a tool version object.
       operationId: postToolVersion
       tags:
         - TRS-Filer
@@ -301,6 +301,68 @@ paths:
                 $ref: '#/components/schemas/Error'
         '404':
           description: The requested tool was not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: An unexpected error occurred.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    put:
+      summary: Add or update a tool version.
+      description: Create a tool version object with a predefined ID.
+        Overwrites any existing tool version object with the same ID.
+      operationId: putToolVersion
+      tags:
+        - TRS-Filer
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: A unique identifier of the tool, scoped to this
+            registry, for example `123456`.
+          schema:
+            type: string
+        - name: version_id
+          in: path
+          required: true
+          description: A unique identifier of the tool version, scoped to this
+            registry, for example `123456`.
+          schema:
+            type: string
+      requestBody:
+        description: Tool version (meta)data to add.
+        required: true
+        content:
+          application/json:
+            schema:
+              x-body-name: tool_version
+              $ref: '#/components/schemas/ToolVersionRegister'
+      responses:
+        '200':
+          description: The tool version was successfully created/updated.
+          content:
+            application/json:
+              schema:
+                description: Tool identifier.
+                type: string
+        '400':
+          description: The request is malformed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: The request is unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: The requester is not authorized to perform this action.
           content:
             application/json:
               schema:
