@@ -1,112 +1,155 @@
+"""Tests for setting tool classes."""
+
+from copy import deepcopy
 from flask import Flask
-from foca.models.config import Config, MongoConfig
 from unittest.mock import MagicMock
-from trs_filer.ga4gh.trs.endpoints.register_tool_classes import (
-    RegisterToolClass
-)
+
+from foca.models.config import (Config, MongoConfig)
+import mongomock
 from pymongo.errors import DuplicateKeyError
-from addict import Dict
+import pytest
+
+from tests.mock_data import (
+    ENDPOINT_CONFIG,
+    ENDPOINT_CONFIG_CHARSET_LITERAL,
+    ENDPOINT_CONFIG_ONE_ID,
+    MOCK_ID,
+    MOCK_ID_ONE_CHAR,
+    MOCK_TOOL_CLASS,
+    MONGO_CONFIG,
+)
+from trs_filer.errors.exceptions import (
+    InternalServerError,
+)
+from trs_filer.ga4gh.trs.endpoints.register_tool_classes import (
+    RegisterToolClass,
+)
 
 
-INDEX_CONFIG = {
-    'keys': [('id', 1)]
-}
-COLLECTION_CONFIG = {
-    'indexes': [INDEX_CONFIG],
-}
-DB_CONFIG = {
-    'collections': {
-        'toolclasses': COLLECTION_CONFIG,
-    },
-}
-MONGO_CONFIG = {
-    'host': 'mongodb',
-    'port': 27017,
-    'dbs': {
-        'trsStore': DB_CONFIG,
-    },
-}
+class TestRegisterToolClass:
+    """Tests for `RegisterToolClass` class."""
 
-ENDPOINT_CONFIG_CHARSET_LITERAL = {
-    "toolclass": {
-        "id": {
-            "charset": '0123456789',
-            "length": 6,
-        },
-        "meta_version": {
-            "init": 1,
-            "increment": 1,
-        },
-    },
-    "url_prefix": "http",
-    "external_host": "1.2.3.4",
-    "external_port": 80,
-    "api_path": "ga4gh/trs/v2",
-}
-
-MOCK_REQUEST_DATA_VALID = {
-    "description": "string",
-    "id": "string",
-    "name": "string"
-}
-
-MOCK_REQUEST_DATA_VALID_NO_ID = {
-    "description": "string",
-    "name": "string"
-}
-
-
-def test_generate_id():
-    """Test for generate_id method."""
-    app = Flask(__name__)
-    app.config['FOCA'] = Config(
-        db=MongoConfig(**MONGO_CONFIG),
-        endpoints=ENDPOINT_CONFIG_CHARSET_LITERAL,
-    )
-    request_data = Dict()
-    request_data.json = MOCK_REQUEST_DATA_VALID
-    with app.app_context():
-        assert isinstance(RegisterToolClass(request_data).generate_id(), str)
-
-
-def test_create_toolclass_with_random_id():
-    """Test for valid duplicate key error."""
-    app = Flask(__name__)
-    app.config['FOCA'] = Config(
-        db=MongoConfig(**MONGO_CONFIG),
-        endpoints=ENDPOINT_CONFIG_CHARSET_LITERAL,
-    )
-
-    app.config['FOCA'].db.dbs['trsStore'] \
-        .collections['toolclasses'].client = MagicMock()
-
-    request_data = Dict()
-    request_data.json = MOCK_REQUEST_DATA_VALID_NO_ID
-    with app.app_context():
-        assert isinstance(
-            RegisterToolClass(request_data).register_toolclass()['id'],
-            str,
+    def test_init(self):
+        """Test for constructing class."""
+        app = Flask(__name__)
+        app.config['FOCA'] = Config(
+            db=MongoConfig(**MONGO_CONFIG),
+            endpoints=ENDPOINT_CONFIG,
         )
 
+        data = deepcopy(MOCK_TOOL_CLASS)
+        with app.app_context():
+            tool = RegisterToolClass(data)
+            assert tool.data['description'] == MOCK_TOOL_CLASS['description']
+            assert tool.data['id'] is None
 
-def test_create_toolclass_duplicate_key():
-    """Test for valid duplicate key error."""
-    app = Flask(__name__)
-    app.config['FOCA'] = Config(
-        db=MongoConfig(**MONGO_CONFIG),
-        endpoints=ENDPOINT_CONFIG_CHARSET_LITERAL,
-    )
-
-    app.config['FOCA'].db.dbs['trsStore'] \
-        .collections['toolclasses'].client = MagicMock()
-    mock = MagicMock(side_effect=[DuplicateKeyError(''), None])
-    app.config['FOCA'].db.dbs['trsStore'] \
-        .collections['toolclasses'].client.insert_one = mock
-
-    request_data = Dict()
-    request_data.json = MOCK_REQUEST_DATA_VALID
-    with app.app_context():
-        assert isinstance(
-            RegisterToolClass(request_data).register_toolclass()['id'],
-            str,
+    def test_process_metadata(self):
+        """Test for processing metadata."""
+        app = Flask(__name__)
+        app.config['FOCA'] = Config(
+            db=MongoConfig(**MONGO_CONFIG),
+            endpoints=ENDPOINT_CONFIG_CHARSET_LITERAL,
         )
+
+        data = deepcopy(MOCK_TOOL_CLASS)
+        with app.app_context():
+            tool = RegisterToolClass(data)
+            tool.process_metadata()
+            assert isinstance(tool.id_charset, str)
+
+    def test_register_metadata(self):
+        """Test for creating a tool class with a randomly assigned identifier.
+        """
+        app = Flask(__name__)
+        app.config['FOCA'] = Config(
+            db=MongoConfig(**MONGO_CONFIG),
+            endpoints=ENDPOINT_CONFIG,
+        )
+        app.config['FOCA'].db.dbs['trsStore'].collections['toolclasses'] \
+            .client = MagicMock()
+
+        data = deepcopy(MOCK_TOOL_CLASS)
+        with app.app_context():
+            tool_class = RegisterToolClass(data=data)
+            tool_class.register_metadata()
+            assert isinstance(tool_class.data['id'], str)
+
+    def test_register_metadata_with_id(self):
+        """Test for creating a tool class with a user-supplied identifier."""
+        app = Flask(__name__)
+        app.config['FOCA'] = Config(
+            db=MongoConfig(**MONGO_CONFIG),
+            endpoints=ENDPOINT_CONFIG,
+        )
+        app.config['FOCA'].db.dbs['trsStore'].collections['toolclasses'] \
+            .client = MagicMock()
+
+        data = deepcopy(MOCK_TOOL_CLASS)
+        with app.app_context():
+            tool_class = RegisterToolClass(data=data, id=MOCK_ID)
+            tool_class.register_metadata()
+            assert isinstance(tool_class.data['id'], str)
+
+    def test_register_metadata_with_id_replace(self):
+        """Test for updating an existing tool class."""
+        app = Flask(__name__)
+        app.config['FOCA'] = Config(
+            db=MongoConfig(**MONGO_CONFIG),
+            endpoints=ENDPOINT_CONFIG,
+        )
+        mock_resp = deepcopy(MOCK_TOOL_CLASS)
+        app.config['FOCA'].db.dbs['trsStore'].collections['toolclasses'] \
+            .client = mongomock.MongoClient().db.collection
+        app.config['FOCA'].db.dbs['trsStore'].collections['toolclasses'] \
+            .client.insert_one(mock_resp)
+
+        data = deepcopy(MOCK_TOOL_CLASS)
+        del data['id']
+        with app.app_context():
+            tool_class = RegisterToolClass(data=data, id=MOCK_ID)
+            tool_class.register_metadata()
+            assert isinstance(tool_class.data['id'], str)
+
+    def test_register_metadata_duplicate_key(self):
+        """Test for creating a tool class; duplicate key error occurs."""
+        app = Flask(__name__)
+        app.config['FOCA'] = Config(
+            db=MongoConfig(**MONGO_CONFIG),
+            endpoints=ENDPOINT_CONFIG,
+        )
+        mock_resp = MagicMock(side_effect=[DuplicateKeyError(''), None])
+        app.config['FOCA'].db.dbs['trsStore'].collections['toolclasses'] \
+            .client = MagicMock()
+        app.config['FOCA'].db.dbs['trsStore'].collections['toolclasses'] \
+            .client.insert_one = mock_resp
+
+        temp_data = deepcopy(MOCK_TOOL_CLASS)
+        data = temp_data
+        with app.app_context():
+            tool = RegisterToolClass(data=data)
+            tool.register_metadata()
+            assert isinstance(tool.data['id'], str)
+
+    def test_register_metadata_duplicate_keys_repeated(self):
+        """Test for creating a tool class; running out of unique identifiers.
+        """
+        app = Flask(__name__)
+        app.config['FOCA'] = Config(
+            db=MongoConfig(**MONGO_CONFIG),
+            endpoints=ENDPOINT_CONFIG_ONE_ID,
+        )
+        mock_resp = deepcopy(MOCK_TOOL_CLASS)
+        mock_resp["id"] = MOCK_ID_ONE_CHAR
+        app.config['FOCA'].db.dbs['trsStore'].collections['toolclasses'] \
+            .client = mongomock.MongoClient().db.collection
+        app.config['FOCA'].db.dbs['trsStore'].collections['toolclasses'] \
+            .client.insert_one(mock_resp)
+
+        data = deepcopy(MOCK_TOOL_CLASS)
+        del data['id']
+        with app.app_context():
+            with pytest.raises(InternalServerError):
+                version = RegisterToolClass(data=data)
+                version.register_metadata()
+                version = RegisterToolClass(data=data)
+                version.register_metadata()

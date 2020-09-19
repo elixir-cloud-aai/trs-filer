@@ -1,117 +1,129 @@
 """Controller for registering new objects."""
 
 import logging
-from random import choice
-import string
-from typing import (Dict, Optional, List)
+import string  # noqa: F401
+from typing import (Dict, Optional)
+
+from flask import current_app
 from pymongo.errors import DuplicateKeyError
-from flask import (current_app, Request)
+
+from trs_filer.errors.exceptions import (
+    InternalServerError,
+)
+from trs_filer.ga4gh.trs.endpoints.utils import (
+    generate_id,
+)
 
 logger = logging.getLogger(__name__)
 
 
 class RegisterToolClass:
-    """Class to register toolClasses with the service."""
+    """Class to register tool classes with the service."""
 
     def __init__(
         self,
-        request: Optional[Request] = None,
-        toolClass_data: Optional[List] = None,
+        data: Dict,
         id: Optional[str] = None,
     ) -> None:
-        """Initialize toolClass data.
+        """Initialize tool class data.
 
         Args:
-            request: API request object.
-            id: ToolClass ID. Auto-generated if not provided.
+            data: Tool class metadata consistent with the `ToolClass` schema.
+            id: Tool class identifier. Auto-generated if not provided.
 
         Attributes:
-            description: A longer explanation of what this class is and what
-            it can accomplish.
-
-            id: The unique identifier for the class.
-
-            name: A short friendly name for the class.
+            data: Tool metadata.
+            replace: Whether it is allowed to replace an existing tool. Set
+                to `True` if an `id` is provided, else set to `False`.
+            id_charset: Allowed character set or expression evaluating to
+                allowed character set for generating object identifiers.
+            id_length: Length of generated object identifiers.
+            meta_version_init: Initial value for tool meta version.
+            url_prefix: URL scheme of application. For constructing tool and
+                version `url` properties.
+            host_name: Name of application host. For constructing tool and
+                version `url` properties.
+            external_port: Port at which application is served. For
+                constructing tool and version `url` properties.
+            api_path: Base path at which API endpoints can be reached. For
+                constructing tool and version `url` properties.
+            tool_class_validation: Whether a tool is only allowed to be added
+                if it is associated with a pre-existing tool class; if `False`,
+                the tool class associated with the tool to be added is inserted
+                into the tool class database collection on the fly.
+            db_coll_tools: Database collection for storing tool objects.
+            db_coll_files: Database collection for storing file objects.
+            db_coll_classes: Database collection for storing tool class
+                objects.
         """
-        if toolClass_data is not None:
-            self.toolclass_data = toolClass_data
-        if request:
-            self.toolclass_data = request.json
-
-        if id:
-            self.toolclass_data['id'] = id
-        self.db_collection_toolclass = (
+        conf = current_app.config['FOCA'].endpoints
+        self.data = data
+        self.data['id'] = None if id is None else id
+        self.replace = True
+        self.id_charset = conf['tool']['id']['charset']
+        self.id_length = int(conf['tool']['id']['length'])
+        self.meta_version_init = int(conf['tool']['meta_version']['init'])
+        self.url_prefix = conf['service']['url_prefix']
+        self.host_name = conf['service']['external_host']
+        self.external_port = conf['service']['external_port']
+        self.api_path = conf['service']['api_path']
+        self.db_coll_classes = (
             current_app.config['FOCA'].db.dbs['trsStore']
             .collections['toolclasses'].client
         )
-        conf = current_app.config['FOCA'].endpoints
-        self.toolclass_id_charset = conf['toolclass']['id']['charset']
-        self.toolclass_id_length = int(conf['toolclass']['id']['length'])
-        self.url_prefix = conf['url_prefix']
-        self.host_name = conf['external_host']
-        self.external_port = conf['external_port']
-        self.api_path = conf['api_path']
+
+    def process_metadata(self) -> None:
+        """Process tool class metadata."""
         # evaluate character set expression or interpret literal string as set
         try:
-            self.toolclass_id_charset = eval(self.toolclass_id_charset)
+            self.id_charset = eval(self.id_charset)
         except Exception:
-            self.toolclass_id_charset = ''.join(
-                sorted(set(self.toolclass_id_charset)))
+            self.id_charset = ''.join(sorted(set(self.id_charset)))
 
-    def register_toolclass(self) -> Dict:
+    def register_metadata(self) -> None:
         """Register toolClass with TRS.
 
         Returns:
             ToolClass object.
         """
+        self.process_metadata()
 
         # set unique ID, dependent values and register object
-        while True:
-
-            # set random tool ID unless ID is provided
-            if 'id' not in self.toolclass_data:
-                replace = False
-                self.toolclass_data['id'] = self.generate_id(
-                    charset=self.toolclass_id_charset,
-                    length=self.toolclass_id_length
+        i = 0
+        while i < 10:
+            i += 1
+            # set random ID unless ID is provided
+            if self.data['id'] is None:
+                self.replace = False
+                self.data['id'] = generate_id(
+                    charset=self.id_charset,
+                    length=self.id_length
                 )
-            else:
-                replace = True
 
-            # update(insert) toolclass in(to) database
-            if replace:
-
-                self.db_collection_toolclass.replace_one(
-                    filter={'id': self.toolclass_data['id']},
-                    replacement=self.toolclass_data,
-                    upsert=True,
+            if self.replace:
+                # replace tool class in database
+                result = self.db_coll_classes.replace_one(
+                    filter={'id': self.data['id']},
+                    replacement=self.data,
                 )
-            else:
-                try:
-                    self.db_collection_toolclass.insert_one(
-                        self.toolclass_data)
-                except DuplicateKeyError:
-                    continue
+                # verify replacement
+                if result.modified_count:
+                    logger.info(
+                        f"Replaced tool class with id '{self.data['id']}'."
+                    )
+                    break
 
-            logger.info(
-                f"Created toolClass with id: {self.toolclass_data['id']}")
+            # insert tool class into database
+            try:
+                self.db_coll_classes.insert_one(document=self.data)
+            except DuplicateKeyError:
+                continue
+
+            logger.info(f"Added tool class with id '{self.data['id']}'.")
             break
-
-        return self.toolclass_data
-
-    def generate_id(
-        self,
-        charset: str = ''.join([string.ascii_letters, string.digits]),
-        length: int = 6,
-    ) -> str:
-        """Generate random string based on allowed set of characters.
-
-        Args:
-            charset: String of allowed characters.
-            length: Length of returned string.
-
-        Returns:
-            Random string of specified length and composed of defined set of
-            allowed characters.
-        """
-        return ''.join(choice(charset) for __ in range(length))
+        else:
+            raise InternalServerError
+        logger.debug(
+            "Entry in 'toolclasses' collection: "
+            f"{self.db_coll_classes.find_one({'id': self.data['id']})}"
+        )

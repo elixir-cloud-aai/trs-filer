@@ -1,17 +1,28 @@
 """"Controllers for TRS endpoints."""
 
+import logging
 from typing import (Optional, Dict, List, Tuple)
 
 from flask import (request, current_app)
 from foca.utils.logging import log_traffic
 
-from trs_filer.ga4gh.trs.endpoints.register_tools import (
-    RegisterObject,
+from trs_filer.errors.exceptions import (
+    BadRequest,
+    InternalServerError,
+    NotFound,
+)
+from trs_filer.ga4gh.trs.endpoints.register_objects import (
+    RegisterTool,
+    RegisterToolVersion,
 )
 from trs_filer.ga4gh.trs.endpoints.register_tool_classes import (
     RegisterToolClass
 )
-from trs_filer.errors.exceptions import NotFound
+from trs_filer.ga4gh.trs.endpoints.service_info import (
+    RegisterServiceInfo,
+)
+
+logger = logging.getLogger(__name__)
 
 
 @log_traffic
@@ -29,12 +40,12 @@ def toolsIdGet(
     Raise:
         NotFound if no object mapping with given id present.
     """
-    db_collection = (
+    db_coll_tools = (
         current_app.config['FOCA'].db.dbs['trsStore']
-        .collections['objects'].client
+        .collections['tools'].client
     )
-    obj = db_collection.find_one({"id": id})
-    if not obj:
+    obj = db_coll_tools.find_one({"id": id})
+    if obj is None:
         raise NotFound
     del obj["_id"]
     return obj
@@ -76,9 +87,9 @@ def toolsIdVersionsVersionIdGet(
         version with given id not found.
     """
 
-    db_collection = (
+    db_coll_tools = (
         current_app.config['FOCA'].db.dbs['trsStore']
-        .collections['objects'].client
+        .collections['tools'].client
     )
 
     proj = {
@@ -89,7 +100,7 @@ def toolsIdVersionsVersionIdGet(
             },
         },
     }
-    data = db_collection.find_one(
+    data = db_coll_tools.find_one(
         filter={'id': id},
         projection=proj,
     )
@@ -194,11 +205,11 @@ def toolsGet(
         filt['has_checker'] = checker
 
     # fetch data
-    db_collection = (
+    db_coll_tools = (
         current_app.config['FOCA'].db.dbs['trsStore']
-        .collections['objects'].client
+        .collections['tools'].client
     )
-    records = db_collection.find(
+    records = db_coll_tools.find(
         filter=filt,
         projection={"_id": False},
     )
@@ -273,12 +284,6 @@ def toolClassesGet(
 ) -> List:
     """List all tool types."""
     filt = {}
-    if id is not None:
-        filt['id'] = id
-    if description is not None:
-        filt['description'] = description
-    if name is not None:
-        filt['name'] = name
 
     # fetch data
     db_collection_class = (
@@ -290,105 +295,238 @@ def toolClassesGet(
         projection={"_id": False},
     )
 
-    # TODO: create dummy headers; implement pagination later
-    headers = {}
-    headers['next_page'] = None
-    headers['last_page'] = None
-    headers['self_link'] = None
-    headers['current_offset'] = None
-    headers['current_limit'] = None
-
-    return list(records), '200', headers
+    return list(records)
 
 
 @log_traffic
 def getServiceInfo() -> Dict:
-    """Show information about this service."""
-    return {}  # pragma: no cover
+    """Show information about this service.
+
+    Returns:
+        Service info details for the given tool.
+    """
+    service_info = RegisterServiceInfo()
+    return service_info.get_service_info()
 
 
 @log_traffic
-def postTool() -> Dict:
+def postServiceInfo() -> Tuple[None, str, Dict]:
+    """Show information about this service.
+
+    Returns:
+        Service info details for the given tool.
+    """
+    service_info = RegisterServiceInfo()
+    headers = service_info.set_service_info_from_app_context(data=request.json)
+    return None, '201', headers
+
+
+@log_traffic
+def postTool() -> str:
     """Add tool with an auto-generated ID.
 
     Returns:
-        Identifier of created object.
+        Identifier of created tool.
     """
-    tool_creator = RegisterObject(request=request)
-    tool = tool_creator.register_object()
-    return tool['id']
+    tool = RegisterTool(data=request.json)
+    tool.register_metadata()
+    return tool.data['id']
 
 
 @log_traffic
 def putTool(
     id: str,
-) -> Dict:
-    """Add tool with a user-supplied ID.
+) -> str:
+    """Add/replace tool with a user-supplied ID.
 
     Args:
         id: Identifier of tool to be created/updated.
 
     Returns:
-        Identifier of created/updated object.
+        Identifier of created/updated tool.
     """
-    tool_creator = RegisterObject(
-        request=request,
+    tool = RegisterTool(
+        data=request.json,
         id=id,
     )
-    tool = tool_creator.register_object()
-    return tool['id']
+    tool.register_metadata()
+    return tool.data['id']
 
 
 @log_traffic
 def deleteTool(
     id: str,
 ) -> str:
-    """Delete tool object.
+    """Delete tool.
 
     Args:
-        id: Identifier of tool object to be deleted.
+        id: Identifier of tool to be deleted.
 
     Returns:
-        Previous identifier of deleted object.
+        Previous identifier of deleted tool.
     """
-    db_collection = (
+    db_coll_tools = (
         current_app.config['FOCA'].db.dbs['trsStore']
-        .collections['objects'].client
+        .collections['tools'].client
     )
-    del_obj = db_collection.delete_one({'id': id})
-    if not del_obj.deleted_count:
-        raise NotFound
-    else:
+    db_coll_files = (
+        current_app.config['FOCA'].db.dbs['trsStore']
+        .collections['files'].client
+    )
+    del_obj_tools = db_coll_tools.delete_one({'id': id})
+    del_obj_files = db_coll_files.delete_one({'id': id})
+    if (
+        del_obj_tools.deleted_count and
+        del_obj_files.deleted_count
+    ):
         return id
+    else:
+        raise NotFound
 
 
 @log_traffic
-def postToolClass() -> Dict:
-    """Add toolClass with an auto-generated ID.
+def postToolVersion(
+    id: str,
+) -> str:
+    """Add tool version with an auto-generated ID.
+
+    Args:
+        id: Identifier of tool to be modified.
 
     Returns:
-        Identifier of created object.
+        Identifier of created tool version.
     """
-    tool_class_creator = RegisterToolClass(request=request)
-    tool_class = tool_class_creator.register_toolclass()
-    return tool_class['id']
+    version = RegisterToolVersion(
+        id=id,
+        data=request.json,
+    )
+    version.register_metadata()
+    return version.data['id']
+
+
+@log_traffic
+def deleteToolVersion(
+    id: str,
+    version_id: str,
+) -> str:
+    """Delete tool version.
+
+    Args:
+        id: Identifier of tool to be modified.
+        version_id: Identifier of tool version to be deleted.
+
+    Returns:
+        Previous identifier of deleted tool version. Note that a
+        `BadRequest/400` error response is returned if attempting to delete
+        the only remaining tool version.
+    """
+    db_coll_tools = (
+        current_app.config['FOCA'].db.dbs['trsStore']
+        .collections['tools'].client
+    )
+    db_coll_files = (
+        current_app.config['FOCA'].db.dbs['trsStore']
+        .collections['files'].client
+    )
+
+    # do not allow deleting the last version
+    # TODO: race condition
+    versions = toolsIdVersionsGet.__wrapped__(id)
+    if len(versions) == 1:
+        if version_id in [v.get('id', None) for v in versions]:
+            logger.error("Will not delete only remaining tool version.")
+            raise BadRequest
+        else:
+            raise NotFound
+
+    del_ver_tools = db_coll_tools.update_one(
+        filter={
+            'id': id,
+            'versions.id': version_id,
+        },
+        update={
+            '$pull': {
+                'versions': {'id': version_id},
+            },
+        },
+    )
+    del_ver_files = db_coll_files.update_one(
+        filter={
+            'id': id,
+            'versions.id': version_id,
+        },
+        update={
+            '$pull': {
+                'versions': {'id': version_id},
+            },
+        },
+    )
+    if (
+        del_ver_tools.modified_count and
+        del_ver_files.modified_count
+    ):
+        return version_id
+    else:
+        raise InternalServerError
+
+
+@log_traffic
+def postToolClass() -> str:
+    """Add tool class with an auto-generated ID.
+
+    Returns:
+        Identifier of created tool class.
+    """
+    tool_class = RegisterToolClass(data=request.json)
+    tool_class.register_metadata()
+    return tool_class.data['id']
 
 
 @log_traffic
 def putToolClass(
     id: str,
-) -> Dict:
-    """Add toolClass with a user-supplied ID.
+) -> str:
+    """Add tool class with a user-supplied ID.
 
     Args:
-        id: Identifier of toolClass to be created/updated.
+        id: Identifier of tool class to be created/updated.
 
     Returns:
-        Identifier of created/updated object.
+        Identifier of created/updated tool class.
     """
-    toolClass_creator = RegisterToolClass(
-        request=request,
+    tool_class = RegisterToolClass(
+        data=request.json,
         id=id,
     )
-    toolClass = toolClass_creator.register_toolclass()
-    return toolClass['id']
+    tool_class.register_metadata()
+    print(tool_class.data['id'])
+    return tool_class.data['id']
+
+
+@log_traffic
+def deleteToolClass(
+    id: str,
+) -> str:
+    """Delete tool class.
+
+    Args:
+        id: Identifier of tool class to be deleted.
+
+    Returns:
+        Previous identifier of deleted tool class. Note that a `BadRequest/400`
+        error response is returned if attempting to delete a tool class that
+        is associated with any tool.
+    """
+    db_coll_classes = (
+        current_app.config['FOCA'].db.dbs['trsStore']
+        .collections['toolclasses'].client
+    )
+
+    # do not allow deleting tool class associated with tool
+    if id in [t['toolclass']['id'] for t in toolsGet.__wrapped__()[0]]:
+        raise BadRequest
+
+    if db_coll_classes.delete_one({'id': id}).deleted_count:
+        return id
+    else:
+        raise NotFound

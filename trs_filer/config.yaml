@@ -12,7 +12,19 @@ db:
     dbs:
         trsStore:
             collections:
-                objects:
+                tools:
+                    indexes:
+                        - keys:
+                              id: 1
+                          options:
+                            'unique': True
+                files:
+                    indexes:
+                        - keys:
+                              id: 1
+                          options:
+                            'unique': True
+                service_info:
                     indexes:
                         - keys:
                               id: 1
@@ -65,6 +77,28 @@ exceptions:
     exceptions: trs_filer.errors.exceptions.exceptions
 
 endpoints:
+    service:
+        url_prefix: http
+        external_host: 1.2.3.4
+        external_port: 3888
+        api_path: ga4gh/trs/v2
+    service_info:
+        id: "TEMPID1"
+        name: "TEMP_STUB"
+        type:
+            group: "TEMP_GROUP"
+            artifact: "TEMP_ARTIFACT"
+            version: "v1"
+        description: "Description of service."
+        organization:
+            name: "Parent organization"
+            url: "parent/abc"
+        contactUrl: "contact/abc"
+        documentationUrl: "docs/abc"
+        createdAt: "2020-01-01"
+        updatedAt: "2020-01-01"
+        environment: "ENV"
+        version: "0.0.0"
     tool:
         id:
             charset: string.ascii_uppercase + string.digits
@@ -72,7 +106,7 @@ endpoints:
         meta_version:
             init: 1
             increment: 1
-    tool_version:
+    version:
         id:
             charset: string.ascii_lowercase + string.digits
             length: 6
@@ -86,7 +120,4 @@ endpoints:
         meta_version:
             init: 1
             increment: 1
-    url_prefix: http
-    external_host: 1.2.3.4
-    external_port: 3888
-    api_path: ga4gh/trs/v2
+        validation: False
