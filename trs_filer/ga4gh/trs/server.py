@@ -15,6 +15,9 @@ from trs_filer.ga4gh.trs.endpoints.register_objects import (
     RegisterTool,
     RegisterToolVersion,
 )
+from trs_filer.ga4gh.trs.endpoints.register_tool_classes import (
+    RegisterToolClass
+)
 from trs_filer.ga4gh.trs.endpoints.service_info import (
     RegisterServiceInfo,
 )
@@ -274,9 +277,25 @@ def toolsIdVersionsVersionIdContainerfileGet(
 
 
 @log_traffic
-def toolClassesGet() -> List:
+def toolClassesGet(
+    id: Optional[str] = None,
+    name: Optional[str] = None,
+    description: Optional[str] = None,
+) -> List:
     """List all tool types."""
-    return []  # pragma: no cover
+    filt = {}
+
+    # fetch data
+    db_collection_class = (
+        current_app.config['FOCA'].db.dbs['trsStore']
+        .collections['toolclasses'].client
+    )
+    records = db_collection_class.find(
+        filter=filt,
+        projection={"_id": False},
+    )
+
+    return list(records)
 
 
 @log_traffic
@@ -303,7 +322,7 @@ def postServiceInfo() -> Tuple[None, str, Dict]:
 
 
 @log_traffic
-def postTool() -> Dict:
+def postTool() -> str:
     """Add tool with an auto-generated ID.
 
     Returns:
@@ -317,7 +336,7 @@ def postTool() -> Dict:
 @log_traffic
 def putTool(
     id: str,
-) -> Dict:
+) -> str:
     """Add/replace tool with a user-supplied ID.
 
     Args:
@@ -386,6 +405,28 @@ def postToolVersion(
 
 
 @log_traffic
+def putToolVersion(
+    id: str,
+    version_id: str,
+) -> str:
+    """Add/replace tool version with a user-supplied ID.
+
+    Args:
+        id: Identifier of tool to be modified.
+
+    Returns:
+        Identifier of created tool version.
+    """
+    version = RegisterToolVersion(
+        id=id,
+        version_id=version_id,
+        data=request.json,
+    )
+    version.register_metadata()
+    return version.data['id']
+
+
+@log_traffic
 def deleteToolVersion(
     id: str,
     version_id: str,
@@ -409,6 +450,7 @@ def deleteToolVersion(
         current_app.config['FOCA'].db.dbs['trsStore']
         .collections['files'].client
     )
+
     # do not allow deleting the last version
     # TODO: race condition
     versions = toolsIdVersionsGet.__wrapped__(id)
@@ -418,6 +460,7 @@ def deleteToolVersion(
             raise BadRequest
         else:
             raise NotFound
+
     del_ver_tools = db_coll_tools.update_one(
         filter={
             'id': id,
@@ -447,3 +490,65 @@ def deleteToolVersion(
         return version_id
     else:
         raise InternalServerError
+
+
+@log_traffic
+def postToolClass() -> str:
+    """Add tool class with an auto-generated ID.
+
+    Returns:
+        Identifier of created tool class.
+    """
+    tool_class = RegisterToolClass(data=request.json)
+    tool_class.register_metadata()
+    return tool_class.data['id']
+
+
+@log_traffic
+def putToolClass(
+    id: str,
+) -> str:
+    """Add tool class with a user-supplied ID.
+
+    Args:
+        id: Identifier of tool class to be created/updated.
+
+    Returns:
+        Identifier of created/updated tool class.
+    """
+    tool_class = RegisterToolClass(
+        data=request.json,
+        id=id,
+    )
+    tool_class.register_metadata()
+    print(tool_class.data['id'])
+    return tool_class.data['id']
+
+
+@log_traffic
+def deleteToolClass(
+    id: str,
+) -> str:
+    """Delete tool class.
+
+    Args:
+        id: Identifier of tool class to be deleted.
+
+    Returns:
+        Previous identifier of deleted tool class. Note that a `BadRequest/400`
+        error response is returned if attempting to delete a tool class that
+        is associated with any tool.
+    """
+    db_coll_classes = (
+        current_app.config['FOCA'].db.dbs['trsStore']
+        .collections['toolclasses'].client
+    )
+
+    # do not allow deleting tool class associated with tool
+    if id in [t['toolclass']['id'] for t in toolsGet.__wrapped__()[0]]:
+        raise BadRequest
+
+    if db_coll_classes.delete_one({'id': id}).deleted_count:
+        return id
+    else:
+        raise NotFound

@@ -1,8 +1,7 @@
 """Controllers for registering new objects."""
 
 import logging
-from random import choice
-import string
+import string  # noqa: F401
 from typing import (Dict, Optional)
 
 from flask import (current_app)
@@ -12,6 +11,12 @@ from trs_filer.errors.exceptions import (
     BadRequest,
     InternalServerError,
     NotFound,
+)
+from trs_filer.ga4gh.trs.endpoints.register_tool_classes import (
+    RegisterToolClass
+)
+from trs_filer.ga4gh.trs.endpoints.utils import (
+    generate_id,
 )
 
 logger = logging.getLogger(__name__)
@@ -47,8 +52,14 @@ class RegisterTool:
                 constructing tool and version `url` properties.
             api_path: Base path at which API endpoints can be reached. For
                 constructing tool and version `url` properties.
+            tool_class_validation: Whether a tool is only allowed to be added
+                if it is associated with a pre-existing tool class; if `False`,
+                the tool class associated with the tool to be added is inserted
+                into the tool class database collection on the fly.
             db_coll_tools: Database collection for storing tool objects.
             db_coll_files: Database collection for storing file objects.
+            db_coll_classes: Database collection for storing tool class
+                objects.
         """
         conf = current_app.config['FOCA'].endpoints
         self.data = data
@@ -61,6 +72,7 @@ class RegisterTool:
         self.host_name = conf['service']['external_host']
         self.external_port = conf['service']['external_port']
         self.api_path = conf['service']['api_path']
+        self.tool_class_validation = conf['toolclass']['validation']
         self.db_coll_tools = (
             current_app.config['FOCA'].db.dbs['trsStore']
             .collections['tools'].client
@@ -68,6 +80,10 @@ class RegisterTool:
         self.db_coll_files = (
             current_app.config['FOCA'].db.dbs['trsStore']
             .collections['files'].client
+        )
+        self.db_coll_classes = (
+            current_app.config['FOCA'].db.dbs['trsStore']
+            .collections['toolclasses'].client
         )
 
     def process_metadata(self) -> None:
@@ -113,6 +129,7 @@ class RegisterTool:
             for version in self.data['versions']:
                 version_proc = RegisterToolVersion(
                     id=self.data['id'],
+                    version_id=version.get('id', None),
                     data=version,
                 )
                 version_proc.process_metadata()
@@ -147,9 +164,28 @@ class RegisterTool:
                 self.db_coll_tools.insert_one(document=self.data)
             except DuplicateKeyError:
                 continue
+
+            # TODO: handle failures & race conditions for adding files & tool
+            # classes
+
+            # insert files into database
             self.db_coll_files.insert_one(document=files)
 
-            # TODO: handle failure
+            # insert tool class into database
+            if self.tool_class_validation:
+                data = self.db_coll_classes.find_one(
+                    filter={'id': self.data['toolclass']['id']},
+                    projection={'_id': False},
+                )
+                print(data)
+                if data is None:
+                    raise BadRequest
+            tool_class = RegisterToolClass(
+                data=self.data['toolclass'],
+                id=self.data['toolclass']['id'],
+            )
+            tool_class.register_metadata()
+
             logger.info(f"Added tool with id '{self.data['id']}'.")
             break
         else:
@@ -171,6 +207,7 @@ class RegisterToolVersion:
         self,
         data: Dict,
         id: str,
+        version_id: str = None,
     ) -> None:
         """Initialize tool version data.
 
@@ -178,6 +215,7 @@ class RegisterToolVersion:
             data: Version metadata consistent with the `ToolVersionRegister`
                 schema.
             id: Tool identifer.
+            version_id: Version identifier.
 
         Attributes:
             data: Version metadata.
@@ -202,6 +240,7 @@ class RegisterToolVersion:
         """
         conf = current_app.config['FOCA'].endpoints
         self.data = data
+        self.data['id'] = None if version_id is None else version_id
         self.id = id
         self.replace = True
         self.id_charset = conf['version']['id']['charset']
@@ -233,7 +272,7 @@ class RegisterToolVersion:
         self.data['meta_version'] = str(self.meta_version_init)
 
         # set random ID unless ID is provided
-        if 'id' not in self.data:
+        if self.data['id'] is None:
             self.replace = False
             self.data['id'] = generate_id(
                 charset=self.id_charset,
@@ -381,20 +420,3 @@ class RegisterToolVersion:
             "Entry in 'files' collection: "
             f"{self.db_coll_files.find_one({'id': self.data['id']})}"
         )
-
-
-def generate_id(
-    charset: str = ''.join([string.ascii_letters, string.digits]),
-    length: int = 6,
-) -> str:
-    """Generate random string based on allowed set of characters.
-
-    Args:
-        charset: String of allowed characters.
-        length: Length of returned string.
-
-    Returns:
-        Random string of specified length and composed of defined set of
-        allowed characters.
-    """
-    return ''.join(choice(charset) for __ in range(length))

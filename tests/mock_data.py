@@ -13,9 +13,10 @@ COLLECTION_CONFIG = {
 }
 DB_CONFIG = {
     'collections': {
-        'service_info': COLLECTION_CONFIG,
-        'tools': COLLECTION_CONFIG,
         'files': COLLECTION_CONFIG,
+        'service_info': COLLECTION_CONFIG,
+        'toolclasses': COLLECTION_CONFIG,
+        'tools': COLLECTION_CONFIG,
     },
 }
 MONGO_CONFIG = {
@@ -65,11 +66,14 @@ SERVICE_INFO_CONFIG = {
     "updatedAt": "2019-06-04T12:58:19Z",
     "version": "1.0.0"
 }
+TOOL_CLASS_CONFIG = deepcopy(TOOL_VERSION_CONFIG)
+TOOL_CLASS_CONFIG['validation'] = False
 ENDPOINT_CONFIG = {
-    "tool": TOOL_VERSION_CONFIG,
-    "version": TOOL_VERSION_CONFIG,
     "service": SERVICE_CONFIG,
     "service_info": SERVICE_INFO_CONFIG,
+    "tool": TOOL_VERSION_CONFIG,
+    "toolclass": TOOL_CLASS_CONFIG,
+    "version": TOOL_VERSION_CONFIG,
 }
 ENDPOINT_CONFIG_CHARSET_LITERAL = deepcopy(ENDPOINT_CONFIG)
 ENDPOINT_CONFIG_CHARSET_LITERAL['tool'] = TOOL_VERSION_CONFIG_CHARSET_LITERAL
@@ -79,6 +83,8 @@ ENDPOINT_CONFIG_CHARSET_LITERAL['version'] = (
 ENDPOINT_CONFIG_ONE_ID = deepcopy(ENDPOINT_CONFIG)
 ENDPOINT_CONFIG_ONE_ID['tool'] = TOOL_VERSION_CONFIG_ONE_ID
 ENDPOINT_CONFIG_ONE_ID['version'] = TOOL_VERSION_CONFIG_ONE_ID
+ENDPOINT_CONFIG_TOOL_CLASS_VALIDATION = deepcopy(ENDPOINT_CONFIG)
+ENDPOINT_CONFIG_TOOL_CLASS_VALIDATION['toolclass']['validation'] = True
 HEADERS_PAGINATION = {
     'next_page': None,
     'last_page': None,
@@ -128,16 +134,16 @@ MOCK_IMAGES = [
                 "type": "sha256"
             }
         ],
-        "image_name": "string",
+        "image_name": "image_name",
         "image_type": "Docker",
-        "registry_host": "string",
+        "registry_host": "registry_host",
         "size": 0,
-        "updated": "string"
+        "updated": "updated"
     }
 ]
 MOCK_VERSION_NO_ID = {
     "author": [
-        "string"
+        "author"
     ],
     "descriptor_type": [
         "CWL"
@@ -149,75 +155,37 @@ MOCK_VERSION_NO_ID = {
         "https://bio.tools/bioexcel_seqqc"
     ],
     "is_production": True,
-    "meta_version": "string",
-    "name": "string",
+    "name": "name",
     "signed": True,
     "verified_source": [
-        "string"
+        "verified_source"
     ]
 }
 MOCK_VERSION_ID = deepcopy(MOCK_VERSION_NO_ID)
 MOCK_VERSION_ID['id'] = MOCK_ID
-MOCK_TOOL_NO_VERSION = {
-    "aliases": [
-        "630d31c3-381e-488d-b639-ce5d047a0142",
-        "dockstore.org:630d31c3-381e-488d-b639-ce5d047a0142",
-        "bio.tools:630d31c3-381e-488d-b639-ce5d047a0142"
-    ],
-    "checker_url": "string",
-    "description": "string",
-    "has_checker": True,
-    "meta_version": "0.0.0",
-    "name": "string",
-    "organization": "string",
-    "toolclass": {
-        "description": "string",
-        "id": "string",
-        "name": "string"
-    },
+MOCK_TOOL_CLASS = {
+    "description": "description",
+    "id": MOCK_ID,
+    "name": "name",
 }
 MOCK_TOOL = {
     "aliases": [
-        "630d31c3-381e-488d-b639-ce5d047a0142",
-        "dockstore.org:630d31c3-381e-488d-b639-ce5d047a0142",
-        "bio.tools:630d31c3-381e-488d-b639-ce5d047a0142"
+        "alias_1",
+        "alias_2",
+        "alias_3",
     ],
-    "checker_url": "string",
-    "description": "string",
+    "checker_url": "checker_url",
+    "description": "description",
     "has_checker": True,
-    "meta_version": "0.0.0",
-    "name": "string",
-    "organization": "string",
-    "toolclass": {
-        "description": "string",
-        "id": "string",
-        "name": "string"
-    },
+    "name": "name",
+    "organization": "organization",
+    "toolclass": MOCK_TOOL_CLASS,
     "versions": [
         MOCK_VERSION_NO_ID,
     ],
 }
-MOCK_TOOL_VERSION_ID = {
-    "aliases": [
-        "630d31c3-381e-488d-b639-ce5d047a0142",
-        "dockstore.org:630d31c3-381e-488d-b639-ce5d047a0142",
-        "bio.tools:630d31c3-381e-488d-b639-ce5d047a0142"
-    ],
-    "checker_url": "string",
-    "description": "string",
-    "has_checker": True,
-    "meta_version": "0.0.0",
-    "name": "string",
-    "organization": "string",
-    "toolclass": {
-        "description": "string",
-        "id": "string",
-        "name": "string"
-    },
-    "versions": [
-        MOCK_VERSION_ID,
-    ],
-}
+MOCK_TOOL_VERSION_ID = deepcopy(MOCK_TOOL)
+MOCK_TOOL_VERSION_ID['versions'] = [MOCK_VERSION_ID]
 MOCK_TOOL_DUPLICATE_VERSION_IDS = deepcopy(MOCK_TOOL)
 MOCK_TOOL_DUPLICATE_VERSION_IDS['versions'] = [
     MOCK_VERSION_ID,
