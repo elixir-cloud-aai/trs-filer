@@ -40,8 +40,8 @@ db:
 api:
     specs:
         - path:
-            - api/20200728.1059c7c.openapi.yaml
             - api/20200131.11d2c12.service-info.yaml
+            - api/20200728.1059c7c.openapi.yaml
             - api/additions.openapi.yaml
           append: null
           add_operation_fields:
