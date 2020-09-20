@@ -40,8 +40,8 @@ db:
 api:
     specs:
         - path:
-            - api/20200728.1059c7c.openapi.yaml
             - api/20200131.11d2c12.service-info.yaml
+            - api/20200728.1059c7c.openapi.yaml
             - api/additions.openapi.yaml
           append: null
           add_operation_fields:
@@ -80,7 +80,7 @@ endpoints:
     service:
         url_prefix: http
         external_host: 1.2.3.4
-        external_port: 3888
+        external_port: 8080
         api_path: ga4gh/trs/v2
     service_info:
         id: "TEMPID1"
