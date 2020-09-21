@@ -1,14 +1,14 @@
 apiVersion: extensions/v1beta1
 kind: Deployment
 metadata:
-  name: trs-filer
+  name: {{ .Values.trs_filer.appName }}
 spec:
   progressDeadlineSeconds: 600
   replicas: 1
   revisionHistoryLimit: 10
   selector:
     matchLabels:
-      app: trs-filer
+      app: {{ .Values.trs_filer.appName }}
   strategy:
     rollingUpdate:
       maxSurge: 25%
@@ -18,12 +18,12 @@ spec:
     metadata:
       creationTimestamp: null
       labels:
-        app: trs-filer
+        app: {{ .Values.trs_filer.appName }}
     spec:
       containers:
       - image: {{ .Values.trs_filer.image }}
         imagePullPolicy: Always
-        name: trs-filer
+        name: {{ .Values.trs_filer.appName }}
         ports:
         - containerPort: 8080
           protocol: TCP

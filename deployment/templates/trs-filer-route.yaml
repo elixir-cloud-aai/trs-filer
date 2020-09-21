@@ -2,17 +2,17 @@
 apiVersion: route.openshift.io/v1
 kind: Route
 metadata:
-  name: trs-filer
+  name: {{ .Values.trs_filer.appName }}
 spec:
   host: {{ .Values.host_name }}
   port:
-    targetPort: trs-filer
+    targetPort: {{ .Values.trs_filer.appName }}
   tls:
     insecureEdgeTerminationPolicy: Redirect
     termination: edge
   to:
     kind: Service
-    name: trs-filer
+    name: {{ .Values.trs_filer.appName }}
     weight: 100
   wildcardPolicy: None
 status:
