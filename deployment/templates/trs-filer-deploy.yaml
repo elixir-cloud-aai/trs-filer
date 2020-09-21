@@ -30,9 +30,21 @@ spec:
         resources: {}
         terminationMessagePath: /dev/termination-log
         terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /app/trs_filer/config.yaml
+          name: config-yaml
+          subPath: config.yaml
       dnsPolicy: ClusterFirst
       restartPolicy: Always
       schedulerName: default-scheduler
       securityContext: {}
       terminationGracePeriodSeconds: 30
+      volumes:
+      - configMap:
+          defaultMode: 420
+          items:
+            - key: config.yaml
+              path: config.yaml
+          name: app-config
+        name: config-yaml
 status:
