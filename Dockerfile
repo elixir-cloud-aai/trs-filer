@@ -16,6 +16,7 @@ COPY ./ /app
 RUN cd /app \
   && python setup.py develop \
   && cd / \
-  && chmod g+w /app/trs_filer/api/
+  && chmod g+w /app/trs_filer/api/ \
+  && pip install yq
 
 CMD ["bash", "-c", "cd /app/trs_filer; python app.py"]

@@ -26,6 +26,8 @@ spec:
           value: /app/trs_filer/config.yaml
         - name: APP_NAME
           value: {{ .Values.trs_filer.appName }}
+        - name: HOST_NAME
+          value:  {{ .Values.host_name }}
       restartPolicy: Never
       serviceAccountName: {{ .Values.trs_filer.appName }}-configurer
 status: {}

@@ -4,9 +4,9 @@
 #
 ###############################################################################
 
-if [ -z "$CONFIG_MAP_NAME" -o -z "$APISERVER" -o -z "$APP_CONFIG_PATH" -o -z "$APP_NAME" ];
+if [ -z "$CONFIG_MAP_NAME" -o -z "$APISERVER" -o -z "$APP_CONFIG_PATH" -o -z "$HOST_NAME" -o -z "$APP_NAME" ];
 then
-	echo "CONFIG_MAP_NAME, APISERVER, APP_CONFIG_PATH, and APP_NAME env vars required"
+	echo "CONFIG_MAP_NAME, APISERVER, APP_CONFIG_PATH, HOSTNAME, and APP_NAME env vars required"
 	env
 	exit 1
 fi
@@ -15,6 +15,7 @@ echo " CONFIG MAP NAME: $CONFIG_MAP_NAME"
 echo " API SERVER:      $APISERVER"
 echo " APP CONFIG PATH: $APP_CONFIG_PATH"
 echo " WES APP NAME:    $APP_NAME"
+echo " HOST NAME:       $HOST_NAME"
 
 NAMESPACE=$(cat /var/run/secrets/kubernetes.io/serviceaccount/namespace)
 
@@ -29,7 +30,11 @@ echo "Current Kubernetes namespace: $NAMESPACE"; echo
 
 echo " * Getting current default configuration"
 
-APP_CONFIG=$(cat "$APP_CONFIG_PATH") || exit 4
+APP_CONFIG=$(yq --arg HOST_NAME "$HOST_NAME" \
+    '.endpoints.service.url_prefix = "https" |
+     .endpoints.service.external_host = $HOST_NAME |
+     .endpoints.service.external_port = 443' \
+    "$APP_CONFIG_PATH") || exit 4
 
 echo " * Getting current configMap"
 curl -s \
@@ -86,7 +91,3 @@ do
 done
 
 echo " All Done"
-
-sleep 3600
-
-
