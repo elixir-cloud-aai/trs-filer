@@ -10,7 +10,6 @@ import pytest
 from tests.mock_data import (
     ENDPOINT_CONFIG,
     HEADERS_PAGINATION,
-    MOCK_FILES,
     MOCK_FILES_DB_ENTRY,
     MOCK_ID,
     MOCK_TOOL_CLASS,
@@ -18,6 +17,7 @@ from tests.mock_data import (
     MOCK_VERSION_ID,
     MONGO_CONFIG,
     SERVICE_INFO_CONFIG,
+    MOCK_CONTAINER_FILE,
 )
 from trs_filer.ga4gh.trs.server import (
     deleteTool,
@@ -277,7 +277,7 @@ def test_toolsIdVersionsVersionIdContainerfileGet():
             id=MOCK_ID,
             version_id=MOCK_ID,
         )
-        assert res == [MOCK_FILES[1]["fileWrapper"]]
+        assert res == [MOCK_CONTAINER_FILE["file_wrapper"]]
 
 
 def test_toolsIdVersionsVersionIdContainerfileGet_tool_na_NotFound():
