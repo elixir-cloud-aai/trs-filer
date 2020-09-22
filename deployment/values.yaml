@@ -8,6 +8,9 @@ host_name: trs-filer-test.c03.k8s-popup.csc.fi
 
 trs_filer:
   image: lvarin/trs-filer:0.1.0
+  appName: trs-filer
+
+apiServer: kubernetes.default.svc:443 # address of k8s API server
 
 mongodb:
   image: mongo:3.6
