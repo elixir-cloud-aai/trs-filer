@@ -100,54 +100,109 @@ HEADERS_SERVICE_INFO = {
         "service-info"
     )
 }
+MOCK_TEST_FILE = {
+    "file_wrapper": {
+        "checksum": [
+            {
+                "checksum": "checksum",
+                "type": "sha1",
+            }
+        ],
+        "content": "content",
+        "url": "url",
+    },
+    "tool_file": {
+        "file_type": "TEST_FILE",
+        "path": "path",
+    },
+    "type": "JSON"
+}
+MOCK_DESCRIPTOR_FILE = {
+    "file_wrapper": {
+        "checksum": [
+            {
+                "checksum": "checksum",
+                "type": "sha1",
+            }
+        ],
+        "content": "content",
+        "url": "url",
+    },
+    "tool_file": {
+        "file_type": "PRIMARY_DESCRIPTOR",
+        "path": "path",
+    },
+    "type": "CWL"
+}
+MOCK_CONTAINER_FILE = {
+    "file_wrapper": {
+        "checksum": [
+            {
+                "checksum": "checksum",
+                "type": "sha1",
+            }
+        ],
+        "content": "content",
+        "url": "url",
+    },
+    "tool_file": {
+        "file_type": "CONTAINERFILE",
+        "path": "path",
+    },
+    "type": "Docker"
+}
+MOCK_OTHER_FILE = {
+    "file_wrapper": {
+        "checksum": [
+            {
+                "checksum": "checksum",
+                "type": "sha1",
+            }
+        ],
+        "content": "content",
+        "url": "url",
+    },
+    "tool_file": {
+        "file_type": "OTHER",
+        "path": "path",
+    },
+    "type": "OTHER"
+}
 MOCK_FILES = [
-    {
-        "fileWrapper": {
-            "checksum": [
-                {
-                    "checksum": "checksum",
-                    "type": "sha1",
-                }
-            ],
-            "content": "content",
-            "url": "url",
-        },
-        "toolFile": {
-            "file_type": "TEST_FILE",
-            "path": "path",
-        }
-    },
-    {
-        "fileWrapper": {
-            "checksum": [
-                {
-                    "checksum": "checksum",
-                    "type": "sha2",
-                }
-            ],
-            "content": "content",
-            "url": "url",
-        },
-        "toolFile": {
-            "file_type": "CONTAINERFILE",
-            "path": "path",
-        }
-    },
+    MOCK_TEST_FILE,
+    MOCK_OTHER_FILE,
+    MOCK_CONTAINER_FILE,
+    MOCK_DESCRIPTOR_FILE,
 ]
+MOCK_TEST_FILE_INVALID = deepcopy(MOCK_TEST_FILE)
+MOCK_TEST_FILE_INVALID["type"] = "invalid"
+MOCK_OTHER_FILE_INVALID = deepcopy(MOCK_OTHER_FILE)
+MOCK_OTHER_FILE_INVALID["type"] = "invalid"
+MOCK_CONTAINER_FILE_INVALID = deepcopy(MOCK_CONTAINER_FILE)
+MOCK_CONTAINER_FILE_INVALID["type"] = "invalid"
+MOCK_DESCRIPTOR_FILE_INVALID = deepcopy(MOCK_DESCRIPTOR_FILE)
+MOCK_DESCRIPTOR_FILE_INVALID["type"] = "invalid"
 MOCK_FILES_DB_ENTRY = {
     "id": MOCK_ID,
     "versions": [
         {
             "id": MOCK_ID,
-            "files": MOCK_FILES,
+            "tests": [MOCK_TEST_FILE],
+            "others": [MOCK_OTHER_FILE],
+            "containers": [MOCK_CONTAINER_FILE],
+            "descriptors": [MOCK_DESCRIPTOR_FILE],
         }
     ],
 }
 MOCK_FILES_CONTENT_URL_MISSING = deepcopy(MOCK_FILES)
-del MOCK_FILES_CONTENT_URL_MISSING[0]['fileWrapper']['content']
-del MOCK_FILES_CONTENT_URL_MISSING[0]['fileWrapper']['url']
+del MOCK_FILES_CONTENT_URL_MISSING[0]['file_wrapper']['content']
+del MOCK_FILES_CONTENT_URL_MISSING[0]['file_wrapper']['url']
 MOCK_FILES_CHECKSUM_MISSING = deepcopy(MOCK_FILES)
-del MOCK_FILES_CHECKSUM_MISSING[0]['fileWrapper']['checksum']
+del MOCK_FILES_CHECKSUM_MISSING[0]['file_wrapper']['checksum']
+MOCK_FILE_TYPE_MISSING = [deepcopy(MOCK_FILES)[1]]
+del MOCK_FILE_TYPE_MISSING[0]['tool_file']['file_type']
+MOCK_FILES_TOOL_FILE_MISSING = [deepcopy(MOCK_FILES)[0]]
+del MOCK_FILES_TOOL_FILE_MISSING[0]['tool_file']
 MOCK_IMAGES = [
     {
         "checksum": [

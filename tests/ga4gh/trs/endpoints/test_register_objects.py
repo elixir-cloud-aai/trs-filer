@@ -15,6 +15,12 @@ from tests.mock_data import (
     ENDPOINT_CONFIG_CHARSET_LITERAL,
     ENDPOINT_CONFIG_ONE_ID,
     ENDPOINT_CONFIG_TOOL_CLASS_VALIDATION,
+    MOCK_TEST_FILE_INVALID,
+    MOCK_OTHER_FILE_INVALID,
+    MOCK_CONTAINER_FILE_INVALID,
+    MOCK_DESCRIPTOR_FILE_INVALID,
+    MOCK_FILES_TOOL_FILE_MISSING,
+    MOCK_FILE_TYPE_MISSING,
     MOCK_FILES_CHECKSUM_MISSING,
     MOCK_FILES_CONTENT_URL_MISSING,
     MOCK_ID,
@@ -340,6 +346,87 @@ class TestRegisterToolVersion:
             tool.process_metadata()
             assert isinstance(tool.id_charset, str)
 
+    def test_process_file_type_register_invalid_descriptor_type(self):
+        """Test for processing metadata with one invalid `descriptors` type."""
+        app = Flask(__name__)
+        app.config['FOCA'] = Config(
+            db=MongoConfig(**MONGO_CONFIG),
+            endpoints=ENDPOINT_CONFIG_CHARSET_LITERAL,
+        )
+
+        data = deepcopy(MOCK_VERSION_NO_ID)
+        with app.app_context():
+            with pytest.raises(BadRequest):
+                tool = RegisterToolVersion(data=data, id=MOCK_ID)
+                tool.process_file_type_register(
+                    file_data=MOCK_DESCRIPTOR_FILE_INVALID
+                )
+
+    def test_process_file_type_register_invalid_container_type(self):
+        """Test for processing metadata with one invalid `containers` type."""
+        app = Flask(__name__)
+        app.config['FOCA'] = Config(
+            db=MongoConfig(**MONGO_CONFIG),
+            endpoints=ENDPOINT_CONFIG_CHARSET_LITERAL,
+        )
+
+        data = deepcopy(MOCK_VERSION_NO_ID)
+        with app.app_context():
+            with pytest.raises(BadRequest):
+                tool = RegisterToolVersion(data=data, id=MOCK_ID)
+                tool.process_file_type_register(
+                    file_data=MOCK_CONTAINER_FILE_INVALID
+                )
+
+    def test_process_file_type_register_invalid_test_type(self):
+        """Test for processing metadata with one invalid `tests` type."""
+        app = Flask(__name__)
+        app.config['FOCA'] = Config(
+            db=MongoConfig(**MONGO_CONFIG),
+            endpoints=ENDPOINT_CONFIG_CHARSET_LITERAL,
+        )
+
+        data = deepcopy(MOCK_VERSION_NO_ID)
+        with app.app_context():
+            with pytest.raises(BadRequest):
+                tool = RegisterToolVersion(data=data, id=MOCK_ID)
+                tool.process_file_type_register(
+                    file_data=MOCK_TEST_FILE_INVALID
+                )
+
+    def test_process_file_type_register_invalid_other_type(self):
+        """Test for processing metadata with one invalid `others` type."""
+        app = Flask(__name__)
+        app.config['FOCA'] = Config(
+            db=MongoConfig(**MONGO_CONFIG),
+            endpoints=ENDPOINT_CONFIG_CHARSET_LITERAL,
+        )
+
+        data = deepcopy(MOCK_VERSION_NO_ID)
+        with app.app_context():
+            with pytest.raises(BadRequest):
+                tool = RegisterToolVersion(data=data, id=MOCK_ID)
+                tool.process_file_type_register(
+                    file_data=MOCK_OTHER_FILE_INVALID
+                )
+
+    def test_process_files_tool_file_not_present(self):
+        """Test for processing metadata with invalid file object with
+        `tool_file` absent.
+        """
+        app = Flask(__name__)
+        app.config['FOCA'] = Config(
+            db=MongoConfig(**MONGO_CONFIG),
+            endpoints=ENDPOINT_CONFIG_CHARSET_LITERAL,
+        )
+
+        data = deepcopy(MOCK_VERSION_NO_ID)
+        data['files'] = MOCK_FILES_TOOL_FILE_MISSING
+        with app.app_context():
+            with pytest.raises(BadRequest):
+                tool = RegisterToolVersion(data=data, id=MOCK_ID)
+                tool.process_files()
+
     def test_register_metadata(self):
         """Test for creating a version with a randomly assigned identifier."""
         app = Flask(__name__)
@@ -458,3 +545,30 @@ class TestRegisterToolVersion:
             with pytest.raises(NotFound):
                 version = RegisterToolVersion(data=data, id=MOCK_ID)
                 version.register_metadata()
+
+    def test_register_metadata_file_type_not_given(self):
+        """Test for creating a version when `file_type` not provided in
+        `tool_file`.
+        """
+        app = Flask(__name__)
+        app.config['FOCA'] = Config(
+            db=MongoConfig(**MONGO_CONFIG),
+            endpoints=ENDPOINT_CONFIG_CHARSET_LITERAL,
+        )
+        mock_resp = deepcopy(MOCK_TOOL_VERSION_ID)
+        mock_resp["id"] = MOCK_ID
+        app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
+            .client = MagicMock()
+        app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
+            .client = MagicMock()
+        app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
+            .client.insert_one(mock_resp)
+        app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
+            .client.insert_one(mock_resp)
+
+        data = deepcopy(MOCK_VERSION_NO_ID)
+        data['files'] = MOCK_FILE_TYPE_MISSING
+        with app.app_context():
+            version = RegisterToolVersion(data=data, id=MOCK_ID)
+            version.register_metadata()
+            assert isinstance(version.data, dict)

@@ -288,9 +288,9 @@ def toolsIdVersionsVersionIdContainerfileGet(
         'versions': {
             '$elemMatch': {
                 'id': version_id,
-                'files': {
+                'containers': {
                     '$elemMatch': {
-                        'toolFile.file_type': 'CONTAINERFILE',
+                        'tool_file.file_type': 'CONTAINERFILE',
                     },
                 },
             },
@@ -303,8 +303,8 @@ def toolsIdVersionsVersionIdContainerfileGet(
     try:
         data = data['versions'][0]
         ret = [
-            d['fileWrapper'] for d in data['files']
-            if d['toolFile']['file_type'] == 'CONTAINERFILE'
+            d['file_wrapper'] for d in data['containers']
+            if d['tool_file']['file_type'] == 'CONTAINERFILE'
         ]
     except (IndexError, KeyError, TypeError):
         raise NotFound

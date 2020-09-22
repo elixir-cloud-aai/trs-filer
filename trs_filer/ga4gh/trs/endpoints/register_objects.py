@@ -235,6 +235,8 @@ class RegisterToolVersion:
             api_path: Base path at which API endpoints can be reached. For
                 constructing tool and version `url` properties.
             files: Container for storing file (meta)data.
+            descriptor_type_enum: List of valid descriptor types.
+            image_type_enum: List of valid image types.
             db_coll_tools: Database collection for storing tool objects.
             db_coll_files: Database collection for storing file objects.
         """
@@ -251,6 +253,8 @@ class RegisterToolVersion:
         self.external_port = conf['service']['external_port']
         self.api_path = conf['service']['api_path']
         self.files = {}
+        self.descriptor_type_enum = ['CWL', 'WDL', 'NFL', 'GALAXY']
+        self.image_type_enum = ['Docker', 'Singularity', 'Conda']
         self.db_coll_tools = (
             current_app.config['FOCA'].db.dbs['trsStore']
             .collections['tools'].client
@@ -289,48 +293,116 @@ class RegisterToolVersion:
         # process files
         self.files = {
             'id': self.data['id'],
-            'files': [],
+            "descriptors": [],
+            "containers": [],
+            "tests": [],
+            "others": []
         }
         if 'files' in self.data:
             # Set `containerfile` property
             self.data['containerfile'] = False
             for f in self.data['files']:
                 try:
-                    if f['toolFile']['file_type'] == "CONTAINERFILE":
+                    if f['tool_file']['file_type'] == "CONTAINERFILE":
                         self.data['containerfile'] = True
                         break
                 except KeyError:
                     continue
             self.process_files()
 
+    def validate_file_wrapper(self, file_data_wrapper: Dict) -> None:
+        """Validate the contents of file_wrapper for a given file object."""
+        if (
+            'url' not in file_data_wrapper and
+            'content' not in file_data_wrapper
+        ):
+            logger.error(
+                "FileWrapper must contain at least one of url or"
+                " content."
+            )
+            raise BadRequest
+        if (
+            self.data['is_production'] and
+            'checksum' not in file_data_wrapper or
+            not file_data_wrapper['checksum']
+        ):
+            logger.error(
+                "Production tools must contain checksum "
+                "information."
+            )
+            raise BadRequest
+
+    def process_file_type_register(self, file_data: Dict) -> None:
+        """Validate file type for a given file data object and appends files object
+        to the respective file dictionary array.
+
+        Args:
+            file_data: File data object.
+        """
+
+        # validate descriptor file types
+        descriptors_arr = ['PRIMARY_DESCRIPTOR', 'SECONDARY_DESCRIPTOR']
+        if file_data['tool_file']['file_type'] in descriptors_arr:
+            if (
+                'type' not in file_data or
+                file_data['type'] not in self.descriptor_type_enum
+            ):
+                raise BadRequest
+            else:
+                self.files['descriptors'].append(file_data)
+
+        # validate image file types
+        if file_data['tool_file']['file_type'] == 'CONTAINERFILE':
+            if (
+                'type' not in file_data or
+                file_data['type'] not in self.image_type_enum
+            ):
+                raise BadRequest
+            else:
+                self.files['containers'].append(file_data)
+
+        # validate test file types
+        if file_data['tool_file']['file_type'] == 'TEST_FILE':
+            if (
+                'type' in file_data and
+                file_data['type'] != 'JSON'
+            ):
+                raise BadRequest
+            else:
+                file_data['type'] = 'JSON'
+                self.files['tests'].append(file_data)
+
+        # validate other file types
+        if file_data['tool_file']['file_type'] == 'OTHER':
+            if (
+                'type' in file_data and
+                file_data['type'] != 'OTHER'
+            ):
+                raise BadRequest
+            else:
+                file_data['type'] = 'OTHER'
+                self.files['others'].append(file_data)
+
     def process_files(self) -> None:
         """Process file (meta)data."""
         # validate required fields
         for _file in self.data['files']:
-            if 'fileWrapper' in _file:
-                data = _file['fileWrapper']
-                if (
-                    'url' not in data and
-                    'content' not in data
-                ):
-                    logger.error(
-                        "FileWrapper must contain at least one of url or"
-                        " content."
-                    )
-                    raise BadRequest
-                if (
-                    self.data['is_production'] and
-                    'checksum' not in data or
-                    not data['checksum']
-                ):
-                    logger.error(
-                        "Production tools must contain checksum "
-                        "information."
-                    )
-                    raise BadRequest
+            curr_file_data = _file
 
-        # create file object
-        self.files['files'] = self.data.pop('files')
+            if 'file_wrapper' in curr_file_data:
+                data = curr_file_data['file_wrapper']
+                self.validate_file_wrapper(data)
+
+                if 'tool_file' not in curr_file_data:
+                    logger.error(
+                        "ToolFile information must be provided."
+                    )
+                    raise BadRequest
+                if 'file_type' not in curr_file_data['tool_file']:
+                    curr_file_data['tool_file']['file_type'] = 'OTHER'
+
+                self.process_file_type_register(curr_file_data)
+        self.data.pop('files')
 
     def register_metadata(self) -> None:
         """Register version with tool."""
