@@ -237,6 +237,8 @@ class RegisterToolVersion:
             files: Container for storing file (meta)data.
             descriptor_type_enum: List of valid descriptor types.
             image_type_enum: List of valid image types.
+            primary_file_descriptor_flag: Boolean dict validating presence
+                of single `PRIMARY_DESCRIPTOR` for each `type`.
             db_coll_tools: Database collection for storing tool objects.
             db_coll_files: Database collection for storing file objects.
         """
@@ -255,6 +257,9 @@ class RegisterToolVersion:
         self.files = {}
         self.descriptor_type_enum = ['CWL', 'WDL', 'NFL', 'GALAXY']
         self.image_type_enum = ['Docker', 'Singularity', 'Conda']
+        self.primary_file_descriptor_flag = {
+            'CWL': False, 'WDL': False, 'NFL': False, 'GALAXY': False
+        }
         self.db_coll_tools = (
             current_app.config['FOCA'].db.dbs['trsStore']
             .collections['tools'].client
@@ -347,8 +352,16 @@ class RegisterToolVersion:
                 'type' not in file_data or
                 file_data['type'] not in self.descriptor_type_enum
             ):
+                logger.error("Invalid descriptor type.")
                 raise BadRequest
             else:
+                if file_data['tool_file']['file_type'] == 'PRIMARY_DESCRIPTOR':
+                    if self.primary_file_descriptor_flag[file_data['type']]:
+                        logger.error(
+                            "Multiple PRIMARY_DESCRIPTORS can't be provided."
+                        )
+                        raise BadRequest
+                    self.primary_file_descriptor_flag[file_data['type']] = True
                 self.files['descriptors'].append(file_data)
 
         # validate image file types
@@ -357,6 +370,7 @@ class RegisterToolVersion:
                 'type' not in file_data or
                 file_data['type'] not in self.image_type_enum
             ):
+                logger.error("Invalid image_file type.")
                 raise BadRequest
             else:
                 self.files['containers'].append(file_data)
@@ -367,6 +381,7 @@ class RegisterToolVersion:
                 'type' in file_data and
                 file_data['type'] != 'JSON'
             ):
+                logger.error("Invalid test_file type.")
                 raise BadRequest
             else:
                 file_data['type'] = 'JSON'
@@ -378,6 +393,7 @@ class RegisterToolVersion:
                 'type' in file_data and
                 file_data['type'] != 'OTHER'
             ):
+                logger.error("Invalid file_other type.")
                 raise BadRequest
             else:
                 file_data['type'] = 'OTHER'

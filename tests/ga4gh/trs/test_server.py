@@ -18,6 +18,7 @@ from tests.mock_data import (
     MONGO_CONFIG,
     SERVICE_INFO_CONFIG,
     MOCK_CONTAINER_FILE,
+    MOCK_DESCRIPTOR_FILE,
 )
 from trs_filer.ga4gh.trs.server import (
     deleteTool,
@@ -37,6 +38,7 @@ from trs_filer.ga4gh.trs.server import (
     toolsIdVersionsGet,
     toolsIdVersionsVersionIdContainerfileGet,
     toolsIdVersionsVersionIdGet,
+    toolsIdVersionsVersionIdTypeDescriptorGet,
 )
 from trs_filer.errors.exceptions import (
     BadRequest,
@@ -865,4 +867,60 @@ def test_deleteToolClass_BadRequest():
         with pytest.raises(BadRequest):
             deleteToolClass.__wrapped__(
                 id=MOCK_ID,
+            )
+
+
+# GET .../descriptor
+def test_toolsIdVersionsVersionIdTypeDescriptorGet():
+    """Test for getting `PRIMARY_DESCRIPTOR` wrapper associated with a specific
+    tool version identified by the given tool and version identifiers for the
+    given input `type`.
+    """
+    app = Flask(__name__)
+    app.config['FOCA'] = Config(
+        db=MongoConfig(**MONGO_CONFIG)
+    )
+    mock_resp = deepcopy(MOCK_FILES_DB_ENTRY)
+    app.config['FOCA'].db.dbs['trsStore'] \
+        .collections['files'].client = mongomock.MongoClient().db.collection
+    app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
+        .client.insert_one(mock_resp)
+
+    with app.app_context():
+        res = toolsIdVersionsVersionIdTypeDescriptorGet.__wrapped__(
+            type='CWL',
+            id=MOCK_ID,
+            version_id=MOCK_ID,
+        )
+
+        res_plain = toolsIdVersionsVersionIdTypeDescriptorGet.__wrapped__(
+            type='PLAIN_CWL',
+            id=MOCK_ID,
+            version_id=MOCK_ID,
+        )
+        assert res == MOCK_DESCRIPTOR_FILE["file_wrapper"]
+        assert res_plain == MOCK_DESCRIPTOR_FILE["file_wrapper"]
+
+
+def test_toolsIdVersionsVersionIdTypeDescriptorGet_type_not_found():
+    """Test for getting `PRIMARY_DESCRIPTOR` wrapper associated with a specific
+    tool version identified by the given tool and version identifiers for the
+    given input `type` when no descriptor for given `type` available.
+    """
+    app = Flask(__name__)
+    app.config['FOCA'] = Config(
+        db=MongoConfig(**MONGO_CONFIG)
+    )
+    mock_resp = deepcopy(MOCK_FILES_DB_ENTRY)
+    app.config['FOCA'].db.dbs['trsStore'] \
+        .collections['files'].client = mongomock.MongoClient().db.collection
+    app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
+        .client.insert_one(mock_resp)
+
+    with app.app_context():
+        with pytest.raises(NotFound):
+            toolsIdVersionsVersionIdTypeDescriptorGet.__wrapped__(
+                type='WDL',
+                id=MOCK_ID,
+                version_id=MOCK_ID,
             )

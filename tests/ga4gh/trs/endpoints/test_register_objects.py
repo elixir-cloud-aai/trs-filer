@@ -19,6 +19,7 @@ from tests.mock_data import (
     MOCK_OTHER_FILE_INVALID,
     MOCK_CONTAINER_FILE_INVALID,
     MOCK_DESCRIPTOR_FILE_INVALID,
+    MOCK_DESCRIPTOR_FILE,
     MOCK_FILES_TOOL_FILE_MISSING,
     MOCK_FILE_TYPE_MISSING,
     MOCK_FILES_CHECKSUM_MISSING,
@@ -360,6 +361,25 @@ class TestRegisterToolVersion:
                 tool = RegisterToolVersion(data=data, id=MOCK_ID)
                 tool.process_file_type_register(
                     file_data=MOCK_DESCRIPTOR_FILE_INVALID
+                )
+
+    def test_process_file_type_register_multiple_primarydescriptor(self):
+        """Test for processing metadata with more than one `descriptors` having
+        `tool_file.file_type` as `PRIMARY_DESCRIPTOR`.
+        """
+        app = Flask(__name__)
+        app.config['FOCA'] = Config(
+            db=MongoConfig(**MONGO_CONFIG),
+            endpoints=ENDPOINT_CONFIG_CHARSET_LITERAL,
+        )
+
+        data = deepcopy(MOCK_VERSION_NO_ID)
+        with app.app_context():
+            with pytest.raises(BadRequest):
+                tool = RegisterToolVersion(data=data, id=MOCK_ID)
+                tool.primary_file_descriptor_flag['CWL'] = True
+                tool.process_file_type_register(
+                    file_data=MOCK_DESCRIPTOR_FILE
                 )
 
     def test_process_file_type_register_invalid_container_type(self):

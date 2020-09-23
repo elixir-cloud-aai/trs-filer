@@ -229,8 +229,60 @@ def toolsIdVersionsVersionIdTypeDescriptorGet(
     id: str,
     version_id: str,
 ) -> Dict:
-    """Get the tool descriptor for the specified tool."""
-    return {}  # pragma: no cover
+    """Get the tool descriptor for the specified tool.
+
+    Args:
+        type: The output type of the descriptor. Allowable values include
+        "CWL", "WDL", "NFL", "GALAXY", "PLAIN_CWL", "PLAIN_WDL", "PLAIN_NFL",
+        "PLAIN_GALAXY".
+        id: Tool identifier.
+        version_id: Identifier to the tool version of the given tool `id`.
+
+    Returns:
+        The tool descriptor. Plain types return the bare descriptor while the
+        "non-plain" types return a descriptor wrapped with metadata.
+    """
+
+    # plain_ret = False
+    proj_type = str(type).split('_')
+    # if 'PLAIN' in proj_type:
+    #     plain_ret = True
+
+    db_coll_files = (
+        current_app.config['FOCA'].db.dbs['trsStore']
+        .collections['files'].client
+    )
+
+    proj = {
+        '_id': False,
+        'versions': {
+            '$elemMatch': {
+                'id': version_id,
+                'descriptors': {
+                    '$elemMatch': {
+                        'type': proj_type[-1],
+                        'tool_file.file_type': 'PRIMARY_DESCRIPTOR',
+                    },
+                },
+            },
+        },
+    }
+
+    data = db_coll_files.find(
+        filter={'id': id},
+        projection=proj,
+    )
+
+    try:
+        data = data[0]['versions'][0]['descriptors']
+        for _d in data:
+            if (
+                _d['type'] == proj_type[-1] and
+                _d['tool_file']['file_type'] == 'PRIMARY_DESCRIPTOR'
+            ):
+                return _d['file_wrapper']
+    except (IndexError, KeyError, TypeError):
+        raise NotFound
 
 
 @log_traffic
