@@ -892,14 +892,7 @@ def test_toolsIdVersionsVersionIdTypeDescriptorGet():
             id=MOCK_ID,
             version_id=MOCK_ID,
         )
-
-        res_plain = toolsIdVersionsVersionIdTypeDescriptorGet.__wrapped__(
-            type='PLAIN_CWL',
-            id=MOCK_ID,
-            version_id=MOCK_ID,
-        )
         assert res == MOCK_DESCRIPTOR_FILE["file_wrapper"]
-        assert res_plain == MOCK_DESCRIPTOR_FILE["file_wrapper"]
 
 
 def test_toolsIdVersionsVersionIdTypeDescriptorGet_type_not_found():
