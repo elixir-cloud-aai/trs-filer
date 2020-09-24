@@ -548,7 +548,7 @@ components:
             Other values MAY be used, as long as implementors are aware of the issues discussed in https://tools.ietf.org/html/rfc6920#section-9.4[RFC6920].
 
             GA4GH may provide more explicit guidance for use of non-IANA-registered algorithms in the future.
-    AdditionalType:
+    OtherType:
       type: string
       description: Additional file type available for describing `type` in
         `FilesRegister`object.
