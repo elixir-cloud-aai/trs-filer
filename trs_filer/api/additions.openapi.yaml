@@ -569,7 +569,7 @@ components:
       anyOf:
         - $ref: '#/components/schemas/DescriptorType'
         - $ref: '#/components/schemas/ImageType'
-        - $ref: '#/components/schemas/AdditionalType'
+        - $ref: '#/components/schemas/OtherType'
     FilesRegister:
       type: object
       description: Properties and (a pointer to the) contents of a file.
