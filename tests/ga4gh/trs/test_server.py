@@ -19,6 +19,7 @@ from tests.mock_data import (
     SERVICE_INFO_CONFIG,
     MOCK_CONTAINER_FILE,
     MOCK_DESCRIPTOR_FILE,
+    MOCK_DESCRIPTOR_SEC_FILE,
 )
 from trs_filer.ga4gh.trs.server import (
     deleteTool,
@@ -39,6 +40,7 @@ from trs_filer.ga4gh.trs.server import (
     toolsIdVersionsVersionIdContainerfileGet,
     toolsIdVersionsVersionIdGet,
     toolsIdVersionsVersionIdTypeDescriptorGet,
+    toolsIdVersionsVersionIdTypeDescriptorRelativePathGet,
 )
 from trs_filer.errors.exceptions import (
     BadRequest,
@@ -916,4 +918,56 @@ def test_toolsIdVersionsVersionIdTypeDescriptorGet_type_not_found():
                 type='WDL',
                 id=MOCK_ID,
                 version_id=MOCK_ID,
+            )
+
+
+# GET .../descriptor/{relative_path}
+def test_toolsIdVersionsVersionIdTypeDescriptorRelativePathGet():
+    """Test for getting `SECONDARY_DESCRIPTOR` wrapper associated with a specific
+    tool version identified by the given tool and version identifiers for the
+    given input `type` and `relative_path`.
+    """
+    app = Flask(__name__)
+    app.config['FOCA'] = Config(
+        db=MongoConfig(**MONGO_CONFIG)
+    )
+    mock_resp = deepcopy(MOCK_FILES_DB_ENTRY)
+    app.config['FOCA'].db.dbs['trsStore'] \
+        .collections['files'].client = mongomock.MongoClient().db.collection
+    app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
+        .client.insert_one(mock_resp)
+
+    with app.app_context():
+        res = toolsIdVersionsVersionIdTypeDescriptorRelativePathGet \
+            .__wrapped__(
+                type='CWL',
+                id=MOCK_ID,
+                version_id=MOCK_ID,
+                relative_path='path_tmp',
+            )
+        assert res == MOCK_DESCRIPTOR_SEC_FILE["file_wrapper"]
+
+
+def test_toolsIdVersionsVersionIdTypeDescriptorRelativePathGet_type_NotFound():
+    """Test for getting `SECONDARY_DESCRIPTOR` wrapper associated with a specific
+    tool version identified by the given tool and version identifiers for the
+    given input `type` and `relative_path`.
+    """
+    app = Flask(__name__)
+    app.config['FOCA'] = Config(
+        db=MongoConfig(**MONGO_CONFIG)
+    )
+    mock_resp = deepcopy(MOCK_FILES_DB_ENTRY)
+    app.config['FOCA'].db.dbs['trsStore'] \
+        .collections['files'].client = mongomock.MongoClient().db.collection
+    app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
+        .client.insert_one(mock_resp)
+
+    with app.app_context():
+        with pytest.raises(NotFound):
+            toolsIdVersionsVersionIdTypeDescriptorRelativePathGet.__wrapped__(
+                type='WDL',
+                id=MOCK_ID,
+                version_id=MOCK_ID,
+                relative_path='path_tmp',
             )

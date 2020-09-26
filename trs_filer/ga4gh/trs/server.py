@@ -268,7 +268,13 @@ def toolsIdVersionsVersionIdTypeDescriptorGet(
     )
 
     try:
-        return data[0]['versions'][0]['descriptors'][0]['file_wrapper']
+        version_data = data[0]['versions'][0]['descriptors']
+        for _d in version_data:
+            if (
+                _d['tool_file']['file_type'] == 'PRIMARY_DESCRIPTOR' and
+                _d['type'] == type
+            ):
+                return _d['file_wrapper']
     except (IndexError, KeyError, TypeError):
         raise NotFound
 
@@ -280,8 +286,61 @@ def toolsIdVersionsVersionIdTypeDescriptorRelativePathGet(
     version_id: str,
     relative_path: str,
 ) -> Dict:
-    """Get additional tool descriptor files relative to the main file."""
-    return {}  # pragma: no cover
+    """Get additional tool descriptor files relative to the main file.
+
+    Args:
+        type: The output type of the descriptor. Allowable values include
+        "CWL", "WDL", "NFL", "GALAXY".
+        id: Tool identifier.
+        version_id: Identifier to the tool version of the given tool `id`.
+        relative_path: A relative path to the additional file (same directory
+        or subdirectories), for example 'foo.cwl' would return a 'foo.cwl'
+        from the same directory as the main descriptor.
+
+    Returns:
+        This returns additional descriptors for the specified tool in the same
+        or other directories that can be reached as a relative path. This
+        endpoint can be useful for workflow engine implementations like cwltool
+        to programmatically download all the descriptors for a tool and run it.
+    """
+
+    db_coll_files = (
+        current_app.config['FOCA'].db.dbs['trsStore']
+        .collections['files'].client
+    )
+
+    proj = {
+        '_id': False,
+        'versions': {
+            '$elemMatch': {
+                'id': version_id,
+                'descriptors': {
+                    '$elemMatch': {
+                        'type': type,
+                        'tool_file.file_type': 'SECONDARY_DESCRIPTOR',
+                        'tool_file.path': relative_path,
+                    },
+                },
+            },
+        },
+    }
+
+    data = db_coll_files.find(
+        filter={'id': id},
+        projection=proj,
+    )
+
+    try:
+        version_data = data[0]['versions'][0]['descriptors']
+        for _d in version_data:
+            if (
+                _d['tool_file']['file_type'] == 'SECONDARY_DESCRIPTOR' and
+                _d['tool_file']['path'] == relative_path and
+                _d['type'] == type
+            ):
+                return _d['file_wrapper']
+    except (IndexError, KeyError, TypeError):
+        raise NotFound
 
 
 @log_traffic
