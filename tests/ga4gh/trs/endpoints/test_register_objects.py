@@ -377,7 +377,7 @@ class TestRegisterToolVersion:
         with app.app_context():
             with pytest.raises(BadRequest):
                 tool = RegisterToolVersion(data=data, id=MOCK_ID)
-                tool.primary_file_descriptor_flag['CWL'] = True
+                tool.primary_descriptor_flags['CWL'] = True
                 tool.process_file_type_register(
                     file_data=MOCK_DESCRIPTOR_FILE
                 )

@@ -268,13 +268,7 @@ def toolsIdVersionsVersionIdTypeDescriptorGet(
     )
 
     try:
-        data = data[0]['versions'][0]['descriptors']
-        for _d in data:
-            if (
-                _d['type'] == type and
-                _d['tool_file']['file_type'] == 'PRIMARY_DESCRIPTOR'
-            ):
-                return _d['file_wrapper']
+        return data[0]['versions'][0]['descriptors'][0]['file_wrapper']
     except (IndexError, KeyError, TypeError):
         raise NotFound
 

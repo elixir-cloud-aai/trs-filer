@@ -569,6 +569,7 @@ components:
         - Conda
         - JSON
         - OTHER
+      example: OTHER
     FilesRegister:
       type: object
       description: Properties and (a pointer to the) contents of a file.
@@ -786,6 +787,7 @@ components:
             - SECONDARY_DESCRIPTOR
             - CONTAINERFILE
             - OTHER
+          example: OTHER
     ToolRegister:
       type: object
       description: A tool (or described tool) is defined as a tuple of a
