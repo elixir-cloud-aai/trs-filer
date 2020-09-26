@@ -548,6 +548,13 @@ components:
             Other values MAY be used, as long as implementors are aware of the issues discussed in https://tools.ietf.org/html/rfc6920#section-9.4[RFC6920].
 
             GA4GH may provide more explicit guidance for use of non-IANA-registered algorithms in the future.
+    OtherType:
+      type: string
+      description: Additional file type available for describing `type` in
+        `FilesRegister`object.
+      enum:
+        - JSON
+        - OTHER
     TypeRegister:
       type: string
       description: Type of file. For descriptor files (`PRIMARY_DESCRIPTOR`
@@ -556,19 +563,13 @@ components:
         (`CONTAINERFILE`), the allowed file types are enumerated in the
         `ImageType` schema. For these files, providing this property is required.
         For test files (`TEST_FILE`) and other files (`OTHER`), only `JSON` and
-        `OTHER` are allowed as values for this property. For these files,
-        providing the value can be omitted and will be set automatically by the
-        implementation.
-      enum:
-        - CWL
-        - WDL
-        - NFL
-        - GALAXY
-        - Docker
-        - Singularity
-        - Conda
-        - JSON
-        - OTHER
+        `OTHER` (described by `AdditionalType`) are allowed as values for this
+        property. For these files, providing the value can be omitted and will be
+        set automatically by the implementation.
+      anyOf:
+        - $ref: '#/components/schemas/DescriptorType'
+        - $ref: '#/components/schemas/ImageType'
+        - $ref: '#/components/schemas/OtherType'
       example: OTHER
     FilesRegister:
       type: object
