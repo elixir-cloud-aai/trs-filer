@@ -6,6 +6,7 @@ from typing import (Dict, Optional)
 
 from flask import (current_app)
 from pymongo.errors import DuplicateKeyError
+import urllib.error
 import urllib.request
 
 from trs_filer.errors.exceptions import (
@@ -394,16 +395,18 @@ class RegisterToolVersion:
                 data = curr_file_data['file_wrapper']
                 self.validate_file_wrapper(data)
 
-                # Copy contents of curr_file_data['file_wrapper']['url'] to curr_file_data['file_wrapper']['content']
+                # store contents accessible at url in database
+                # TODO: this needs more checks
                 if (
                     'url' in curr_file_data['file_wrapper'] and
                     'content' not in curr_file_data['file_wrapper']
                 ):
+                    wrapper = curr_file_data['file_wrapper']
                     try:
-                        with urllib.request.urlopen(curr_file_data['file_wrapper']['url']) as f:
-                            curr_file_data['file_wrapper']['content'] = f.read().decode('utf-8')
+                        with urllib.request.urlopen(wrapper['url']) as f:
+                            wrapper['content'] = f.read().decode('utf-8')
                     except urllib.error.URLError as e:
-                        logger.error(f"'{curr_file_data['file_wrapper']['url']}' '{e.reason}'")
+                        logger.error(f"'{wrapper['url']}' '{e.reason}'")
 
                 if 'tool_file' not in curr_file_data:
                     logger.error(
@@ -512,4 +515,4 @@ class RegisterToolVersion:
         logger.debug(
             "Entry in 'files' collection: "
             f"{self.db_coll_files.find_one({'id': self.data['id']})}"
-        )  
+        )
