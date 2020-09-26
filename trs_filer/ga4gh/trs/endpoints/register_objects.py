@@ -6,6 +6,8 @@ from typing import (Dict, Optional)
 
 from flask import (current_app)
 from pymongo.errors import DuplicateKeyError
+import urllib.error
+import urllib.request
 
 from trs_filer.errors.exceptions import (
     BadRequest,
@@ -420,6 +422,19 @@ class RegisterToolVersion:
             if 'file_wrapper' in curr_file_data:
                 data = curr_file_data['file_wrapper']
                 self.validate_file_wrapper(data)
+
+                # store contents accessible at url in database
+                # TODO: this needs more checks
+                if (
+                    'url' in curr_file_data['file_wrapper'] and
+                    'content' not in curr_file_data['file_wrapper']
+                ):
+                    wrapper = curr_file_data['file_wrapper']
+                    try:
+                        with urllib.request.urlopen(wrapper['url']) as f:
+                            wrapper['content'] = f.read().decode('utf-8')
+                    except urllib.error.URLError as e:
+                        logger.error(f"'{wrapper['url']}' '{e.reason}'")
 
                 if 'tool_file' not in curr_file_data:
                     logger.error(

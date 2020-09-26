@@ -360,8 +360,59 @@ def toolsIdVersionsVersionIdTypeFilesGet(
     version_id: str,
     format: Optional[str] = None,
 ) -> List:
-    """Get a list of objects that contain the relative path and file type."""
-    return []  # pragma: no cover
+    """Get the tool_file specification(s) for the specified tool version.
+
+    Args:
+        id: Tool identifier.
+        version_id: Tool version identifier.
+        type: The output type of the descriptor. Examples of allowable
+            values are "CWL", "WDL", "NFL", "GALAXY".
+
+    Returns:
+        List of file JSON responses.
+    """
+    db_coll_files = (
+        current_app.config['FOCA'].db.dbs['trsStore']
+        .collections['files'].client
+    )
+
+    if type in ['CWL', 'WDL', 'NFL', 'GALAXY']:
+        type_class = 'descriptors'
+    elif type in ['Docker', 'Singularity', 'Conda']:
+        type_class = 'containers'
+    elif type == 'JSON':
+        type_class = 'tests'
+    elif type == 'OTHER':
+        type_class = 'others'
+    else:
+        raise BadRequest
+
+    proj = {
+        '_id': False,
+        'versions': {
+            '$elemMatch': {
+                'id': version_id,
+                type_class: {
+                    '$elemMatch': {
+                        'type': type,
+                    },
+                },
+            },
+        },
+    }
+    data = db_coll_files.find_one(
+        filter={'id': id},
+        projection=proj,
+    )
+    try:
+        data = data['versions'][0]
+        ret = [
+            d['tool_file'] for d in data[type_class]
+            if d['type'] == type
+        ]
+    except (IndexError, KeyError, TypeError):
+        raise NotFound
+    return ret
 
 
 @log_traffic
