@@ -203,6 +203,18 @@ class RegisterTool:
 class RegisterToolVersion:
     """Class to register a version with a tool object."""
 
+    descriptor_types = [
+        'CWL',
+        'WDL',
+        'NFL',
+        'GALAXY',
+    ]
+    image_types = [
+        'Docker',
+        'Singularity',
+        'Conda',
+    ]
+
     def __init__(
         self,
         data: Dict,
@@ -235,26 +247,30 @@ class RegisterToolVersion:
             api_path: Base path at which API endpoints can be reached. For
                 constructing tool and version `url` properties.
             files: Container for storing file (meta)data.
-            descriptor_type_enum: List of valid descriptor types.
-            image_type_enum: List of valid image types.
+            primary_descriptor_flags: Dictionary to keep track of which
+                descriptor types have a `PRIMARY_DESCRIPTOR` file associated
+                with them.
             db_coll_tools: Database collection for storing tool objects.
             db_coll_files: Database collection for storing file objects.
         """
         conf = current_app.config['FOCA'].endpoints
-        self.data = data
+        self.data: Dict = data
         self.data['id'] = None if version_id is None else version_id
-        self.id = id
-        self.replace = True
-        self.id_charset = conf['version']['id']['charset']
-        self.id_length = int(conf['version']['id']['length'])
-        self.meta_version_init = int(conf['version']['meta_version']['init'])
-        self.url_prefix = conf['service']['url_prefix']
-        self.host_name = conf['service']['external_host']
-        self.external_port = conf['service']['external_port']
-        self.api_path = conf['service']['api_path']
-        self.files = {}
-        self.descriptor_type_enum = ['CWL', 'WDL', 'NFL', 'GALAXY']
-        self.image_type_enum = ['Docker', 'Singularity', 'Conda']
+        self.id: str = id
+        self.replace: bool = True
+        self.id_charset: str = conf['version']['id']['charset']
+        self.id_length: int = int(conf['version']['id']['length'])
+        self.meta_version_init: int = int(
+            conf['version']['meta_version']['init']
+        )
+        self.url_prefix: str = conf['service']['url_prefix']
+        self.host_name: str = conf['service']['external_host']
+        self.external_port: int = conf['service']['external_port']
+        self.api_path: str = conf['service']['api_path']
+        self.files: Dict = {}
+        self.primary_descriptor_flags: Dict[str, bool] = {
+            k: False for k in self.descriptor_types
+        }
         self.db_coll_tools = (
             current_app.config['FOCA'].db.dbs['trsStore']
             .collections['tools'].client
@@ -341,43 +357,55 @@ class RegisterToolVersion:
         """
 
         # validate descriptor file types
-        descriptors_arr = ['PRIMARY_DESCRIPTOR', 'SECONDARY_DESCRIPTOR']
-        if file_data['tool_file']['file_type'] in descriptors_arr:
+        descriptor_set = ('PRIMARY_DESCRIPTOR', 'SECONDARY_DESCRIPTOR')
+        if file_data['tool_file']['file_type'] in descriptor_set:
             if (
                 'type' not in file_data or
-                file_data['type'] not in self.descriptor_type_enum
+                file_data['type'] not in self.descriptor_types
             ):
+                logger.error("Missing or invalid descriptor type.")
                 raise BadRequest
             else:
+                if file_data['tool_file']['file_type'] == "PRIMARY_DESCRIPTOR":
+                    if self.primary_descriptor_flags[file_data['type']]:
+                        logger.error(
+                            "Multiple PRIMARY_DESCRIPTOR files for the same "
+                            "descriptor type are not supported."
+                        )
+                        raise BadRequest
+                    self.primary_descriptor_flags[file_data['type']] = True
                 self.files['descriptors'].append(file_data)
 
         # validate image file types
-        if file_data['tool_file']['file_type'] == 'CONTAINERFILE':
+        elif file_data['tool_file']['file_type'] == "CONTAINERFILE":
             if (
                 'type' not in file_data or
-                file_data['type'] not in self.image_type_enum
+                file_data['type'] not in self.image_types
             ):
+                logger.error("Missing or invalid image file type.")
                 raise BadRequest
             else:
                 self.files['containers'].append(file_data)
 
         # validate test file types
-        if file_data['tool_file']['file_type'] == 'TEST_FILE':
+        elif file_data['tool_file']['file_type'] == "TEST_FILE":
             if (
                 'type' in file_data and
-                file_data['type'] != 'JSON'
+                file_data['type'] != "JSON"
             ):
+                logger.error("Invalid test file type.")
                 raise BadRequest
             else:
                 file_data['type'] = 'JSON'
                 self.files['tests'].append(file_data)
 
         # validate other file types
-        if file_data['tool_file']['file_type'] == 'OTHER':
+        elif file_data['tool_file']['file_type'] == "OTHER":
             if (
                 'type' in file_data and
-                file_data['type'] != 'OTHER'
+                file_data['type'] != "OTHER"
             ):
+                logger.error("Invalid file type.")
                 raise BadRequest
             else:
                 file_data['type'] = 'OTHER'
