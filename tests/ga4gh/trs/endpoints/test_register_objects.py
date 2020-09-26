@@ -15,10 +15,9 @@ from tests.mock_data import (
     ENDPOINT_CONFIG_CHARSET_LITERAL,
     ENDPOINT_CONFIG_ONE_ID,
     ENDPOINT_CONFIG_TOOL_CLASS_VALIDATION,
-    MOCK_TEST_FILE_INVALID,
-    MOCK_OTHER_FILE_INVALID,
-    MOCK_CONTAINER_FILE_INVALID,
-    MOCK_DESCRIPTOR_FILE_INVALID,
+    MOCK_TEST_FILE,
+    MOCK_OTHER_FILE,
+    MOCK_CONTAINER_FILE,
     MOCK_DESCRIPTOR_FILE,
     MOCK_FILES_TOOL_FILE_MISSING,
     MOCK_FILE_TYPE_MISSING,
@@ -356,11 +355,13 @@ class TestRegisterToolVersion:
         )
 
         data = deepcopy(MOCK_VERSION_NO_ID)
+        mock_files = deepcopy(MOCK_DESCRIPTOR_FILE)
+        mock_files["type"] = "invalid"
         with app.app_context():
             with pytest.raises(BadRequest):
                 tool = RegisterToolVersion(data=data, id=MOCK_ID)
                 tool.process_file_type_register(
-                    file_data=MOCK_DESCRIPTOR_FILE_INVALID
+                    file_data=mock_files
                 )
 
     def test_process_file_type_register_multiple_primarydescriptor(self):
@@ -391,11 +392,13 @@ class TestRegisterToolVersion:
         )
 
         data = deepcopy(MOCK_VERSION_NO_ID)
+        mock_files = deepcopy(MOCK_CONTAINER_FILE)
+        mock_files["type"] = "invalid"
         with app.app_context():
             with pytest.raises(BadRequest):
                 tool = RegisterToolVersion(data=data, id=MOCK_ID)
                 tool.process_file_type_register(
-                    file_data=MOCK_CONTAINER_FILE_INVALID
+                    file_data=mock_files
                 )
 
     def test_process_file_type_register_invalid_test_type(self):
@@ -407,11 +410,13 @@ class TestRegisterToolVersion:
         )
 
         data = deepcopy(MOCK_VERSION_NO_ID)
+        mock_files = deepcopy(MOCK_TEST_FILE)
+        mock_files["type"] = "invalid"
         with app.app_context():
             with pytest.raises(BadRequest):
                 tool = RegisterToolVersion(data=data, id=MOCK_ID)
                 tool.process_file_type_register(
-                    file_data=MOCK_TEST_FILE_INVALID
+                    file_data=mock_files
                 )
 
     def test_process_file_type_register_invalid_other_type(self):
@@ -423,11 +428,13 @@ class TestRegisterToolVersion:
         )
 
         data = deepcopy(MOCK_VERSION_NO_ID)
+        mock_files = deepcopy(MOCK_OTHER_FILE)
+        mock_files["type"] = "invalid"
         with app.app_context():
             with pytest.raises(BadRequest):
                 tool = RegisterToolVersion(data=data, id=MOCK_ID)
                 tool.process_file_type_register(
-                    file_data=MOCK_OTHER_FILE_INVALID
+                    file_data=mock_files
                 )
 
     def test_process_files_tool_file_not_present(self):
