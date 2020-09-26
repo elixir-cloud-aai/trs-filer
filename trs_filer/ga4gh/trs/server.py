@@ -241,6 +241,8 @@ def toolsIdVersionsVersionIdTypeDescriptorGet(
         The tool descriptor. Plain types return the bare descriptor while the
         "non-plain" types return a descriptor wrapped with metadata.
     """
+    validate_descriptor_type(type=type)
+    ret = {}
 
     db_coll_files = (
         current_app.config['FOCA'].db.dbs['trsStore']
@@ -274,9 +276,10 @@ def toolsIdVersionsVersionIdTypeDescriptorGet(
                 _d['tool_file']['file_type'] == 'PRIMARY_DESCRIPTOR' and
                 _d['type'] == type
             ):
-                return _d['file_wrapper']
+                ret = _d['file_wrapper']
     except (IndexError, KeyError, TypeError):
         raise NotFound
+    return ret
 
 
 @log_traffic
@@ -289,20 +292,20 @@ def toolsIdVersionsVersionIdTypeDescriptorRelativePathGet(
     """Get additional tool descriptor files relative to the main file.
 
     Args:
-        type: The output type of the descriptor. Allowable values include
-        "CWL", "WDL", "NFL", "GALAXY".
+        type: The output type of the descriptor. Examples of allowable
+            values are "CWL", "WDL", "NFL", "GALAXY".
         id: Tool identifier.
-        version_id: Identifier to the tool version of the given tool `id`.
+        version_id: Tool version identifier.
         relative_path: A relative path to the additional file (same directory
         or subdirectories), for example 'foo.cwl' would return a 'foo.cwl'
         from the same directory as the main descriptor.
 
     Returns:
-        This returns additional descriptors for the specified tool in the same
-        or other directories that can be reached as a relative path. This
-        endpoint can be useful for workflow engine implementations like cwltool
-        to programmatically download all the descriptors for a tool and run it.
+        Additional files associated with a given descriptor type of a given
+        tool version.
     """
+    ret = {}
+    validate_descriptor_type(type=type)
 
     db_coll_files = (
         current_app.config['FOCA'].db.dbs['trsStore']
@@ -317,7 +320,6 @@ def toolsIdVersionsVersionIdTypeDescriptorRelativePathGet(
                 'descriptors': {
                     '$elemMatch': {
                         'type': type,
-                        'tool_file.file_type': 'SECONDARY_DESCRIPTOR',
                         'tool_file.path': relative_path,
                     },
                 },
@@ -334,13 +336,13 @@ def toolsIdVersionsVersionIdTypeDescriptorRelativePathGet(
         version_data = data[0]['versions'][0]['descriptors']
         for _d in version_data:
             if (
-                _d['tool_file']['file_type'] == 'SECONDARY_DESCRIPTOR' and
                 _d['tool_file']['path'] == relative_path and
                 _d['type'] == type
             ):
-                return _d['file_wrapper']
+                ret = _d['file_wrapper']
     except (IndexError, KeyError, TypeError):
         raise NotFound
+    return ret
 
 
 @log_traffic
@@ -350,6 +352,8 @@ def toolsIdVersionsVersionIdTypeTestsGet(
     version_id: str,
 ) -> List:
     """Get a list of test JSONs."""
+    # TODO: REMOVE COMMENTS WHEN IMPLEMENTING
+    # validate_descriptor_type(type=type)
     return []  # pragma: no cover
 
 
@@ -363,36 +367,27 @@ def toolsIdVersionsVersionIdTypeFilesGet(
     """Get the tool_file specification(s) for the specified tool version.
 
     Args:
-        id: Tool identifier.
-        version_id: Tool version identifier.
         type: The output type of the descriptor. Examples of allowable
             values are "CWL", "WDL", "NFL", "GALAXY".
+        id: Tool identifier.
+        version_id: Tool version identifier.
 
     Returns:
         List of file JSON responses.
     """
+    validate_descriptor_type(type=type)
+
     db_coll_files = (
         current_app.config['FOCA'].db.dbs['trsStore']
         .collections['files'].client
     )
-
-    if type in ['CWL', 'WDL', 'NFL', 'GALAXY']:
-        type_class = 'descriptors'
-    elif type in ['Docker', 'Singularity', 'Conda']:
-        type_class = 'containers'
-    elif type == 'JSON':
-        type_class = 'tests'
-    elif type == 'OTHER':
-        type_class = 'others'
-    else:
-        raise BadRequest
 
     proj = {
         '_id': False,
         'versions': {
             '$elemMatch': {
                 'id': version_id,
-                type_class: {
+                'descriptors': {
                     '$elemMatch': {
                         'type': type,
                     },
@@ -404,15 +399,12 @@ def toolsIdVersionsVersionIdTypeFilesGet(
         filter={'id': id},
         projection=proj,
     )
+
     try:
         data = data['versions'][0]
-        ret = [
-            d['tool_file'] for d in data[type_class]
-            if d['type'] == type
-        ]
+        return [d['tool_file'] for d in data['descriptors']]
     except (IndexError, KeyError, TypeError):
         raise NotFound
-    return ret
 
 
 @log_traffic
@@ -729,3 +721,22 @@ def deleteToolClass(
         return id
     else:
         raise NotFound
+
+
+def validate_descriptor_type(type: str) -> None:
+    """Validate tool descriptor type.
+
+    Args:
+        type: Descriptor type, e.g., NFL".
+
+    Raises:
+        BadRequest: Provided descriptor type is invalid.
+    """
+    valid_types = [f"PLAIN_{t}" for t in RegisterToolVersion.descriptor_types]
+    valid_types += RegisterToolVersion.descriptor_types
+
+    if type not in valid_types:
+        logger.error(
+            f"Specified type '{type}' not among valid types: {valid_types}'"
+        )
+        raise BadRequest
