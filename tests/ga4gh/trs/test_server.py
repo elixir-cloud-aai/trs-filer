@@ -19,6 +19,7 @@ from tests.mock_data import (
     SERVICE_INFO_CONFIG,
     MOCK_CONTAINER_FILE,
     MOCK_DESCRIPTOR_FILE,
+    MOCK_OTHER_FILE,
 )
 from trs_filer.ga4gh.trs.server import (
     deleteTool,
@@ -36,6 +37,7 @@ from trs_filer.ga4gh.trs.server import (
     toolsGet,
     toolsIdGet,
     toolsIdVersionsGet,
+    toolsIdVersionsVersionIdTypeFilesGet,
     toolsIdVersionsVersionIdContainerfileGet,
     toolsIdVersionsVersionIdGet,
     toolsIdVersionsVersionIdTypeDescriptorGet,
@@ -257,6 +259,71 @@ def test_toolsGet_filters():
             organization=data['organization'],
         )
         assert res == ([data], '200', HEADERS_PAGINATION)
+
+
+def test_toolsIdVersionsVersionIdTypeFilesGet_Descriptor():
+    """Test for getting descriptor files associated with a specific tool version
+    identified by the given tool and version identifiers.
+    """
+    app = Flask(__name__)
+    app.config['FOCA'] = Config(
+        db=MongoConfig(**MONGO_CONFIG)
+    )
+    mock_resp = deepcopy(MOCK_FILES_DB_ENTRY)
+    app.config['FOCA'].db.dbs['trsStore'] \
+        .collections['files'].client = mongomock.MongoClient().db.collection
+    app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
+        .client.insert_one(mock_resp)
+
+    with app.app_context():
+        res = toolsIdVersionsVersionIdTypeFilesGet.__wrapped__(
+            id=MOCK_ID,
+            version_id=MOCK_ID,
+            type=MOCK_DESCRIPTOR_FILE['type']
+        )
+        assert res == [MOCK_DESCRIPTOR_FILE["tool_file"]]
+
+
+def test_toolsIdVersionsVersionIdTypeFilesGet_no_tool_file_NotFound():
+    """Test for getting tool files associated with a specific tool version
+    identified by the given tool and version identifiers when no
+    specification file is available for the tool version.
+    """
+    app = Flask(__name__)
+    app.config['FOCA'] = Config(
+        db=MongoConfig(**MONGO_CONFIG)
+    )
+    mock_resp = deepcopy(MOCK_FILES_DB_ENTRY)
+    for version in mock_resp['versions']:
+        version['files'] = {}
+    app.config['FOCA'].db.dbs['trsStore'] \
+        .collections['files'].client = mongomock.MongoClient().db.collection
+    app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
+        .client.insert_one(mock_resp)
+
+    with app.app_context():
+        with pytest.raises(NotFound):
+            toolsIdVersionsVersionIdTypeFilesGet.__wrapped__(
+                id=MOCK_ID,
+                version_id=MOCK_ID + MOCK_ID,
+                type=MOCK_OTHER_FILE['type']
+            )
+
+
+def test_toolsIdVersionsVersionIdTypeFilesGet_wrong_type_BadRequest():
+    """Test for getting files when an invalid type is specified."""
+    app = Flask(__name__)
+    app.config['FOCA'] = Config(
+        db=MongoConfig(**MONGO_CONFIG)
+    )
+
+    with app.app_context():
+        with pytest.raises(BadRequest):
+            toolsIdVersionsVersionIdTypeFilesGet.__wrapped__(
+                id=MOCK_ID,
+                version_id=MOCK_ID + MOCK_ID,
+                type='foo'
+            )
 
 
 # GET /tools/{id}/versions/{version_id}/containerfile

@@ -2,10 +2,13 @@
 
 import logging
 import string  # noqa: F401
+import socket
 from typing import (Dict, Optional)
+import urllib3
 
 from flask import (current_app)
 from pymongo.errors import DuplicateKeyError
+import requests
 
 from trs_filer.errors.exceptions import (
     BadRequest,
@@ -267,7 +270,10 @@ class RegisterToolVersion:
         self.host_name: str = conf['service']['external_host']
         self.external_port: int = conf['service']['external_port']
         self.api_path: str = conf['service']['api_path']
-        self.files: Dict = {}
+        self.files: Dict = {
+            "descriptors": [],
+            "containers": [],
+        }
         self.primary_descriptor_flags: Dict[str, bool] = {
             k: False for k in self.descriptor_types
         }
@@ -307,130 +313,93 @@ class RegisterToolVersion:
         )
 
         # process files
-        self.files = {
-            'id': self.data['id'],
-            "descriptors": [],
-            "containers": [],
-            "tests": [],
-            "others": []
-        }
         if 'files' in self.data:
             # Set `containerfile` property
             self.data['containerfile'] = False
-            for f in self.data['files']:
-                try:
-                    if f['tool_file']['file_type'] == "CONTAINERFILE":
-                        self.data['containerfile'] = True
-                        break
-                except KeyError:
-                    continue
+            for _file in self.data['files']:
+                if _file['tool_file']['file_type'] == "CONTAINERFILE":
+                    self.data['containerfile'] = True
+                    break
             self.process_files()
+            self.data.pop('files')
 
-    def validate_file_wrapper(self, file_data_wrapper: Dict) -> None:
-        """Validate the contents of file_wrapper for a given file object."""
-        if (
-            'url' not in file_data_wrapper and
-            'content' not in file_data_wrapper
-        ):
-            logger.error(
-                "FileWrapper must contain at least one of url or"
-                " content."
-            )
-            raise BadRequest
-        if (
-            self.data['is_production'] and
-            'checksum' not in file_data_wrapper or
-            not file_data_wrapper['checksum']
-        ):
-            logger.error(
-                "Production tools must contain checksum "
-                "information."
-            )
-            raise BadRequest
+    def process_files(self) -> None:
+        """Process file (meta)data."""
+        self.files['id'] = self.data['id']
 
-    def process_file_type_register(self, file_data: Dict) -> None:
-        """Validate file type for a given file data object and appends files object
-        to the respective file dictionary array.
+        # validate required fields
+        for _file in self.data['files']:
 
-        Args:
-            file_data: File data object.
-        """
-
-        # validate descriptor file types
-        descriptor_set = ('PRIMARY_DESCRIPTOR', 'SECONDARY_DESCRIPTOR')
-        if file_data['tool_file']['file_type'] in descriptor_set:
+            # validate conditionally required properties
             if (
-                'type' not in file_data or
-                file_data['type'] not in self.descriptor_types
+                'url' not in _file['file_wrapper'] and
+                'content' not in _file['file_wrapper']
             ):
-                logger.error("Missing or invalid descriptor type.")
+                logger.error(
+                    "FileWrapper must contain at least one of `url` or "
+                    "`content`."
+                )
                 raise BadRequest
-            else:
-                if file_data['tool_file']['file_type'] == "PRIMARY_DESCRIPTOR":
-                    if self.primary_descriptor_flags[file_data['type']]:
+            if (
+                self.data['is_production'] and
+                'checksum' not in _file['file_wrapper'] or
+                not _file['file_wrapper']['checksum']
+            ):
+                logger.error(
+                    "Production tools must contain checksum information for "
+                    "all files."
+                )
+                raise BadRequest
+
+            # store contents accessible at url in database
+            # TODO: this needs more checks on the content
+            if (
+                'url' in _file['file_wrapper'] and
+                'content' not in _file['file_wrapper']
+            ):
+                _w = _file['file_wrapper']
+                try:
+                    _w['content'] = requests.get(_w['url']).text
+                except (
+                    requests.exceptions.ConnectionError,
+                    requests.exceptions.MissingSchema,
+                    socket.gaierror,
+                    urllib3.exceptions.NewConnectionError,
+                ):
+                    logger.error(
+                        "Could not retrieve content via the URL "
+                        f"'{_w['url']}' provided for file "
+                        f"'{_file['tool_file']['path']}'."
+                    )
+                    raise BadRequest
+
+            # validate descriptor file types
+            descriptor_set = (
+                'PRIMARY_DESCRIPTOR',
+                'SECONDARY_DESCRIPTOR',
+                'TEST_FILE',
+                'OTHER',
+            )
+            if _file['tool_file']['file_type'] in descriptor_set:
+                if _file['type'] not in self.descriptor_types:
+                    logger.error("Invalid descriptor type.")
+                    raise BadRequest
+                if _file['tool_file']['file_type'] == "PRIMARY_DESCRIPTOR":
+                    if self.primary_descriptor_flags[_file['type']]:
                         logger.error(
                             "Multiple PRIMARY_DESCRIPTOR files for the same "
                             "descriptor type are not supported."
                         )
                         raise BadRequest
-                    self.primary_descriptor_flags[file_data['type']] = True
-                self.files['descriptors'].append(file_data)
+                    self.primary_descriptor_flags[_file['type']] = True
+                self.files['descriptors'].append(_file)
 
-        # validate image file types
-        elif file_data['tool_file']['file_type'] == "CONTAINERFILE":
-            if (
-                'type' not in file_data or
-                file_data['type'] not in self.image_types
-            ):
-                logger.error("Missing or invalid image file type.")
-                raise BadRequest
-            else:
-                self.files['containers'].append(file_data)
-
-        # validate test file types
-        elif file_data['tool_file']['file_type'] == "TEST_FILE":
-            if (
-                'type' in file_data and
-                file_data['type'] != "JSON"
-            ):
-                logger.error("Invalid test file type.")
-                raise BadRequest
-            else:
-                file_data['type'] = 'JSON'
-                self.files['tests'].append(file_data)
-
-        # validate other file types
-        elif file_data['tool_file']['file_type'] == "OTHER":
-            if (
-                'type' in file_data and
-                file_data['type'] != "OTHER"
-            ):
-                logger.error("Invalid file type.")
-                raise BadRequest
-            else:
-                file_data['type'] = 'OTHER'
-                self.files['others'].append(file_data)
-
-    def process_files(self) -> None:
-        """Process file (meta)data."""
-        # validate required fields
-        for _file in self.data['files']:
-            curr_file_data = _file
-
-            if 'file_wrapper' in curr_file_data:
-                data = curr_file_data['file_wrapper']
-                self.validate_file_wrapper(data)
-
-                if 'tool_file' not in curr_file_data:
-                    logger.error(
-                        "ToolFile information must be provided."
-                    )
+            # validate image file types
+            elif _file['tool_file']['file_type'] == "CONTAINERFILE":
+                if _file['type'] not in self.image_types:
+                    logger.error("Missing or invalid image file type.")
                     raise BadRequest
-                if 'file_type' not in curr_file_data['tool_file']:
-                    curr_file_data['tool_file']['file_type'] = 'OTHER'
-
-                self.process_file_type_register(curr_file_data)
-        self.data.pop('files')
+                self.files['containers'].append(_file)
 
     def register_metadata(self) -> None:
         """Register version with tool."""

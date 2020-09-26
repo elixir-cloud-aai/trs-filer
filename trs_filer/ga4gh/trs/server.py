@@ -241,6 +241,7 @@ def toolsIdVersionsVersionIdTypeDescriptorGet(
         The tool descriptor. Plain types return the bare descriptor while the
         "non-plain" types return a descriptor wrapped with metadata.
     """
+    validate_descriptor_type(type=type)
 
     db_coll_files = (
         current_app.config['FOCA'].db.dbs['trsStore']
@@ -281,6 +282,8 @@ def toolsIdVersionsVersionIdTypeDescriptorRelativePathGet(
     relative_path: str,
 ) -> Dict:
     """Get additional tool descriptor files relative to the main file."""
+    # TODO: REMOVE COMMENTS WHEN IMPLEMENTING
+    # validate_descriptor_type(type=type)
     return {}  # pragma: no cover
 
 
@@ -291,6 +294,8 @@ def toolsIdVersionsVersionIdTypeTestsGet(
     version_id: str,
 ) -> List:
     """Get a list of test JSONs."""
+    # TODO: REMOVE COMMENTS WHEN IMPLEMENTING
+    # validate_descriptor_type(type=type)
     return []  # pragma: no cover
 
 
@@ -301,8 +306,48 @@ def toolsIdVersionsVersionIdTypeFilesGet(
     version_id: str,
     format: Optional[str] = None,
 ) -> List:
-    """Get a list of objects that contain the relative path and file type."""
-    return []  # pragma: no cover
+    """Get the tool_file specification(s) for the specified tool version.
+
+    Args:
+        id: Tool identifier.
+        version_id: Tool version identifier.
+        type: The output type of the descriptor. Examples of allowable
+            values are "CWL", "WDL", "NFL", "GALAXY".
+
+    Returns:
+        List of file JSON responses.
+    """
+    validate_descriptor_type(type=type)
+
+    db_coll_files = (
+        current_app.config['FOCA'].db.dbs['trsStore']
+        .collections['files'].client
+    )
+
+    proj = {
+        '_id': False,
+        'versions': {
+            '$elemMatch': {
+                'id': version_id,
+                'descriptors': {
+                    '$elemMatch': {
+                        'type': type,
+                    },
+                },
+            },
+        },
+    }
+
+    data = db_coll_files.find_one(
+        filter={'id': id},
+        projection=proj,
+    )
+
+    try:
+        data = data['versions'][0]
+        return [d['tool_file'] for d in data['descriptors']]
+    except (IndexError, KeyError, TypeError):
+        raise NotFound
 
 
 @log_traffic
@@ -619,3 +664,22 @@ def deleteToolClass(
         return id
     else:
         raise NotFound
+
+
+def validate_descriptor_type(type: str) -> None:
+    """Validate tool descriptor type.
+
+    Args:
+        type: Descriptor type, e.g., NFL".
+
+    Raises:
+        BadRequest: Provided descriptor type is invalid.
+    """
+    valid_types = [f"PLAIN_{t}" for t in RegisterToolVersion.descriptor_types]
+    valid_types += RegisterToolVersion.descriptor_types
+
+    if type not in valid_types:
+        logger.error(
+            f"Specified type '{type}' not among valid types: {valid_types}'"
+        )
+        raise BadRequest
