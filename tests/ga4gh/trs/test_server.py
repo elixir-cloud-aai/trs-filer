@@ -18,7 +18,6 @@ from tests.mock_data import (
     MONGO_CONFIG,
     SERVICE_INFO_CONFIG,
     MOCK_CONTAINER_FILE,
-    MOCK_TEST_FILE,
     MOCK_DESCRIPTOR_FILE,
     MOCK_OTHER_FILE,
 )
@@ -262,30 +261,6 @@ def test_toolsGet_filters():
         assert res == ([data], '200', HEADERS_PAGINATION)
 
 
-# GET /tools/{id}/versions/{version_id}/{type}/files
-def test_toolsIdVersionsVersionIdTypeFilesGet_Test():
-    """Test for getting Test files associated with a specific tool version
-    identified by the given tool and version identifiers.
-    """
-    app = Flask(__name__)
-    app.config['FOCA'] = Config(
-        db=MongoConfig(**MONGO_CONFIG)
-    )
-    mock_resp = deepcopy(MOCK_FILES_DB_ENTRY)
-    app.config['FOCA'].db.dbs['trsStore'] \
-        .collections['files'].client = mongomock.MongoClient().db.collection
-    app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
-        .client.insert_one(mock_resp)
-
-    with app.app_context():
-        res = toolsIdVersionsVersionIdTypeFilesGet.__wrapped__(
-            id=MOCK_ID,
-            version_id=MOCK_ID,
-            type=MOCK_TEST_FILE['type']
-        )
-        assert res == [MOCK_TEST_FILE["tool_file"]]
-
-
 def test_toolsIdVersionsVersionIdTypeFilesGet_Descriptor():
     """Test for getting descriptor files associated with a specific tool version
     identified by the given tool and version identifiers.
@@ -307,52 +282,6 @@ def test_toolsIdVersionsVersionIdTypeFilesGet_Descriptor():
             type=MOCK_DESCRIPTOR_FILE['type']
         )
         assert res == [MOCK_DESCRIPTOR_FILE["tool_file"]]
-
-
-def test_toolsIdVersionsVersionIdTypeFilesGet_Container():
-    """Test for getting container files associated with a specific tool version
-    identified by the given tool and version identifiers.
-    """
-    app = Flask(__name__)
-    app.config['FOCA'] = Config(
-        db=MongoConfig(**MONGO_CONFIG)
-    )
-    mock_resp = deepcopy(MOCK_FILES_DB_ENTRY)
-    app.config['FOCA'].db.dbs['trsStore'] \
-        .collections['files'].client = mongomock.MongoClient().db.collection
-    app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
-        .client.insert_one(mock_resp)
-
-    with app.app_context():
-        res = toolsIdVersionsVersionIdTypeFilesGet.__wrapped__(
-            id=MOCK_ID,
-            version_id=MOCK_ID,
-            type=MOCK_CONTAINER_FILE['type']
-        )
-        assert res == [MOCK_CONTAINER_FILE["tool_file"]]
-
-
-def test_toolsIdVersionsVersionIdTypeFilesGet_Other():
-    """Test for getting other files associated with a specific tool version
-    identified by the given tool and version identifiers.
-    """
-    app = Flask(__name__)
-    app.config['FOCA'] = Config(
-        db=MongoConfig(**MONGO_CONFIG)
-    )
-    mock_resp = deepcopy(MOCK_FILES_DB_ENTRY)
-    app.config['FOCA'].db.dbs['trsStore'] \
-        .collections['files'].client = mongomock.MongoClient().db.collection
-    app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
-        .client.insert_one(mock_resp)
-
-    with app.app_context():
-        res = toolsIdVersionsVersionIdTypeFilesGet.__wrapped__(
-            id=MOCK_ID,
-            version_id=MOCK_ID,
-            type=MOCK_OTHER_FILE['type']
-        )
-        assert res == [MOCK_OTHER_FILE["tool_file"]]
 
 
 def test_toolsIdVersionsVersionIdTypeFilesGet_no_tool_file_NotFound():
@@ -381,8 +310,8 @@ def test_toolsIdVersionsVersionIdTypeFilesGet_no_tool_file_NotFound():
             )
 
 
-def test_toolsIdVersionsVersionIdTypeFilesGet_wrong_tool_bad_request():
-    """Test for getting files when incorrect type is specified"""
+def test_toolsIdVersionsVersionIdTypeFilesGet_wrong_type_BadRequest():
+    """Test for getting files when an invalid type is specified."""
     app = Flask(__name__)
     app.config['FOCA'] = Config(
         db=MongoConfig(**MONGO_CONFIG)

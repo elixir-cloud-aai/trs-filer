@@ -115,7 +115,7 @@ MOCK_TEST_FILE = {
         "file_type": "TEST_FILE",
         "path": "path",
     },
-    "type": "JSON"
+    "type": "CWL",
 }
 MOCK_DESCRIPTOR_FILE = {
     "file_wrapper": {
@@ -132,7 +132,7 @@ MOCK_DESCRIPTOR_FILE = {
         "file_type": "PRIMARY_DESCRIPTOR",
         "path": "path",
     },
-    "type": "CWL"
+    "type": "CWL",
 }
 MOCK_CONTAINER_FILE = {
     "file_wrapper": {
@@ -149,7 +149,7 @@ MOCK_CONTAINER_FILE = {
         "file_type": "CONTAINERFILE",
         "path": "path",
     },
-    "type": "Docker"
+    "type": "Docker",
 }
 MOCK_OTHER_FILE = {
     "file_wrapper": {
@@ -166,7 +166,7 @@ MOCK_OTHER_FILE = {
         "file_type": "OTHER",
         "path": "path",
     },
-    "type": "OTHER"
+    "type": "CWL"
 }
 MOCK_FILES = [
     MOCK_TEST_FILE,
