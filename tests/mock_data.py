@@ -134,6 +134,23 @@ MOCK_DESCRIPTOR_FILE = {
     },
     "type": "CWL",
 }
+MOCK_DESCRIPTOR_SEC_FILE = {
+    "file_wrapper": {
+        "checksum": [
+            {
+                "checksum": "checksum",
+                "type": "sha1",
+            }
+        ],
+        "content": "content",
+        "url": "url",
+    },
+    "tool_file": {
+        "file_type": "SECONDARY_DESCRIPTOR",
+        "path": "path_tmp",
+    },
+    "type": "CWL"
+}
 MOCK_CONTAINER_FILE = {
     "file_wrapper": {
         "checksum": [
@@ -182,7 +199,7 @@ MOCK_FILES_DB_ENTRY = {
             "tests": [MOCK_TEST_FILE],
             "others": [MOCK_OTHER_FILE],
             "containers": [MOCK_CONTAINER_FILE],
-            "descriptors": [MOCK_DESCRIPTOR_FILE],
+            "descriptors": [MOCK_DESCRIPTOR_FILE, MOCK_DESCRIPTOR_SEC_FILE],
         }
     ],
 }
