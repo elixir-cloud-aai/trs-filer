@@ -2,6 +2,7 @@
 
 import logging
 from typing import (Optional, Dict, List, Tuple)
+from urllib.parse import unquote
 
 from flask import (request, current_app)
 from foca.utils.logging import log_traffic
@@ -298,12 +299,16 @@ def toolsIdVersionsVersionIdTypeDescriptorRelativePathGet(
         version_id: Tool version identifier.
         relative_path: A relative path to the additional file (same directory
         or subdirectories), for example 'foo.cwl' would return a 'foo.cwl'
-        from the same directory as the main descriptor.
+        from the same directory as the main descriptor. Needs to be percent/url
+        encoded/quoted.
 
     Returns:
         Additional files associated with a given descriptor type of a given
         tool version.
     """
+    logger.debug(f"Encoded relative path: '{relative_path}'")
+    relative_path = unquote(relative_path)
+    logger.debug(f"Decoded relative path: '{relative_path}'")
     ret = {}
     validate_descriptor_type(type=type)
 
