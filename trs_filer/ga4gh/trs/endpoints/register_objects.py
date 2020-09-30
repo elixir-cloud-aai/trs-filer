@@ -180,7 +180,6 @@ class RegisterTool:
                     filter={'id': self.data['toolclass']['id']},
                     projection={'_id': False},
                 )
-                print(data)
                 if data is None:
                     raise BadRequest
             tool_class = RegisterToolClass(
@@ -392,6 +391,14 @@ class RegisterToolVersion:
                         )
                         raise BadRequest
                     self.primary_descriptor_flags[_file['type']] = True
+
+                if _file['tool_file']['file_type'] == "SECONDARY_DESCRIPTOR":
+                    if not self.primary_descriptor_flags[_file['type']]:
+                        logger.error(
+                            "PRIMARY_DESCRIPTOR must be added for the same "
+                            "descriptor type to add SECONDARY_DESCRIPTOR."
+                        )
+                        raise BadRequest
                 self.files['descriptors'].append(_file)
 
             # validate image file types

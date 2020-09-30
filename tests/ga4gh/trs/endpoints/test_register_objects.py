@@ -18,6 +18,7 @@ from tests.mock_data import (
     ENDPOINT_CONFIG_TOOL_CLASS_VALIDATION,
     MOCK_CONTAINER_FILE,
     MOCK_DESCRIPTOR_FILE,
+    MOCK_DESCRIPTOR_SEC_FILE,
     MOCK_FILES_CHECKSUM_MISSING,
     MOCK_FILES_CONTENT_URL_MISSING,
     MOCK_ID,
@@ -367,6 +368,41 @@ class TestRegisterToolVersion:
                 tool.data['files'] = data['files']
                 tool.primary_descriptor_flags['CWL'] = True
                 tool.process_files()
+
+    def test_process_files_first_secondary_descriptor_type(self):
+        """Test for processing files with a secondary descriptor
+        before primary."""
+        app = Flask(__name__)
+        app.config['FOCA'] = Config(
+            db=MongoConfig(**MONGO_CONFIG),
+            endpoints=ENDPOINT_CONFIG_CHARSET_LITERAL,
+        )
+
+        data = deepcopy(MOCK_VERSION_NO_ID)
+        mock_file = deepcopy(MOCK_DESCRIPTOR_SEC_FILE)
+        with app.app_context():
+            with pytest.raises(BadRequest):
+                tool = RegisterToolVersion(data=data, id=MOCK_ID)
+                tool.data['files'] = [mock_file]
+                tool.primary_descriptor_flags['CWL'] = False
+                tool.process_files()
+
+    def test_process_files_first_primary_then_secondary_descriptor_type(self):
+        """Test for processing files with a secondary descriptor after
+        primary."""
+        app = Flask(__name__)
+        app.config['FOCA'] = Config(
+            db=MongoConfig(**MONGO_CONFIG),
+            endpoints=ENDPOINT_CONFIG_CHARSET_LITERAL,
+        )
+
+        data = deepcopy(MOCK_VERSION_NO_ID)
+        mock_file = deepcopy(MOCK_DESCRIPTOR_SEC_FILE)
+        with app.app_context():
+            tool = RegisterToolVersion(data=data, id=MOCK_ID)
+            tool.data['files'] = [mock_file]
+            tool.primary_descriptor_flags['CWL'] = True
+            tool.process_files()
 
     def test_process_files_invalid_container_type(self):
         """Test for processing files with an invalid container type."""
