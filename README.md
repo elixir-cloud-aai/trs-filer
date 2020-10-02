@@ -4,23 +4,23 @@
 [![Build_status][badge-build-status]][badge-url-build-status]
 [![Coverage][badge-coverage]][badge-url-coverage]
 
-## Synopsis
 
+## Synopsis
 
 ## Description
 
-
 ## Usage
-
 
 ## Contributing
 
-This project is a community effort and lives off your contributions, be it in
+
+This Project is a community effort and lives off your contributions, be it in
 the form of bug reports, feature requests, discussions, or fixes and other code
 changes. Please refer to our organization's [contributing
 guidelines][res-elixir-cloud-contributing] if you are interested to contribute.
 Please mind the [code of conduct][res-elixir-cloud-coc] for all interactions
-with the community.
+with the  Community.
+
 
 ## Versioning
 
@@ -28,10 +28,13 @@ The project adopts the [semantic versioning][res-semver] scheme for versioning.
 Currently the service is in beta stage, so the API may change without further
 notice.
 
+
 ## License
 
 This project is covered by the [Apache License 2.0][license-apache] also
 [shipped with this repository][license].
+
+
 
 ## Contact
 
@@ -39,6 +42,7 @@ The project is a collaborative effort under the umbrella of [ELIXIR Cloud &
 AAI][org-elixir-cloud]. Follow the link to get in touch with us via chat or
 email. Please mention the name of this service for any inquiry, proposal,
 question etc.
+
 
 [badge-build-status]:<https://travis-ci.com/elixir-cloud-aai/trs-filer.svg?branch=dev>
 [badge-coverage]:<https://img.shields.io/coveralls/github/elixir-cloud-aai/trs-filer>
