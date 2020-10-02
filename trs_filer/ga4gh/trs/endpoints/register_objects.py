@@ -284,6 +284,7 @@ class RegisterToolVersion:
             current_app.config['FOCA'].db.dbs['trsStore']
             .collections['files'].client
         )
+        self.checked_files = False
 
     def process_metadata(self) -> None:
         """Process version metadata."""
@@ -383,14 +384,20 @@ class RegisterToolVersion:
                 if _file['type'] not in self.descriptor_types:
                     logger.error("Invalid descriptor type.")
                     raise BadRequest
-                if _file['tool_file']['file_type'] == "PRIMARY_DESCRIPTOR":
-                    if self.primary_descriptor_flags[_file['type']]:
-                        logger.error(
-                            "Multiple PRIMARY_DESCRIPTOR files for the same "
-                            "descriptor type are not supported."
-                        )
-                        raise BadRequest
-                    self.primary_descriptor_flags[_file['type']] = True
+
+                for _file2 in self.data['files']:
+                    if self.checked_files:
+                        break
+                    if _file2['tool_file']['file_type'] == \
+                            "PRIMARY_DESCRIPTOR":
+                        if self.primary_descriptor_flags[_file2['type']]:
+                            logger.error(
+                                "Multiple PRIMARY_DESCRIPTOR files for "
+                                "the same descriptor type are not supported."
+                            )
+                            raise BadRequest
+                        self.primary_descriptor_flags[_file2['type']] = True
+                self.checked_files = True
 
                 if _file['tool_file']['file_type'] == "SECONDARY_DESCRIPTOR":
                     if not self.primary_descriptor_flags[_file['type']]:
