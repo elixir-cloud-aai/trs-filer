@@ -351,7 +351,7 @@ class TestRegisterToolVersion:
                 tool.data['files'] = [mock_file]
                 tool.process_files()
 
-    def test_process_files_multiple_primarydescriptor(self):
+    def test_process_files_multiple_primary_descriptors(self):
         """Test for processing files with more than one descriptor being
         annotated as primary descriptor.
         """
@@ -362,16 +362,16 @@ class TestRegisterToolVersion:
         )
 
         data = deepcopy(MOCK_VERSION_NO_ID)
+        data['files'].append(MOCK_DESCRIPTOR_FILE)
         with app.app_context():
             with pytest.raises(BadRequest):
                 tool = RegisterToolVersion(data=data, id=MOCK_ID)
                 tool.data['files'] = data['files']
-                tool.primary_descriptor_flags['CWL'] = True
                 tool.process_files()
 
-    def test_process_files_first_secondary_descriptor_type(self):
-        """Test for processing files with a secondary descriptor
-        before primary."""
+    def test_process_files_secondary_but_not_primary_descriptor(self):
+        """Test for processing files with a secondary descriptor but no
+        primary descriptor file."""
         app = Flask(__name__)
         app.config['FOCA'] = Config(
             db=MongoConfig(**MONGO_CONFIG),
@@ -379,30 +379,12 @@ class TestRegisterToolVersion:
         )
 
         data = deepcopy(MOCK_VERSION_NO_ID)
-        mock_file = deepcopy(MOCK_DESCRIPTOR_SEC_FILE)
+        data['files'] = [MOCK_DESCRIPTOR_SEC_FILE]
         with app.app_context():
             with pytest.raises(BadRequest):
                 tool = RegisterToolVersion(data=data, id=MOCK_ID)
-                tool.data['files'] = [mock_file]
-                tool.primary_descriptor_flags['CWL'] = False
+                tool.data['files'] = data['files']
                 tool.process_files()
-
-    def test_process_files_first_primary_then_secondary_descriptor_type(self):
-        """Test for processing files with a secondary descriptor after
-        primary."""
-        app = Flask(__name__)
-        app.config['FOCA'] = Config(
-            db=MongoConfig(**MONGO_CONFIG),
-            endpoints=ENDPOINT_CONFIG_CHARSET_LITERAL,
-        )
-
-        data = deepcopy(MOCK_VERSION_NO_ID)
-        mock_file = deepcopy(MOCK_DESCRIPTOR_SEC_FILE)
-        with app.app_context():
-            tool = RegisterToolVersion(data=data, id=MOCK_ID)
-            tool.data['files'] = [mock_file]
-            tool.primary_descriptor_flags['CWL'] = True
-            tool.process_files()
 
     def test_process_files_invalid_container_type(self):
         """Test for processing files with an invalid container type."""

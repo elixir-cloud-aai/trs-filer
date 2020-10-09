@@ -1,5 +1,6 @@
 """Controllers for registering new objects."""
 
+from collections import defaultdict
 import logging
 import string  # noqa: F401
 import socket
@@ -68,7 +69,7 @@ class RegisterTool:
         self.data = data
         self.data['id'] = None if id is None else id
         self.replace = True
-        self.id_charset = conf['tool']['id']['charset']
+        self.id_charset: str = conf['tool']['id']['charset']
         self.id_length = int(conf['tool']['id']['length'])
         self.meta_version_init = int(conf['tool']['meta_version']['init'])
         self.url_prefix = conf['service']['url_prefix']
@@ -249,9 +250,6 @@ class RegisterToolVersion:
             api_path: Base path at which API endpoints can be reached. For
                 constructing tool and version `url` properties.
             files: Container for storing file (meta)data.
-            primary_descriptor_flags: Dictionary to keep track of which
-                descriptor types have a `PRIMARY_DESCRIPTOR` file associated
-                with them.
             db_coll_tools: Database collection for storing tool objects.
             db_coll_files: Database collection for storing file objects.
         """
@@ -273,9 +271,6 @@ class RegisterToolVersion:
             "descriptors": [],
             "containers": [],
         }
-        self.primary_descriptor_flags: Dict[str, bool] = {
-            k: False for k in self.descriptor_types
-        }
         self.db_coll_tools = (
             current_app.config['FOCA'].db.dbs['trsStore']
             .collections['tools'].client
@@ -284,7 +279,6 @@ class RegisterToolVersion:
             current_app.config['FOCA'].db.dbs['trsStore']
             .collections['files'].client
         )
-        self.checked_files = False
 
     def process_metadata(self) -> None:
         """Process version metadata."""
@@ -326,6 +320,38 @@ class RegisterToolVersion:
     def process_files(self) -> None:
         """Process file (meta)data."""
         self.files['id'] = self.data['id']
+
+        # validate file types
+        file_types = defaultdict(list)
+        for f in self.data['files']:
+            file_types[f['type']].append(f['tool_file']['file_type'])
+        invalid = False
+        for d_type, f_types in file_types.items():
+            if f_types.count("PRIMARY_DESCRIPTOR") > 1:
+                logger.error(
+                    "More than one file is annotated as a "
+                    f"'PRIMARY_DESCRIPTOR' file for descriptor type '{d_type}'"
+                )
+                invalid = True
+            if (
+                "SECONDARY_DESCRIPTOR" in f_types and
+                "PRIMARY_DESCRIPTOR" not in f_types
+            ):
+                logger.error(
+                    "At least one file is annotated as a "
+                    "'SECONDARY_DESCRIPTOR' file for descriptor type "
+                    f"'{d_type}', but no 'PRIMARY_DESCRIPTOR' file is "
+                    "available."
+                )
+                invalid = True
+        if invalid:
+            logger.error(
+                "If there are any descriptor files associated with a "
+                "a given descriptor type of a given tool version, exactly "
+                "one of the files must be desginaed the 'PRIMARY_DESCRIPTOR' "
+                "file"
+            )
+            raise BadRequest
 
         # validate required fields
         for _file in self.data['files']:
@@ -384,29 +410,6 @@ class RegisterToolVersion:
                 if _file['type'] not in self.descriptor_types:
                     logger.error("Invalid descriptor type.")
                     raise BadRequest
-
-                for _file2 in self.data['files']:
-                    if self.checked_files:
-                        break
-                    if _file2['tool_file']['file_type'] == \
-                            "PRIMARY_DESCRIPTOR":
-                        if self.primary_descriptor_flags[_file2['type']]:
-                            logger.error(
-                                "Multiple PRIMARY_DESCRIPTOR files for "
-                                "the same descriptor type are not supported."
-                            )
-                            raise BadRequest
-                        self.primary_descriptor_flags[_file2['type']] = True
-                self.checked_files = True
-
-                if _file['tool_file']['file_type'] == "SECONDARY_DESCRIPTOR":
-                    if not self.primary_descriptor_flags[_file['type']]:
-                        logger.error(
-                            "PRIMARY_DESCRIPTOR must be added for the same "
-                            "descriptor type to add SECONDARY_DESCRIPTOR."
-                        )
-                        raise BadRequest
-                self.files['descriptors'].append(_file)
 
             # validate image file types
             elif _file['tool_file']['file_type'] == "CONTAINERFILE":
