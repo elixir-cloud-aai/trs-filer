@@ -362,7 +362,9 @@ class TestRegisterToolVersion:
         )
 
         data = deepcopy(MOCK_VERSION_NO_ID)
-        data['files'].append(MOCK_DESCRIPTOR_FILE)
+        mock_descriptor = deepcopy(MOCK_DESCRIPTOR_FILE)
+        mock_descriptor['tool_file']['path'] = 'random_path'
+        data['files'].append(mock_descriptor)
         with app.app_context():
             with pytest.raises(BadRequest):
                 tool = RegisterToolVersion(data=data, id=MOCK_ID)
