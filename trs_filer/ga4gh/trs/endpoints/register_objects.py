@@ -320,6 +320,7 @@ class RegisterToolVersion:
     def process_files(self) -> None:
         """Process file (meta)data."""
         self.files['id'] = self.data['id']
+        file_path_array = []
 
         # validate file types
         file_types = defaultdict(list)
@@ -417,6 +418,13 @@ class RegisterToolVersion:
                     logger.error("Missing or invalid image file type.")
                     raise BadRequest
                 self.files['containers'].append(_file)
+
+            # validate unique paths
+            if _file['tool_file']['path'] not in file_path_array:
+                file_path_array.append(_file['tool_file']['path'])
+            else:
+                logger.error("Duplicate file paths not allowed.")
+                raise BadRequest
 
     def register_metadata(self) -> None:
         """Register version with tool."""

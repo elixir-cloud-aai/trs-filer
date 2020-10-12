@@ -450,7 +450,7 @@ def test_toolsIdVersionsVersionIdTypeDescriptorRelativePathGet():
                 type='CWL',
                 id=MOCK_ID,
                 version_id=MOCK_ID,
-                relative_path='path_tmp',
+                relative_path='path_sec_desc_cwl',
             )
         assert res == MOCK_DESCRIPTOR_SEC_FILE["file_wrapper"]
 
