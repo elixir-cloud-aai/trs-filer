@@ -122,7 +122,10 @@ class RegisterTool:
             )
 
             # process version information
-            version_list = [v.get('id', None) for v in self.data['versions']]
+            version_list = [
+                v.get('id', None) for v in self.data['versions']
+                if v.get('id', None) is not None
+            ]
             if len(version_list) != len(set(version_list)):
                 logger.error("Duplicate tool version IDs specified.")
                 raise BadRequest
