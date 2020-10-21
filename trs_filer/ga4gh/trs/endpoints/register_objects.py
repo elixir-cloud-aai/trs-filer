@@ -310,14 +310,8 @@ class RegisterToolVersion:
         )
 
         # process files
+        self.process_files()
         if 'files' in self.data:
-            # Set `containerfile` property
-            self.data['containerfile'] = False
-            for _file in self.data['files']:
-                if _file['tool_file']['file_type'] == "CONTAINERFILE":
-                    self.data['containerfile'] = True
-                    break
-            self.process_files()
             self.data.pop('files')
 
     def process_files(self) -> None:
@@ -326,7 +320,7 @@ class RegisterToolVersion:
 
         # validate file types
         file_types = defaultdict(list)
-        for f in self.data['files']:
+        for f in self.data.get('files', []):
             file_types[f['type']].append(f['tool_file']['file_type'])
         invalid = False
         for d_type, f_types in file_types.items():
@@ -357,7 +351,7 @@ class RegisterToolVersion:
             raise BadRequest
 
         # validate required fields
-        for _file in self.data['files']:
+        for _file in self.data.get('files', []):
 
             # validate conditionally required properties
             if (
