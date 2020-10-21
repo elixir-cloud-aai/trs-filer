@@ -630,40 +630,35 @@ def deleteToolVersion(
         current_app.config['FOCA'].db.dbs['trsStore']
         .collections['files'].client
     )
-
-    # do not allow deleting the last version
-    # TODO: race condition
-    versions = toolsIdVersionsGet.__wrapped__(id)
-    if len(versions) == 1:
-        if version_id in [v.get('id', None) for v in versions]:
-            logger.error("Will not delete only remaining tool version.")
-            raise BadRequest
-        else:
-            raise NotFound
-
-    del_ver_tools = db_coll_tools.update_one(
-        filter={'id': id},
-        update={
-            '$pull': {
-                'versions': {'id': version_id},
-            },
+    filt = {
+        'id': id,
+        'versions.id': version_id,
+    }
+    update = {
+        '$pull': {
+            'versions': {'id': version_id},
         },
+    }
+    del_ver_tools = db_coll_tools.update_one(
+        filter=filt,
+        update=update,
     )
     del_ver_files = db_coll_files.update_one(
-        filter={'id': id},
-        update={
-            '$pull': {
-                'versions': {'id': version_id},
-            },
-        },
+        filter=filt,
+        update=update,
     )
-    if (
+    if not (
+        del_ver_tools.matched_count and
+        del_ver_files.matched_count
+    ):
+        raise NotFound
+    elif not (
         del_ver_tools.modified_count and
         del_ver_files.modified_count
     ):
-        return version_id
-    else:
         raise InternalServerError
+    else:
+        return version_id
 
 
 @log_traffic
