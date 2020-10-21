@@ -410,6 +410,7 @@ class RegisterToolVersion:
                 if _file['type'] not in self.descriptor_types:
                     logger.error("Invalid descriptor type.")
                     raise BadRequest
+                self.files['descriptors'].append(_file)
 
             # validate image file types
             elif _file['tool_file']['file_type'] == "CONTAINERFILE":
