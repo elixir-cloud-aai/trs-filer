@@ -820,7 +820,11 @@ def test_deleteToolVersion_tool_NotFound():
     mock_resp['id'] = MOCK_ID
     app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
         .client = mongomock.MongoClient().db.collection
+    app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
+        .client = mongomock.MongoClient().db.collection
     app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
+        .client.insert_one(mock_resp)
+    app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
         .client.insert_one(mock_resp)
 
     with app.app_context():
@@ -844,7 +848,11 @@ def test_deleteToolVersion_version_NotFound():
     mock_resp['id'] = MOCK_ID
     app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
         .client = mongomock.MongoClient().db.collection
+    app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
+        .client = mongomock.MongoClient().db.collection
     app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
+        .client.insert_one(mock_resp)
+    app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
         .client.insert_one(mock_resp)
 
     with app.app_context():
@@ -855,37 +863,21 @@ def test_deleteToolVersion_version_NotFound():
             )
 
 
-def test_deleteToolVersion_BadRequest():
-    """Test for deleting a version `version_id` of a tool associated with a
-    given `id` when that version is the last remaining version associated with
-    the tool.
-    """
-    app = Flask(__name__)
-    app.config['FOCA'] = Config(
-        db=MongoConfig(**MONGO_CONFIG),
-        endpoints=ENDPOINT_CONFIG,
-    )
-    mock_resp = deepcopy(MOCK_TOOL_VERSION_ID)
-    mock_resp['id'] = MOCK_ID
-    app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
-        .client = mongomock.MongoClient().db.collection
-    app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
-        .client.insert_one(mock_resp)
-
-    data = deepcopy(MOCK_TOOL_VERSION_ID)
-    with app.app_context():
-        with pytest.raises(BadRequest):
-            deleteToolVersion.__wrapped__(
-                id=MOCK_ID,
-                version_id=data['versions'][0]['id'],
-            )
-
-
-def test_deleteToolVersion_InternalServerError():
+def test_deleteToolVersion_InternalServerError(monkeypatch):
     """Test for deleting a version `version_id` of a tool associated with a
     given `id` when the deletion was incomplete (either only the tool or only
     the associated files were deleted).
     """
+    class MongoMockResponse:
+        def __init__(self, matched_count, modified_count):
+            self.matched_count = matched_count
+            self.modified_count = modified_count
+
+    mock_response = MongoMockResponse(matched_count=1, modified_count=0)
+    monkeypatch.setattr(
+        'mongomock.collection.Collection.update_one',
+        lambda *args, **kwargs: mock_response
+    )
     app = Flask(__name__)
     app.config['FOCA'] = Config(
         db=MongoConfig(**MONGO_CONFIG),
@@ -899,6 +891,8 @@ def test_deleteToolVersion_InternalServerError():
     app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
         .client = mongomock.MongoClient().db.collection
     app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
+        .client.insert_one(mock_resp)
+    app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
         .client.insert_one(mock_resp)
 
     data = deepcopy(MOCK_TOOL_VERSION_ID)
