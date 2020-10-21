@@ -55,6 +55,10 @@ class RegisterToolClass:
             db_coll_files: Database collection for storing file objects.
             db_coll_classes: Database collection for storing tool class
                 objects.
+            processed: Whether the tool class data is already processed. Used
+                to speed up registration in situations where a random
+                identifier has to be generated multiple times because of
+                collisions.
         """
         conf = current_app.config['FOCA'].endpoints
         self.data = data
@@ -71,35 +75,32 @@ class RegisterToolClass:
             current_app.config['FOCA'].db.dbs['trsStore']
             .collections['toolclasses'].client
         )
+        self.processed = False
 
     def process_metadata(self) -> None:
         """Process tool class metadata."""
-        # evaluate character set expression or interpret literal string as set
-        try:
-            self.id_charset = eval(self.id_charset)
-        except Exception:
-            self.id_charset = ''.join(sorted(set(self.id_charset)))
+        # set random ID unless ID is provided
+        if self.data['id'] is None:
+            if not self.processed:
+                self.replace = False
+                try:
+                    self.id_charset = eval(self.id_charset)
+                except Exception:
+                    self.id_charset = ''.join(
+                        sorted(set(self.id_charset))  # type: ignore
+                    )
+            # evaluate character set expression or interpret literal string as
+            # set
+            self.data['id'] = generate_id(
+                charset=self.id_charset,
+                length=self.id_length
+            )
+        self.processed = True
 
     def register_metadata(self) -> None:
-        """Register toolClass with TRS.
-
-        Returns:
-            ToolClass object.
-        """
-        self.process_metadata()
-
-        # set unique ID, dependent values and register object
-        i = 0
-        while i < 10:
-            i += 1
-            # set random ID unless ID is provided
-            if self.data['id'] is None:
-                self.replace = False
-                self.data['id'] = generate_id(
-                    charset=self.id_charset,
-                    length=self.id_length
-                )
-
+        """Register toolClass with TRS."""
+        for i in range(10):
+            self.process_metadata()
             if self.replace:
                 # replace tool class in database
                 result = self.db_coll_classes.replace_one(
@@ -112,13 +113,11 @@ class RegisterToolClass:
                         f"Replaced tool class with id '{self.data['id']}'."
                     )
                     break
-
             # insert tool class into database
             try:
                 self.db_coll_classes.insert_one(document=self.data)
             except DuplicateKeyError:
                 continue
-
             logger.info(f"Added tool class with id '{self.data['id']}'.")
             break
         else:

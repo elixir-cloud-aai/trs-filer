@@ -13,5 +13,5 @@ trs_filer:
 apiServer: kubernetes.default.svc:443 # address of k8s API server
 
 mongodb:
-  image: mongo:3.6
+  image: mongo:4.4
   volumeSize: 1Gi

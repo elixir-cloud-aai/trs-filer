@@ -2,6 +2,8 @@
 
 from copy import deepcopy
 
+from pymongo import MongoClient
+
 MOCK_ID = "mock_id"
 MOCK_ID_ONE_CHAR = "A"
 CHARSET_EXPRESSION = 'string.digits'
@@ -18,6 +20,7 @@ DB_CONFIG = {
         'toolclasses': COLLECTION_CONFIG,
         'tools': COLLECTION_CONFIG,
     },
+    'client': MongoClient('mongodb', 27017)['trsStore'],
 }
 MONGO_CONFIG = {
     'host': 'mongodb',

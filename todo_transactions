@@ -1,0 +1,93 @@
+POST tool
+    create with random ID
+PUT tool
+    create or overwrite with provided ID
+
+POST version
+    create with random ID
+PUT version
+    create or overwrite with provided ID
+
+POST toolClass
+    create with random ID
+    if called directly, create
+    if called from POST tool, just generate data to insert, then create in transaction
+PUT toolClass
+    create or overwrite with provided ID
+    if called directly, create/overwrite
+    if called from POST tool, just 
+    
+    
+Scenarios:
+1. user POSTs/PUTs tool, does not specify tool class ID, create on the fly enabled => create tool class
+2. user POSTs/PUTs tool, does not specify tool class ID, create on the fly disabled => BadRequest
+3. user POSTs/PUTs tool, specifies tool class ID, create on the fly enabled => create tool class only if not exists; if exists, validate*
+4. user POSTs/PUTs tool, specified tool class ID, create on the fly disabled => BadRequest if tool class not exists; if exists, validate*
+* tool class validation includes name, description if provided as well
+
+POST/PUT tool:
+    process tool data, possibly incl. creating random tool ID
+    process version data, incl. files, and possibly incl. creating random version IDs
+    process tool class data, possibly incl. creating random tool class ID
+    1. register metadata with transaction to write to tools, files, classes collections (POST: insert; PUT: insert or replace)
+    2. N/A
+    3. register metadata with transaction to write to tools, files, classes collections (POST: insert; PUT: insert or replace) OR
+       register metadata with transaction to write to tools, files collections only (POST: insert; PUT: insert or replace)
+    4. register metadata with transaction to write to tools, files collections only (POST: insert; PUT: insert or replace)
+    => 2*2 transaction callbacks (possibly parameterize insert/replace)
+
+POST/PUT version:
+    process version data, incl. files, and possibly incl. creating random version ID
+    register metadata with transaction to write to tools, files collections (POST: insert; PUT: insert or replace)
+    => 2*1 transaction callbacks (possibly parameterize insert/replace)
+
+POST/PUT tool class:
+    process tool class data, possibly incl. creating random tool class ID
+    register metadata to write to classes collection (POST: insert; PUT: insert or replace)
+    => No transactions, leave as is
+
+
+
+
+
+
+
+
+
+docker-compose up -d --build
+
+# register tool
+
+
+
+docker exec -it $(docker ps | grep elixircloud | cut -f1 -d" ") python
+
+tool_id = "4OFYJW"
+
+from pymongo import MongoClient
+client = MongoClient()
+client = MongoClient('mongodb', 27017)
+db = client.trsStore
+db.files.find_one({"id": tool_id})
+
+quit()
+docker-compose down
+
+
+
+from flask_pymongo import PyMongo
+from flask import Flask
+import os
+host = "mongodb"
+port = 27017
+db = "trsStore"
+app = Flask(__name__)
+app.config['MONGO_URI'] = 'mongodb://{host}:{port}/{db}'.format(
+    host=os.environ.get('MONGO_HOST', host),
+    port=os.environ.get('MONGO_PORT', port),
+    db=os.environ.get('MONGO_DBNAME', db),
+)
+client = PyMongo(app)
+
+from foca.foca import foca
+app = foca("config.yaml")

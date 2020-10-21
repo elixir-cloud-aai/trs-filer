@@ -8,7 +8,11 @@ from typing import (Dict, Optional)
 import urllib3
 
 from flask import (current_app)
+from pymongo import WriteConcern
+from pymongo.client_session import ClientSession
 from pymongo.errors import DuplicateKeyError
+from pymongo.read_concern import ReadConcern
+from pymongo.read_preferences import ReadPreference
 import requests
 
 from trs_filer.errors.exceptions import (
@@ -60,6 +64,7 @@ class RegisterTool:
                 if it is associated with a pre-existing tool class; if `False`,
                 the tool class associated with the tool to be added is inserted
                 into the tool class database collection on the fly.
+            db: Database for storing all app data.
             db_coll_tools: Database collection for storing tool objects.
             db_coll_files: Database collection for storing file objects.
             db_coll_classes: Database collection for storing tool class
@@ -77,6 +82,9 @@ class RegisterTool:
         self.external_port = conf['service']['external_port']
         self.api_path = conf['service']['api_path']
         self.tool_class_validation = conf['toolclass']['validation']
+        self.db = (
+            current_app.config['FOCA'].db.dbs['trsStore'].client.client
+        )
         self.db_coll_tools = (
             current_app.config['FOCA'].db.dbs['trsStore']
             .collections['tools'].client
@@ -97,6 +105,7 @@ class RegisterTool:
             self.id_charset = eval(self.id_charset)
         except Exception:
             self.id_charset = ''.join(sorted(set(self.id_charset)))
+
         # init meta version
         self.data['meta_version'] = str(self.meta_version_init)
 
@@ -134,6 +143,7 @@ class RegisterTool:
                 'versions': [],
             }
             for version in self.data['versions']:
+                logger.warning("NEW VERSION")
                 version_proc = RegisterToolVersion(
                     id=self.data['id'],
                     version_id=version.get('id', None),
@@ -179,19 +189,19 @@ class RegisterTool:
             self.db_coll_files.insert_one(document=files)
 
             # insert tool class into database
+            _class_data = self.data['toolclass']
             if self.tool_class_validation:
                 data = self.db_coll_classes.find_one(
-                    filter={'id': self.data['toolclass']['id']},
+                    filter={'id': _class_data['id']},
                     projection={'_id': False},
                 )
-                if data is None:
+                if data != _class_data:
                     raise BadRequest
             tool_class = RegisterToolClass(
-                data=self.data['toolclass'],
-                id=self.data['toolclass']['id'],
+                data=_class_data,
+                id=_class_data.get('id', None),
             )
             tool_class.register_metadata()
-
             logger.info(f"Added tool with id '{self.data['id']}'.")
             break
         else:
@@ -253,6 +263,7 @@ class RegisterToolVersion:
             api_path: Base path at which API endpoints can be reached. For
                 constructing tool and version `url` properties.
             files: Container for storing file (meta)data.
+            db: Database for storing all app data.
             db_coll_tools: Database collection for storing tool objects.
             db_coll_files: Database collection for storing file objects.
         """
@@ -274,6 +285,13 @@ class RegisterToolVersion:
             "descriptors": [],
             "containers": [],
         }
+        self.db = (
+            current_app.config['FOCA'].db.dbs['trsStore'].client.client
+        )
+        self.write_concern = WriteConcern(
+            "majority",
+            wtimeout=1000,
+        )
         self.db_coll_tools = (
             current_app.config['FOCA'].db.dbs['trsStore']
             .collections['tools'].client
@@ -423,88 +441,51 @@ class RegisterToolVersion:
         if obj is None:
             raise NotFound
 
-        # keep trying to generate unique ID
-        i = 0
-        while i < 10:
-            i += 1
+        # register object
+        for i in range(10):
             self.process_metadata()
             if self.replace:
 
-                # replace tool version in database
-                result_tools = self.db_coll_tools.update_one(
-                    filter={
-                        'id': self.id,
-                        'versions.id': self.data['id'],
-                    },
-                    update={
-                        '$set': {
-                            'versions.$': self.data,
-                        },
-                    },
-                )
-
-                # replace tool version files in database
-                result_files = self.db_coll_files.update_one(
-                    filter={
-                        'id': self.id,
-                        'versions.id': self.data['id'],
-                    },
-                    update={
-                        '$set': {
-                            'versions.$': self.files,
-                        },
-                    },
-                )
-
-                # verify replacement
-                if (
-                    result_tools.raw_result['updatedExisting'] and
-                    result_files.raw_result['updatedExisting']
-                ):
-                    logger.info(
-                        f"Replaced version with id '{self.data['id']}' in "
-                        f"tool '{self.id}'."
+                with self.db.start_session() as session:
+                    session.with_transaction(
+                        self.callback_replace,
+                        read_concern=ReadConcern('local'),
+                        write_concern=self.write_concern,
+                        read_preference=ReadPreference.PRIMARY,
                     )
-                    break
+                break
+                ## verify replacement
+                #if (
+                #    result_tools.raw_result['updatedExisting'] and
+                #    result_files.raw_result['updatedExisting']
+                #):
+                #    logger.info(
+                #        f"Replaced version with id '{self.data['id']}' in "
+                #        f"tool '{self.id}'."
+                #    )
+                #    break
 
             # insert tool version into database
-            result_tools = self.db_coll_tools.update_one(
-                filter={
-                    'id': self.id,
-                    'versions.id': {'$ne': self.data['id']},
-                },
-                update={
-                    '$push': {
-                        'versions': self.data,
-                    },
-                },
-            )
-
-            # insert tool version files into database
-            result_files = self.db_coll_files.update_one(
-                filter={
-                    'id': self.id,
-                    'versions.id': {'$ne': self.data['id']},
-                },
-                update={
-                    '$push': {
-                        'versions': self.files,
-                    },
-                },
-            )
-
-            # verify insertion
-            if (
-                result_tools.modified_count and
-                result_files.modified_count
-            ):
-                logger.info(
-                    f"Added version with id '{self.data['id']}' to tool "
-                    f"'{self.id}'."
+            with self.db.start_session() as session:
+                session.with_transaction(
+                    self.callback_insert,
+                    read_concern=ReadConcern('local'),
+                    write_concern=self.write_concern,
+                    read_preference=ReadPreference.PRIMARY,
                 )
-                break
+            break
+            ## verify insertion
+            #if (
+            #    result_tools.modified_count and
+            #    result_files.modified_count
+            #):
+            #    logger.info(
+            #        f"Added version with id '{self.data['id']}' to tool "
+            #        f"'{self.id}'."
+            #    )
+            #    break
         else:
-            raise InternalServerError
+            raise InternalServerError("Too many tries to insert data.")
         logger.debug(
             "Entry in 'tools' collection: "
             f"{self.db_coll_tools.find_one({'id': self.data['id']})}"
@@ -512,4 +493,60 @@ class RegisterToolVersion:
         logger.debug(
             "Entry in 'files' collection: "
             f"{self.db_coll_files.find_one({'id': self.data['id']})}"
+        )
+
+    def callback_replace(self, session) -> None:
+        coll_tools = session.client.trsStore.tools
+        coll_files = session.client.trsStore.files
+        coll_tools.update_one(
+            filter={
+                'id': self.id,
+                'versions.id': self.data['id'],
+            },
+            update={
+                '$set': {
+                    'versions.$': self.data,
+                },
+            },
+            session=session,
+        )
+        coll_files.update_one(
+            filter={
+                'id': self.id,
+                'versions.id': self.data['id'],
+            },
+            update={
+                '$set': {
+                    'versions.$': self.files,
+                },
+            },
+            session=session,
+        )
+
+    def callback_insert(self, session: ClientSession) -> None:
+        coll_tools = session.client.trsStore.tools
+        coll_files = session.client.trsStore.files
+        coll_tools.update_one(
+            filter={
+                'id': self.id,
+                'versions.id': {'$ne': self.data['id']},
+            },
+            update={
+                '$push': {
+                    'versions': self.data,
+                },
+            },
+            session=session,
+        )
+        coll_files.update_one(
+            filter={
+                'id': self.id,
+                'versions.id': {'$ne': self.data['id']},
+            },
+            update={
+                '$push': {
+                    'versions': self.files,
+                },
+            },
+            session=session,
         )

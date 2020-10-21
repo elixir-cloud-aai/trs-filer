@@ -24,6 +24,7 @@ from tests.mock_data import (
     MOCK_ID,
     MOCK_ID_ONE_CHAR,
     MOCK_TOOL,
+    MOCK_TOOL_CLASS,
     MOCK_TOOL_VERSION_ID,
     MOCK_TOOL_DUPLICATE_VERSION_IDS,
     MOCK_VERSION_ID,
@@ -206,21 +207,22 @@ class TestRegisterTool:
                 tool = RegisterTool(data=data)
                 tool.register_metadata()
 
-    def test_register_metadata_with_tool_class_validation(self):
+    def test_register_metadata_with_tool_class_validation(self, monkeypatch):
         """Test for creating a tool with tool class validation passing."""
         app = Flask(__name__)
         app.config['FOCA'] = Config(
             db=MongoConfig(**MONGO_CONFIG),
             endpoints=ENDPOINT_CONFIG_TOOL_CLASS_VALIDATION,
         )
+        mock_resp = deepcopy(MOCK_TOOL_CLASS)
         app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
-            .client = MagicMock()
+            .client = mongomock.MongoClient().db.collection
         app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
-            .client = MagicMock()
+            .client = mongomock.MongoClient().db.collection
         app.config['FOCA'].db.dbs['trsStore'].collections['toolclasses'] \
-            .client = MagicMock()
-        app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
-            .client.replace_one = MagicMock()
+            .client = mongomock.MongoClient().db.collection
+        app.config['FOCA'].db.dbs['trsStore'].collections['toolclasses'] \
+            .client.insert_one(mock_resp)
 
         data = deepcopy(MOCK_TOOL_VERSION_ID)
         with app.app_context():
@@ -241,8 +243,6 @@ class TestRegisterTool:
             .client = mongomock.MongoClient().db.collection
         app.config['FOCA'].db.dbs['trsStore'].collections['toolclasses'] \
             .client = mongomock.MongoClient().db.collection
-        app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
-            .client.replace_one = MagicMock()
 
         data = deepcopy(MOCK_TOOL_VERSION_ID)
         data['toolclass']['id'] = MOCK_ID + MOCK_ID
