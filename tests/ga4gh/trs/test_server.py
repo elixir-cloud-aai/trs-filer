@@ -364,8 +364,9 @@ def test_toolsIdVersionsVersionIdContainerfileGet_no_containerfile_NotFound():
         db=MongoConfig(**MONGO_CONFIG)
     )
     mock_resp = deepcopy(MOCK_FILES_DB_ENTRY)
+    mock_resp['versions'][0]['containers'] = []
     for version in mock_resp['versions']:
-        version['files'] = {}
+        version['files'] = []
     app.config['FOCA'].db.dbs['trsStore'] \
         .collections['files'].client = mongomock.MongoClient().db.collection
     app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
@@ -373,10 +374,11 @@ def test_toolsIdVersionsVersionIdContainerfileGet_no_containerfile_NotFound():
 
     with app.app_context():
         with pytest.raises(NotFound):
-            toolsIdVersionsVersionIdContainerfileGet.__wrapped__(
+            res = toolsIdVersionsVersionIdContainerfileGet.__wrapped__(
                 id=MOCK_ID,
-                version_id=MOCK_ID + MOCK_ID,
+                version_id=MOCK_ID,
             )
+            assert res == []
 
 
 # GET /tools/{id}/versions/{version_id}/{type}/descriptor
@@ -404,10 +406,11 @@ def test_toolsIdVersionsVersionIdTypeDescriptorGet():
         assert res == MOCK_DESCRIPTOR_FILE["file_wrapper"]
 
 
-def test_toolsIdVersionsVersionIdTypeDescriptorGet_type_not_found():
+def test_toolsIdVersionsVersionIdTypeDescriptorGet_tool_na_NotFound():
     """Test for getting `PRIMARY_DESCRIPTOR` wrapper associated with a specific
     tool version identified by the given tool and version identifiers for the
-    given input `type` when no descriptor for given `type` available.
+    given input `type` when a tool with the specified identifier is not
+    available.
     """
     app = Flask(__name__)
     app.config['FOCA'] = Config(
@@ -422,16 +425,66 @@ def test_toolsIdVersionsVersionIdTypeDescriptorGet_type_not_found():
     with app.app_context():
         with pytest.raises(NotFound):
             toolsIdVersionsVersionIdTypeDescriptorGet.__wrapped__(
-                type='WDL',
+                id=MOCK_ID + MOCK_ID,
+                version_id=MOCK_ID,
+                type="CWL",
+            )
+
+
+def test_toolsIdVersionsVersionIdTypeDescriptorGet_version_na_NotFound():
+    """Test for getting `PRIMARY_DESCRIPTOR` wrapper associated with a specific
+    tool version identified by the given tool and version identifiers for the
+    given input `type` when a version with the specified identifier is not
+    available.
+    """
+    app = Flask(__name__)
+    app.config['FOCA'] = Config(
+        db=MongoConfig(**MONGO_CONFIG)
+    )
+    mock_resp = deepcopy(MOCK_FILES_DB_ENTRY)
+    app.config['FOCA'].db.dbs['trsStore'] \
+        .collections['files'].client = mongomock.MongoClient().db.collection
+    app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
+        .client.insert_one(mock_resp)
+
+    with app.app_context():
+        with pytest.raises(NotFound):
+            toolsIdVersionsVersionIdTypeDescriptorGet.__wrapped__(
+                id=MOCK_ID,
+                version_id=MOCK_ID + MOCK_ID,
+                type="CWL",
+            )
+
+
+def test_toolsIdVersionsVersionIdTypeDescriptorGet_type_NotFound():
+    """Test for getting `PRIMARY_DESCRIPTOR` wrapper associated with a specific
+    tool version identified by the given tool and version identifiers for the
+    given input `type` when the descriptor type is not available.
+    """
+    app = Flask(__name__)
+    app.config['FOCA'] = Config(
+        db=MongoConfig(**MONGO_CONFIG)
+    )
+    mock_resp = deepcopy(MOCK_FILES_DB_ENTRY)
+    mock_resp['versions'][0]['descriptors'] = []
+    app.config['FOCA'].db.dbs['trsStore'] \
+        .collections['files'].client = mongomock.MongoClient().db.collection
+    app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
+        .client.insert_one(mock_resp)
+
+    with app.app_context():
+        with pytest.raises(NotFound):
+            toolsIdVersionsVersionIdTypeDescriptorGet.__wrapped__(
                 id=MOCK_ID,
                 version_id=MOCK_ID,
+                type='CWL',
             )
 
 
 # GET /tools/{id}/versions/{version_id}/{type}/descriptor/{relative_path}
 def test_toolsIdVersionsVersionIdTypeDescriptorRelativePathGet():
-    """Test for getting `SECONDARY_DESCRIPTOR` wrapper associated with a specific
-    tool version identified by the given tool and version identifiers for the
+    """Test for getting descriptor wrapper associated with a specific tool
+    version identified by the given tool and version identifiers for the
     given input `type` and `relative_path`.
     """
     app = Flask(__name__)
@@ -455,10 +508,63 @@ def test_toolsIdVersionsVersionIdTypeDescriptorRelativePathGet():
         assert res == MOCK_DESCRIPTOR_SEC_FILE["file_wrapper"]
 
 
+def test_toolsIdVersionsVersionIdTypeDescriptorRelativePathGet_tool_NotFound():
+    """Test for getting descriptor wrapper associated with a specific tool
+    version identified by the given tool and version identifiers for the
+    given input `type` and `relative_path` when a tool with the specified
+    identifier is not available.
+    """
+    app = Flask(__name__)
+    app.config['FOCA'] = Config(
+        db=MongoConfig(**MONGO_CONFIG)
+    )
+    mock_resp = deepcopy(MOCK_FILES_DB_ENTRY)
+    app.config['FOCA'].db.dbs['trsStore'] \
+        .collections['files'].client = mongomock.MongoClient().db.collection
+    app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
+        .client.insert_one(mock_resp)
+
+    with app.app_context():
+        with pytest.raises(NotFound):
+            toolsIdVersionsVersionIdTypeDescriptorRelativePathGet.__wrapped__(
+                id=MOCK_ID + MOCK_ID,
+                version_id=MOCK_ID,
+                type="CWL",
+                relative_path='path_tmp',
+            )
+
+
+def test_toolsIdVersionsVersionIdTypeDescriptorRelativePathGet_vers_NotFound():
+    """Test for getting descriptor wrapper associated with a specific tool
+    version identified by the given tool and version identifiers for the
+    given input `type` and `relative_path` when a tool version with the
+    specified identifier is not available.
+    """
+    app = Flask(__name__)
+    app.config['FOCA'] = Config(
+        db=MongoConfig(**MONGO_CONFIG)
+    )
+    mock_resp = deepcopy(MOCK_FILES_DB_ENTRY)
+    app.config['FOCA'].db.dbs['trsStore'] \
+        .collections['files'].client = mongomock.MongoClient().db.collection
+    app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
+        .client.insert_one(mock_resp)
+
+    with app.app_context():
+        with pytest.raises(NotFound):
+            toolsIdVersionsVersionIdTypeDescriptorRelativePathGet.__wrapped__(
+                id=MOCK_ID,
+                version_id=MOCK_ID + MOCK_ID,
+                type="CWL",
+                relative_path='path_tmp',
+            )
+
+
 def test_toolsIdVersionsVersionIdTypeDescriptorRelativePathGet_type_NotFound():
-    """Test for getting `SECONDARY_DESCRIPTOR` wrapper associated with a specific
-    tool version identified by the given tool and version identifiers for the
-    given input `type` and `relative_path`.
+    """Test for getting descriptor wrapper associated with a specific tool
+    version identified by the given tool and version identifiers for the
+    given input `type` and `relative_path` when a descriptor of the specified
+    descriptor type is not available.
     """
     app = Flask(__name__)
     app.config['FOCA'] = Config(
@@ -480,6 +586,33 @@ def test_toolsIdVersionsVersionIdTypeDescriptorRelativePathGet_type_NotFound():
             )
 
 
+def test_toolsIdVersionsVersionIdTypeDescriptorRelativePathGet_path_NotFound():
+    """Test for getting descriptor wrapper associated with a specific tool
+    version identified by the given tool and version identifiers for the
+    given input `type` and `relative_path` when a descriptor is not available
+    at the specified path.
+    """
+    app = Flask(__name__)
+    app.config['FOCA'] = Config(
+        db=MongoConfig(**MONGO_CONFIG)
+    )
+    mock_resp = deepcopy(MOCK_FILES_DB_ENTRY)
+    app.config['FOCA'].db.dbs['trsStore'] \
+        .collections['files'].client = mongomock.MongoClient().db.collection
+    app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
+        .client.insert_one(mock_resp)
+
+    with app.app_context():
+        with pytest.raises(NotFound):
+            toolsIdVersionsVersionIdTypeDescriptorRelativePathGet.__wrapped__(
+                type='CWL',
+                id=MOCK_ID,
+                version_id=MOCK_ID,
+                relative_path='path_tmp_na',
+            )
+
+
+# GET /tools/{id}/versions/{version_id}/{type}/files
 def test_toolsIdVersionsVersionIdTypeFilesGet():
     """Test for getting descriptor files associated with a specific tool version
     identified by the given tool and version identifiers.
