@@ -244,32 +244,22 @@ def toolsIdVersionsVersionIdTypeDescriptorGet(
     """
     validate_descriptor_type(type=type)
     ret = {}
-
     db_coll_files = (
         current_app.config['FOCA'].db.dbs['trsStore']
         .collections['files'].client
     )
-
     proj = {
         '_id': False,
         'versions': {
             '$elemMatch': {
                 'id': version_id,
-                'descriptors': {
-                    '$elemMatch': {
-                        'type': type,
-                        'tool_file.file_type': 'PRIMARY_DESCRIPTOR',
-                    },
-                },
             },
         },
     }
-
     data = db_coll_files.find(
         filter={'id': id},
         projection=proj,
     )
-
     try:
         version_data = data[0]['versions'][0]['descriptors']
         for _d in version_data:
@@ -279,6 +269,8 @@ def toolsIdVersionsVersionIdTypeDescriptorGet(
             ):
                 ret = _d['file_wrapper']
     except (IndexError, KeyError, TypeError):
+        raise NotFound
+    if not ret:
         raise NotFound
     return ret
 
@@ -311,6 +303,56 @@ def toolsIdVersionsVersionIdTypeDescriptorRelativePathGet(
     logger.debug(f"Decoded relative path: '{relative_path}'")
     ret = {}
     validate_descriptor_type(type=type)
+    db_coll_files = (
+        current_app.config['FOCA'].db.dbs['trsStore']
+        .collections['files'].client
+    )
+    proj = {
+        '_id': False,
+        'versions': {
+            '$elemMatch': {
+                'id': version_id,
+            },
+        },
+    }
+    data = db_coll_files.find(
+        filter={'id': id},
+        projection=proj,
+    )
+    try:
+        version_data = data[0]['versions'][0]['descriptors']
+        for _d in version_data:
+            if (
+                _d['tool_file']['path'] == relative_path and
+                _d['type'] == type
+            ):
+                ret = _d['file_wrapper']
+    except (IndexError, KeyError, TypeError):
+        raise NotFound
+    if not ret:
+        raise NotFound
+    return ret
+
+
+@log_traffic
+def toolsIdVersionsVersionIdTypeTestsGet(
+    type: str,
+    id: str,
+    version_id: str,
+) -> List:
+    """Get a list of test JSONs.
+
+    Args:
+        type: The output type of the descriptor. Examples of allowable
+            values are "CWL", "WDL", "NFL", "GALAXY".
+        id: Tool identifier.
+        version_id: Tool version identifier.
+
+    Returns:
+        List of JSONs associated with a given descriptor type of a given
+        tool version.
+    """
+    validate_descriptor_type(type=type)
 
     db_coll_files = (
         current_app.config['FOCA'].db.dbs['trsStore']
@@ -325,7 +367,7 @@ def toolsIdVersionsVersionIdTypeDescriptorRelativePathGet(
                 'descriptors': {
                     '$elemMatch': {
                         'type': type,
-                        'tool_file.path': relative_path,
+                        'tool_file.file_type': 'TEST_FILE',
                     },
                 },
             },
@@ -338,28 +380,17 @@ def toolsIdVersionsVersionIdTypeDescriptorRelativePathGet(
     )
 
     try:
+        ret_array = []
         version_data = data[0]['versions'][0]['descriptors']
         for _d in version_data:
             if (
-                _d['tool_file']['path'] == relative_path and
+                _d['tool_file']['file_type'] == 'TEST_FILE' and
                 _d['type'] == type
             ):
-                ret = _d['file_wrapper']
+                ret_array.append(_d['file_wrapper'])
     except (IndexError, KeyError, TypeError):
         raise NotFound
-    return ret
-
-
-@log_traffic
-def toolsIdVersionsVersionIdTypeTestsGet(
-    type: str,
-    id: str,
-    version_id: str,
-) -> List:
-    """Get a list of test JSONs."""
-    # TODO: REMOVE COMMENTS WHEN IMPLEMENTING
-    # validate_descriptor_type(type=type)
-    return []  # pragma: no cover
+    return ret_array
 
 
 @log_traffic
@@ -381,35 +412,27 @@ def toolsIdVersionsVersionIdTypeFilesGet(
         List of file JSON responses.
     """
     validate_descriptor_type(type=type)
-
     db_coll_files = (
         current_app.config['FOCA'].db.dbs['trsStore']
         .collections['files'].client
     )
-
     proj = {
         '_id': False,
-        'versions': {
-            '$elemMatch': {
-                'id': version_id,
-                'descriptors': {
-                    '$elemMatch': {
-                        'type': type,
-                    },
-                },
-            },
-        },
+        'versions': {'$elemMatch': {'id': version_id}},
     }
     data = db_coll_files.find_one(
         filter={'id': id},
         projection=proj,
     )
-
     try:
         data = data['versions'][0]
-        return [d['tool_file'] for d in data['descriptors']]
+        ret = [
+            d['tool_file'] for d in data['descriptors']
+            if d['type'] == type
+        ]
     except (IndexError, KeyError, TypeError):
         raise NotFound
+    return ret
 
 
 @log_traffic
@@ -432,16 +455,7 @@ def toolsIdVersionsVersionIdContainerfileGet(
     )
     proj = {
         '_id': False,
-        'versions': {
-            '$elemMatch': {
-                'id': version_id,
-                'containers': {
-                    '$elemMatch': {
-                        'tool_file.file_type': 'CONTAINERFILE',
-                    },
-                },
-            },
-        },
+        'versions': {'$elemMatch': {'id': version_id}},
     }
     data = db_coll_files.find_one(
         filter={'id': id},
@@ -454,6 +468,8 @@ def toolsIdVersionsVersionIdContainerfileGet(
             if d['tool_file']['file_type'] == 'CONTAINERFILE'
         ]
     except (IndexError, KeyError, TypeError):
+        raise NotFound
+    if not ret:
         raise NotFound
     return ret
 
@@ -630,40 +646,35 @@ def deleteToolVersion(
         current_app.config['FOCA'].db.dbs['trsStore']
         .collections['files'].client
     )
-
-    # do not allow deleting the last version
-    # TODO: race condition
-    versions = toolsIdVersionsGet.__wrapped__(id)
-    if len(versions) == 1:
-        if version_id in [v.get('id', None) for v in versions]:
-            logger.error("Will not delete only remaining tool version.")
-            raise BadRequest
-        else:
-            raise NotFound
-
-    del_ver_tools = db_coll_tools.update_one(
-        filter={'id': id},
-        update={
-            '$pull': {
-                'versions': {'id': version_id},
-            },
+    filt = {
+        'id': id,
+        'versions.id': version_id,
+    }
+    update = {
+        '$pull': {
+            'versions': {'id': version_id},
         },
+    }
+    del_ver_tools = db_coll_tools.update_one(
+        filter=filt,
+        update=update,
     )
     del_ver_files = db_coll_files.update_one(
-        filter={'id': id},
-        update={
-            '$pull': {
-                'versions': {'id': version_id},
-            },
-        },
+        filter=filt,
+        update=update,
     )
-    if (
+    if not (
+        del_ver_tools.matched_count and
+        del_ver_files.matched_count
+    ):
+        raise NotFound
+    elif not (
         del_ver_tools.modified_count and
         del_ver_files.modified_count
     ):
-        return version_id
-    else:
         raise InternalServerError
+    else:
+        return version_id
 
 
 @log_traffic

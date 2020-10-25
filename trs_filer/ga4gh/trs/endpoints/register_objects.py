@@ -122,7 +122,10 @@ class RegisterTool:
             )
 
             # process version information
-            version_list = [v.get('id', None) for v in self.data['versions']]
+            version_list = [
+                v.get('id', None) for v in self.data['versions']
+                if v.get('id', None) is not None
+            ]
             if len(version_list) != len(set(version_list)):
                 logger.error("Duplicate tool version IDs specified.")
                 raise BadRequest
@@ -307,14 +310,8 @@ class RegisterToolVersion:
         )
 
         # process files
+        self.process_files()
         if 'files' in self.data:
-            # Set `containerfile` property
-            self.data['containerfile'] = False
-            for _file in self.data['files']:
-                if _file['tool_file']['file_type'] == "CONTAINERFILE":
-                    self.data['containerfile'] = True
-                    break
-            self.process_files()
             self.data.pop('files')
 
     def process_files(self) -> None:
@@ -323,17 +320,13 @@ class RegisterToolVersion:
 
         # validate file types and unique paths
         file_types = defaultdict(list)
-        file_path_dict = {}
-        for f in self.data['files']:
+        file_path_dict = defaultdict(list)
+        for f in self.data.get('files', []):
             file_types[f['type']].append(f['tool_file']['file_type'])
-            if f['type'] not in file_path_dict:
-                file_path_dict[f['type']] = [f['tool_file']['path']]
-            else:
-                if f['tool_file']['path'] in file_path_dict[f['type']]:
-                    logger.error("Duplicate file paths not allowed.")
-                    raise BadRequest
-                else:
-                    file_path_dict[f['type']].append(f['tool_file']['path'])
+            if f['tool_file']['path'] in file_path_dict.get(f['type'], []):
+                logger.error("Duplicate file paths are not allowed")
+                raise BadRequest
+            file_path_dict[f['type']].append(f['tool_file']['path'])
 
         invalid = False
         for d_type, f_types in file_types.items():
@@ -364,7 +357,7 @@ class RegisterToolVersion:
             raise BadRequest
 
         # validate required fields
-        for _file in self.data['files']:
+        for _file in self.data.get('files', []):
 
             # validate conditionally required properties
             if (
@@ -420,6 +413,7 @@ class RegisterToolVersion:
                 if _file['type'] not in self.descriptor_types:
                     logger.error("Invalid descriptor type.")
                     raise BadRequest
+                self.files['descriptors'].append(_file)
 
             # validate image file types
             elif _file['tool_file']['file_type'] == "CONTAINERFILE":

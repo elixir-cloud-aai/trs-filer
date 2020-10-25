@@ -196,10 +196,13 @@ MOCK_FILES_DB_ENTRY = {
     "versions": [
         {
             "id": MOCK_ID,
-            "tests": [MOCK_TEST_FILE],
-            "others": [MOCK_OTHER_FILE],
             "containers": [MOCK_CONTAINER_FILE],
-            "descriptors": [MOCK_DESCRIPTOR_FILE, MOCK_DESCRIPTOR_SEC_FILE],
+            "descriptors": [
+                MOCK_TEST_FILE,
+                MOCK_OTHER_FILE,
+                MOCK_DESCRIPTOR_FILE,
+                MOCK_DESCRIPTOR_SEC_FILE,
+            ],
         }
     ],
 }

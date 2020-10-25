@@ -373,7 +373,8 @@ class TestRegisterToolVersion:
 
     def test_process_files_secondary_but_not_primary_descriptor(self):
         """Test for processing files with a secondary descriptor but no
-        primary descriptor file."""
+        primary descriptor file.
+        """
         app = Flask(__name__)
         app.config['FOCA'] = Config(
             db=MongoConfig(**MONGO_CONFIG),
@@ -406,8 +407,9 @@ class TestRegisterToolVersion:
                 tool.process_files()
 
     def test_process_files_non_unique_paths(self):
-        """Test for processing when file objects don't have unique
-        paths."""
+        """Test for processing files when multiple file objects associated
+        with a given descriptor type share the same path.
+        """
         app = Flask(__name__)
         app.config['FOCA'] = Config(
             db=MongoConfig(**MONGO_CONFIG),
