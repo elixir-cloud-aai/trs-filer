@@ -340,10 +340,57 @@ def toolsIdVersionsVersionIdTypeTestsGet(
     id: str,
     version_id: str,
 ) -> List:
-    """Get a list of test JSONs."""
-    # TODO: REMOVE COMMENTS WHEN IMPLEMENTING
-    # validate_descriptor_type(type=type)
-    return []  # pragma: no cover
+    """Get a list of test JSONs.
+
+    Args:
+        type: The output type of the descriptor. Examples of allowable
+            values are "CWL", "WDL", "NFL", "GALAXY".
+        id: Tool identifier.
+        version_id: Tool version identifier.
+
+    Returns:
+        List of JSONs associated with a given descriptor type of a given
+        tool version.
+    """
+    validate_descriptor_type(type=type)
+
+    db_coll_files = (
+        current_app.config['FOCA'].db.dbs['trsStore']
+        .collections['files'].client
+    )
+
+    proj = {
+        '_id': False,
+        'versions': {
+            '$elemMatch': {
+                'id': version_id,
+                'descriptors': {
+                    '$elemMatch': {
+                        'type': type,
+                        'tool_file.file_type': 'TEST_FILE',
+                    },
+                },
+            },
+        },
+    }
+
+    data = db_coll_files.find(
+        filter={'id': id},
+        projection=proj,
+    )
+
+    try:
+        ret_array = []
+        version_data = data[0]['versions'][0]['descriptors']
+        for _d in version_data:
+            if (
+                _d['tool_file']['file_type'] == 'TEST_FILE' and
+                _d['type'] == type
+            ):
+                ret_array.append(_d['file_wrapper'])
+    except (IndexError, KeyError, TypeError):
+        raise NotFound
+    return ret_array
 
 
 @log_traffic

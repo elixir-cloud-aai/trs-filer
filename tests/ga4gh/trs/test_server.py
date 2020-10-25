@@ -21,6 +21,7 @@ from tests.mock_data import (
     MOCK_DESCRIPTOR_FILE,
     MOCK_DESCRIPTOR_SEC_FILE,
     MOCK_OTHER_FILE,
+    MOCK_TEST_FILE,
 )
 from trs_filer.ga4gh.trs.server import (
     deleteTool,
@@ -43,6 +44,7 @@ from trs_filer.ga4gh.trs.server import (
     toolsIdVersionsVersionIdGet,
     toolsIdVersionsVersionIdTypeDescriptorGet,
     toolsIdVersionsVersionIdTypeDescriptorRelativePathGet,
+    toolsIdVersionsVersionIdTypeTestsGet,
 )
 from trs_filer.errors.exceptions import (
     BadRequest,
@@ -622,6 +624,7 @@ def test_toolsIdVersionsVersionIdTypeFilesGet():
         db=MongoConfig(**MONGO_CONFIG)
     )
     mock_resp = deepcopy(MOCK_FILES_DB_ENTRY)
+    mock_resp['versions'][0]['descriptors'][3]['type'] = "WDL"
     app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
         .client = mongomock.MongoClient().db.collection
     app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
@@ -631,12 +634,14 @@ def test_toolsIdVersionsVersionIdTypeFilesGet():
         res = toolsIdVersionsVersionIdTypeFilesGet.__wrapped__(
             id=MOCK_ID,
             version_id=MOCK_ID,
-            type=MOCK_DESCRIPTOR_FILE['type']
+            type="CWL"
         )
+        descriptors = mock_resp['versions'][0]['descriptors']
         assert res == [
-            MOCK_DESCRIPTOR_FILE["tool_file"],
-            MOCK_DESCRIPTOR_SEC_FILE["tool_file"],
+            _file['tool_file'] for _file in descriptors
+            if _file['type'] == "CWL"
         ]
+        assert len(res) == len(descriptors) - 1
 
 
 def test_toolsIdVersionsVersionIdTypeFilesGet_no_tool_file_NotFound():
@@ -678,6 +683,56 @@ def test_toolsIdVersionsVersionIdTypeFilesGet_wrong_type_BadRequest():
                 id=MOCK_ID,
                 version_id=MOCK_ID + MOCK_ID,
                 type='foo'
+            )
+
+
+# GET /tools/{id}/versions/{version_id}/{type}/tests
+def test_toolsIdVersionsVersionIdTypeTestsGet():
+    """Test for getting list of test JSONs associated with a specific tool
+    version identified by the given tool and version identifiers for the given
+    input `type`.
+    """
+    app = Flask(__name__)
+    app.config['FOCA'] = Config(
+        db=MongoConfig(**MONGO_CONFIG)
+    )
+    mock_resp = deepcopy(MOCK_FILES_DB_ENTRY)
+    app.config['FOCA'].db.dbs['trsStore'] \
+        .collections['files'].client = mongomock.MongoClient().db.collection
+    app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
+        .client.insert_one(mock_resp)
+
+    with app.app_context():
+        res = toolsIdVersionsVersionIdTypeTestsGet.__wrapped__(
+                type='CWL',
+                id=MOCK_ID,
+                version_id=MOCK_ID,
+            )
+        assert res == [MOCK_TEST_FILE["file_wrapper"]]
+
+
+def test_toolsIdVersionsVersionIdTypeTestsGet_type_NotFound():
+    """Test for getting list of test JSONs associated with a specific tool
+    version identified by the given tool and version identifiers for the given
+    input `type` when no test files are available for the specified descriptor
+    type.
+    """
+    app = Flask(__name__)
+    app.config['FOCA'] = Config(
+        db=MongoConfig(**MONGO_CONFIG)
+    )
+    mock_resp = deepcopy(MOCK_FILES_DB_ENTRY)
+    app.config['FOCA'].db.dbs['trsStore'] \
+        .collections['files'].client = mongomock.MongoClient().db.collection
+    app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
+        .client.insert_one(mock_resp)
+
+    with app.app_context():
+        with pytest.raises(NotFound):
+            toolsIdVersionsVersionIdTypeTestsGet.__wrapped__(
+                type='WDL',
+                id=MOCK_ID,
+                version_id=MOCK_ID,
             )
 
 
