@@ -113,7 +113,7 @@ MOCK_TEST_FILE = {
     },
     "tool_file": {
         "file_type": "TEST_FILE",
-        "path": "path",
+        "path": "path_test_cwl",
     },
     "type": "CWL",
 }
@@ -130,7 +130,7 @@ MOCK_DESCRIPTOR_FILE = {
     },
     "tool_file": {
         "file_type": "PRIMARY_DESCRIPTOR",
-        "path": "path",
+        "path": "path_prim_desc_cwl",
     },
     "type": "CWL",
 }
@@ -147,7 +147,7 @@ MOCK_DESCRIPTOR_SEC_FILE = {
     },
     "tool_file": {
         "file_type": "SECONDARY_DESCRIPTOR",
-        "path": "path_tmp",
+        "path": "path_sec_desc_cwl",
     },
     "type": "CWL"
 }
@@ -164,7 +164,7 @@ MOCK_CONTAINER_FILE = {
     },
     "tool_file": {
         "file_type": "CONTAINERFILE",
-        "path": "path",
+        "path": "path_container_docker",
     },
     "type": "Docker",
 }
@@ -181,7 +181,7 @@ MOCK_OTHER_FILE = {
     },
     "tool_file": {
         "file_type": "OTHER",
-        "path": "path",
+        "path": "path_other_cwl",
     },
     "type": "CWL"
 }

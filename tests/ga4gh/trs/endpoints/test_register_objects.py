@@ -362,7 +362,9 @@ class TestRegisterToolVersion:
         )
 
         data = deepcopy(MOCK_VERSION_NO_ID)
-        data['files'].append(MOCK_DESCRIPTOR_FILE)
+        mock_descriptor = deepcopy(MOCK_DESCRIPTOR_FILE)
+        mock_descriptor['tool_file']['path'] = 'random_path'
+        data['files'].append(mock_descriptor)
         with app.app_context():
             with pytest.raises(BadRequest):
                 tool = RegisterToolVersion(data=data, id=MOCK_ID)
@@ -371,7 +373,8 @@ class TestRegisterToolVersion:
 
     def test_process_files_secondary_but_not_primary_descriptor(self):
         """Test for processing files with a secondary descriptor but no
-        primary descriptor file."""
+        primary descriptor file.
+        """
         app = Flask(__name__)
         app.config['FOCA'] = Config(
             db=MongoConfig(**MONGO_CONFIG),
@@ -401,6 +404,28 @@ class TestRegisterToolVersion:
             with pytest.raises(BadRequest):
                 tool = RegisterToolVersion(data=data, id=MOCK_ID)
                 tool.data['files'] = [mock_file]
+                tool.process_files()
+
+    def test_process_files_non_unique_paths(self):
+        """Test for processing files when multiple file objects associated
+        with a given descriptor type share the same path.
+        """
+        app = Flask(__name__)
+        app.config['FOCA'] = Config(
+            db=MongoConfig(**MONGO_CONFIG),
+            endpoints=ENDPOINT_CONFIG_CHARSET_LITERAL,
+        )
+
+        data = deepcopy(MOCK_VERSION_NO_ID)
+        tmp_file_obj1 = deepcopy(MOCK_DESCRIPTOR_FILE)
+        tmp_file_obj2 = deepcopy(MOCK_DESCRIPTOR_SEC_FILE)
+        tmp_file_obj1["tool_file"]["path"] = "tmp_url"
+        tmp_file_obj2["tool_file"]["path"] = "tmp_url"
+        data['files'] = [tmp_file_obj1, tmp_file_obj2]
+        with app.app_context():
+            with pytest.raises(BadRequest):
+                tool = RegisterToolVersion(data=data, id=MOCK_ID)
+                tool.data['files'] = data['files']
                 tool.process_files()
 
     def test_process_files_no_content(self, monkeypatch):

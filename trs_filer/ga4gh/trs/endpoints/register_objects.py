@@ -318,10 +318,16 @@ class RegisterToolVersion:
         """Process file (meta)data."""
         self.files['id'] = self.data['id']
 
-        # validate file types
+        # validate file types and unique paths
         file_types = defaultdict(list)
+        file_path_dict = defaultdict(list)
         for f in self.data.get('files', []):
             file_types[f['type']].append(f['tool_file']['file_type'])
+            if f['tool_file']['path'] in file_path_dict.get(f['type'], []):
+                logger.error("Duplicate file paths are not allowed")
+                raise BadRequest
+            file_path_dict[f['type']].append(f['tool_file']['path'])
+
         invalid = False
         for d_type, f_types in file_types.items():
             if f_types.count("PRIMARY_DESCRIPTOR") > 1:
