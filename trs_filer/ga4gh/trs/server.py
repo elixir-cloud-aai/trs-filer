@@ -244,32 +244,22 @@ def toolsIdVersionsVersionIdTypeDescriptorGet(
     """
     validate_descriptor_type(type=type)
     ret = {}
-
     db_coll_files = (
         current_app.config['FOCA'].db.dbs['trsStore']
         .collections['files'].client
     )
-
     proj = {
         '_id': False,
         'versions': {
             '$elemMatch': {
                 'id': version_id,
-                'descriptors': {
-                    '$elemMatch': {
-                        'type': type,
-                        'tool_file.file_type': 'PRIMARY_DESCRIPTOR',
-                    },
-                },
             },
         },
     }
-
     data = db_coll_files.find(
         filter={'id': id},
         projection=proj,
     )
-
     try:
         version_data = data[0]['versions'][0]['descriptors']
         for _d in version_data:
@@ -279,6 +269,8 @@ def toolsIdVersionsVersionIdTypeDescriptorGet(
             ):
                 ret = _d['file_wrapper']
     except (IndexError, KeyError, TypeError):
+        raise NotFound
+    if not ret:
         raise NotFound
     return ret
 
@@ -311,32 +303,22 @@ def toolsIdVersionsVersionIdTypeDescriptorRelativePathGet(
     logger.debug(f"Decoded relative path: '{relative_path}'")
     ret = {}
     validate_descriptor_type(type=type)
-
     db_coll_files = (
         current_app.config['FOCA'].db.dbs['trsStore']
         .collections['files'].client
     )
-
     proj = {
         '_id': False,
         'versions': {
             '$elemMatch': {
                 'id': version_id,
-                'descriptors': {
-                    '$elemMatch': {
-                        'type': type,
-                        'tool_file.path': relative_path,
-                    },
-                },
             },
         },
     }
-
     data = db_coll_files.find(
         filter={'id': id},
         projection=proj,
     )
-
     try:
         version_data = data[0]['versions'][0]['descriptors']
         for _d in version_data:
@@ -346,6 +328,8 @@ def toolsIdVersionsVersionIdTypeDescriptorRelativePathGet(
             ):
                 ret = _d['file_wrapper']
     except (IndexError, KeyError, TypeError):
+        raise NotFound
+    if not ret:
         raise NotFound
     return ret
 
@@ -428,40 +412,27 @@ def toolsIdVersionsVersionIdTypeFilesGet(
         List of file JSON responses.
     """
     validate_descriptor_type(type=type)
-
     db_coll_files = (
         current_app.config['FOCA'].db.dbs['trsStore']
         .collections['files'].client
     )
-
     proj = {
         '_id': False,
-        'versions': {
-            '$elemMatch': {
-                'id': version_id,
-                'descriptors': {
-                    '$elemMatch': {
-                        'type': type,
-                    },
-                },
-            },
-        },
+        'versions': {'$elemMatch': {'id': version_id}},
     }
     data = db_coll_files.find_one(
         filter={'id': id},
         projection=proj,
     )
-
-    descriptor_types = ['PRIMARY_DESCRIPTOR', 'SECONDARY_DESCRIPTOR']
     try:
-        data = data['versions'][0]['descriptors']
-        ret_array = []
-        for d in data:
-            if d['tool_file']['file_type'] in descriptor_types:
-                ret_array.append(d['tool_file'])
-        return ret_array
+        data = data['versions'][0]
+        ret = [
+            d['tool_file'] for d in data['descriptors']
+            if d['type'] == type
+        ]
     except (IndexError, KeyError, TypeError):
         raise NotFound
+    return ret
 
 
 @log_traffic
@@ -484,16 +455,7 @@ def toolsIdVersionsVersionIdContainerfileGet(
     )
     proj = {
         '_id': False,
-        'versions': {
-            '$elemMatch': {
-                'id': version_id,
-                'containers': {
-                    '$elemMatch': {
-                        'tool_file.file_type': 'CONTAINERFILE',
-                    },
-                },
-            },
-        },
+        'versions': {'$elemMatch': {'id': version_id}},
     }
     data = db_coll_files.find_one(
         filter={'id': id},
@@ -506,6 +468,8 @@ def toolsIdVersionsVersionIdContainerfileGet(
             if d['tool_file']['file_type'] == 'CONTAINERFILE'
         ]
     except (IndexError, KeyError, TypeError):
+        raise NotFound
+    if not ret:
         raise NotFound
     return ret
 
