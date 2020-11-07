@@ -13,7 +13,6 @@ COLLECTION_CONFIG = {
 }
 DB_CONFIG = {
     'collections': {
-        'files': COLLECTION_CONFIG,
         'service_info': COLLECTION_CONFIG,
         'toolclasses': COLLECTION_CONFIG,
         'tools': COLLECTION_CONFIG,
@@ -190,22 +189,8 @@ MOCK_FILES = [
     MOCK_OTHER_FILE,
     MOCK_CONTAINER_FILE,
     MOCK_DESCRIPTOR_FILE,
+    MOCK_DESCRIPTOR_SEC_FILE,
 ]
-MOCK_FILES_DB_ENTRY = {
-    "id": MOCK_ID,
-    "versions": [
-        {
-            "id": MOCK_ID,
-            "containers": [MOCK_CONTAINER_FILE],
-            "descriptors": [
-                MOCK_TEST_FILE,
-                MOCK_OTHER_FILE,
-                MOCK_DESCRIPTOR_FILE,
-                MOCK_DESCRIPTOR_SEC_FILE,
-            ],
-        }
-    ],
-}
 MOCK_FILES_CONTENT_URL_MISSING = deepcopy(MOCK_FILES)
 del MOCK_FILES_CONTENT_URL_MISSING[0]['file_wrapper']['content']
 del MOCK_FILES_CONTENT_URL_MISSING[0]['file_wrapper']['url']

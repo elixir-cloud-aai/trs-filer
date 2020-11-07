@@ -61,7 +61,6 @@ class RegisterTool:
                 the tool class associated with the tool to be added is inserted
                 into the tool class database collection on the fly.
             db_coll_tools: Database collection for storing tool objects.
-            db_coll_files: Database collection for storing file objects.
             db_coll_classes: Database collection for storing tool class
                 objects.
         """
@@ -80,10 +79,6 @@ class RegisterTool:
         self.db_coll_tools = (
             current_app.config['FOCA'].db.dbs['trsStore']
             .collections['tools'].client
-        )
-        self.db_coll_files = (
-            current_app.config['FOCA'].db.dbs['trsStore']
-            .collections['files'].client
         )
         self.db_coll_classes = (
             current_app.config['FOCA'].db.dbs['trsStore']
@@ -129,10 +124,7 @@ class RegisterTool:
             if len(version_list) != len(set(version_list)):
                 logger.error("Duplicate tool version IDs specified.")
                 raise BadRequest
-            files = {
-                'id': self.data['id'],
-                'versions': [],
-            }
+
             for version in self.data['versions']:
                 version_proc = RegisterToolVersion(
                     id=self.data['id'],
@@ -141,7 +133,6 @@ class RegisterTool:
                 )
                 version_proc.process_metadata()
                 version = version_proc.data
-                files['versions'].append(version_proc.files)
 
             if self.replace:
                 # replace tool in database
@@ -150,17 +141,8 @@ class RegisterTool:
                     replacement=self.data,
                 )
 
-                # replace tool version files in database
-                result_files = self.db_coll_files.replace_one(
-                    filter={'id': self.data['id']},
-                    replacement=files,
-                )
-
                 # verify replacement
-                if (
-                    result_tools.modified_count and
-                    result_files.modified_count
-                ):
+                if result_tools.modified_count:
                     logger.info(
                         f"Replaced tool with id '{self.data['id']}'."
                     )
@@ -174,9 +156,6 @@ class RegisterTool:
 
             # TODO: handle failures & race conditions for adding files & tool
             # classes
-
-            # insert files into database
-            self.db_coll_files.insert_one(document=files)
 
             # insert tool class into database
             if self.tool_class_validation:
@@ -199,10 +178,6 @@ class RegisterTool:
         logger.debug(
             "Entry in 'tools' collection: "
             f"{self.db_coll_tools.find_one({'id': self.data['id']})}"
-        )
-        logger.debug(
-            "Entry in 'files' collection: "
-            f"{self.db_coll_files.find_one({'id': self.data['id']})}"
         )
 
 
@@ -252,9 +227,7 @@ class RegisterToolVersion:
                 constructing tool and version `url` properties.
             api_path: Base path at which API endpoints can be reached. For
                 constructing tool and version `url` properties.
-            files: Container for storing file (meta)data.
             db_coll_tools: Database collection for storing tool objects.
-            db_coll_files: Database collection for storing file objects.
         """
         conf = current_app.config['FOCA'].endpoints
         self.data: Dict = data
@@ -270,17 +243,9 @@ class RegisterToolVersion:
         self.host_name: str = conf['service']['external_host']
         self.external_port: int = conf['service']['external_port']
         self.api_path: str = conf['service']['api_path']
-        self.files: Dict = {
-            "descriptors": [],
-            "containers": [],
-        }
         self.db_coll_tools = (
             current_app.config['FOCA'].db.dbs['trsStore']
             .collections['tools'].client
-        )
-        self.db_coll_files = (
-            current_app.config['FOCA'].db.dbs['trsStore']
-            .collections['files'].client
         )
 
     def process_metadata(self) -> None:
@@ -311,12 +276,9 @@ class RegisterToolVersion:
 
         # process files
         self.process_files()
-        if 'files' in self.data:
-            self.data.pop('files')
 
     def process_files(self) -> None:
         """Process file (meta)data."""
-        self.files['id'] = self.data['id']
 
         # validate file types and unique paths
         file_types = defaultdict(list)
@@ -413,14 +375,12 @@ class RegisterToolVersion:
                 if _file['type'] not in self.descriptor_types:
                     logger.error("Invalid descriptor type.")
                     raise BadRequest
-                self.files['descriptors'].append(_file)
 
             # validate image file types
             elif _file['tool_file']['file_type'] == "CONTAINERFILE":
                 if _file['type'] not in self.image_types:
                     logger.error("Missing or invalid image file type.")
                     raise BadRequest
-                self.files['containers'].append(_file)
 
     def register_metadata(self) -> None:
         """Register version with tool."""
@@ -449,24 +409,8 @@ class RegisterToolVersion:
                     },
                 )
 
-                # replace tool version files in database
-                result_files = self.db_coll_files.update_one(
-                    filter={
-                        'id': self.id,
-                        'versions.id': self.data['id'],
-                    },
-                    update={
-                        '$set': {
-                            'versions.$': self.files,
-                        },
-                    },
-                )
-
                 # verify replacement
-                if (
-                    result_tools.raw_result['updatedExisting'] and
-                    result_files.raw_result['updatedExisting']
-                ):
+                if result_tools.raw_result['updatedExisting']:
                     logger.info(
                         f"Replaced version with id '{self.data['id']}' in "
                         f"tool '{self.id}'."
@@ -486,24 +430,8 @@ class RegisterToolVersion:
                 },
             )
 
-            # insert tool version files into database
-            result_files = self.db_coll_files.update_one(
-                filter={
-                    'id': self.id,
-                    'versions.id': {'$ne': self.data['id']},
-                },
-                update={
-                    '$push': {
-                        'versions': self.files,
-                    },
-                },
-            )
-
             # verify insertion
-            if (
-                result_tools.modified_count and
-                result_files.modified_count
-            ):
+            if result_tools.modified_count:
                 logger.info(
                     f"Added version with id '{self.data['id']}' to tool "
                     f"'{self.id}'."
@@ -514,8 +442,4 @@ class RegisterToolVersion:
         logger.debug(
             "Entry in 'tools' collection: "
             f"{self.db_coll_tools.find_one({'id': self.data['id']})}"
-        )
-        logger.debug(
-            "Entry in 'files' collection: "
-            f"{self.db_coll_files.find_one({'id': self.data['id']})}"
         )
