@@ -10,7 +10,6 @@ import pytest
 from tests.mock_data import (
     ENDPOINT_CONFIG,
     HEADERS_PAGINATION,
-    MOCK_FILES_DB_ENTRY,
     MOCK_ID,
     MOCK_TOOL_CLASS,
     MOCK_TOOL_VERSION_ID,
@@ -92,6 +91,7 @@ def test_toolsGet():
 
     data = deepcopy(MOCK_TOOL_VERSION_ID)
     data['id'] = MOCK_ID
+    del data['versions'][0]['files']
     with app.app_context():
         res = toolsGet.__wrapped__()
         assert res == ([data], '200', HEADERS_PAGINATION)
@@ -114,6 +114,7 @@ def test_toolsGet_filters():
 
     data = deepcopy(MOCK_TOOL_VERSION_ID)
     data['id'] = MOCK_ID
+    del data['versions'][0]['files']
     with app.app_context():
         res = toolsGet.__wrapped__(
             id=data['id'],
@@ -147,6 +148,7 @@ def test_toolsIdGet():
     app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
         .client.insert_one(mock_resp)
     del mock_resp['_id']
+    del mock_resp['versions'][0]['files']
 
     with app.app_context():
         res = toolsIdGet.__wrapped__(id=MOCK_ID)
@@ -188,6 +190,7 @@ def test_toolsIdVersionsGet():
     app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
         .client.insert_one(mock_resp)
     del mock_resp['_id']
+    del mock_resp['versions'][0]['files']
 
     with app.app_context():
         res = toolsIdVersionsGet.__wrapped__(id=MOCK_ID)
@@ -230,6 +233,7 @@ def test_toolsIdVersionsVersionIdGet():
         .client = mongomock.MongoClient().db.collection
     app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
         .client.insert_one(mock_resp)
+    del mock_resp['versions'][0]['files']
 
     with app.app_context():
         res = toolsIdVersionsVersionIdGet.__wrapped__(
@@ -296,10 +300,11 @@ def test_toolsIdVersionsVersionIdContainerfileGet():
     app.config['FOCA'] = Config(
         db=MongoConfig(**MONGO_CONFIG)
     )
-    mock_resp = deepcopy(MOCK_FILES_DB_ENTRY)
+    mock_resp = deepcopy(MOCK_TOOL_VERSION_ID)
+    mock_resp['id'] = MOCK_ID
     app.config['FOCA'].db.dbs['trsStore'] \
-        .collections['files'].client = mongomock.MongoClient().db.collection
-    app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
+        .collections['tools'].client = mongomock.MongoClient().db.collection
+    app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
         .client.insert_one(mock_resp)
 
     with app.app_context():
@@ -319,10 +324,11 @@ def test_toolsIdVersionsVersionIdContainerfileGet_tool_na_NotFound():
     app.config['FOCA'] = Config(
         db=MongoConfig(**MONGO_CONFIG)
     )
-    mock_resp = deepcopy(MOCK_FILES_DB_ENTRY)
+    mock_resp = deepcopy(MOCK_TOOL_VERSION_ID)
+    mock_resp['id'] = MOCK_ID
     app.config['FOCA'].db.dbs['trsStore'] \
-        .collections['files'].client = mongomock.MongoClient().db.collection
-    app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
+        .collections['tools'].client = mongomock.MongoClient().db.collection
+    app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
         .client.insert_one(mock_resp)
 
     with app.app_context():
@@ -342,10 +348,11 @@ def test_toolsIdVersionsVersionIdContainerfileGet_version_na_NotFound():
     app.config['FOCA'] = Config(
         db=MongoConfig(**MONGO_CONFIG)
     )
-    mock_resp = deepcopy(MOCK_FILES_DB_ENTRY)
+    mock_resp = deepcopy(MOCK_TOOL_VERSION_ID)
+    mock_resp['id'] = MOCK_ID
     app.config['FOCA'].db.dbs['trsStore'] \
-        .collections['files'].client = mongomock.MongoClient().db.collection
-    app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
+        .collections['tools'].client = mongomock.MongoClient().db.collection
+    app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
         .client.insert_one(mock_resp)
 
     with app.app_context():
@@ -365,13 +372,13 @@ def test_toolsIdVersionsVersionIdContainerfileGet_no_containerfile_NotFound():
     app.config['FOCA'] = Config(
         db=MongoConfig(**MONGO_CONFIG)
     )
-    mock_resp = deepcopy(MOCK_FILES_DB_ENTRY)
-    mock_resp['versions'][0]['containers'] = []
-    for version in mock_resp['versions']:
-        version['files'] = []
+    mock_resp = deepcopy(MOCK_TOOL_VERSION_ID)
+    mock_resp['id'] = MOCK_ID
+    mock_resp['versions'][0]['files'] = []
+
     app.config['FOCA'].db.dbs['trsStore'] \
-        .collections['files'].client = mongomock.MongoClient().db.collection
-    app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
+        .collections['tools'].client = mongomock.MongoClient().db.collection
+    app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
         .client.insert_one(mock_resp)
 
     with app.app_context():
@@ -393,10 +400,11 @@ def test_toolsIdVersionsVersionIdTypeDescriptorGet():
     app.config['FOCA'] = Config(
         db=MongoConfig(**MONGO_CONFIG)
     )
-    mock_resp = deepcopy(MOCK_FILES_DB_ENTRY)
+    mock_resp = deepcopy(MOCK_TOOL_VERSION_ID)
+    mock_resp['id'] = MOCK_ID
     app.config['FOCA'].db.dbs['trsStore'] \
-        .collections['files'].client = mongomock.MongoClient().db.collection
-    app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
+        .collections['tools'].client = mongomock.MongoClient().db.collection
+    app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
         .client.insert_one(mock_resp)
 
     with app.app_context():
@@ -418,10 +426,11 @@ def test_toolsIdVersionsVersionIdTypeDescriptorGet_tool_na_NotFound():
     app.config['FOCA'] = Config(
         db=MongoConfig(**MONGO_CONFIG)
     )
-    mock_resp = deepcopy(MOCK_FILES_DB_ENTRY)
+    mock_resp = deepcopy(MOCK_TOOL_VERSION_ID)
+    mock_resp['id'] = MOCK_ID
     app.config['FOCA'].db.dbs['trsStore'] \
-        .collections['files'].client = mongomock.MongoClient().db.collection
-    app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
+        .collections['tools'].client = mongomock.MongoClient().db.collection
+    app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
         .client.insert_one(mock_resp)
 
     with app.app_context():
@@ -443,10 +452,11 @@ def test_toolsIdVersionsVersionIdTypeDescriptorGet_version_na_NotFound():
     app.config['FOCA'] = Config(
         db=MongoConfig(**MONGO_CONFIG)
     )
-    mock_resp = deepcopy(MOCK_FILES_DB_ENTRY)
+    mock_resp = deepcopy(MOCK_TOOL_VERSION_ID)
+    mock_resp['id'] = MOCK_ID
     app.config['FOCA'].db.dbs['trsStore'] \
-        .collections['files'].client = mongomock.MongoClient().db.collection
-    app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
+        .collections['tools'].client = mongomock.MongoClient().db.collection
+    app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
         .client.insert_one(mock_resp)
 
     with app.app_context():
@@ -467,11 +477,12 @@ def test_toolsIdVersionsVersionIdTypeDescriptorGet_type_NotFound():
     app.config['FOCA'] = Config(
         db=MongoConfig(**MONGO_CONFIG)
     )
-    mock_resp = deepcopy(MOCK_FILES_DB_ENTRY)
-    mock_resp['versions'][0]['descriptors'] = []
+    mock_resp = deepcopy(MOCK_TOOL_VERSION_ID)
+    mock_resp['id'] = MOCK_ID
+    mock_resp['versions'][0]['files'] = []
     app.config['FOCA'].db.dbs['trsStore'] \
-        .collections['files'].client = mongomock.MongoClient().db.collection
-    app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
+        .collections['tools'].client = mongomock.MongoClient().db.collection
+    app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
         .client.insert_one(mock_resp)
 
     with app.app_context():
@@ -493,10 +504,11 @@ def test_toolsIdVersionsVersionIdTypeDescriptorRelativePathGet():
     app.config['FOCA'] = Config(
         db=MongoConfig(**MONGO_CONFIG)
     )
-    mock_resp = deepcopy(MOCK_FILES_DB_ENTRY)
+    mock_resp = deepcopy(MOCK_TOOL_VERSION_ID)
+    mock_resp['id'] = MOCK_ID
     app.config['FOCA'].db.dbs['trsStore'] \
-        .collections['files'].client = mongomock.MongoClient().db.collection
-    app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
+        .collections['tools'].client = mongomock.MongoClient().db.collection
+    app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
         .client.insert_one(mock_resp)
 
     with app.app_context():
@@ -520,10 +532,11 @@ def test_toolsIdVersionsVersionIdTypeDescriptorRelativePathGet_tool_NotFound():
     app.config['FOCA'] = Config(
         db=MongoConfig(**MONGO_CONFIG)
     )
-    mock_resp = deepcopy(MOCK_FILES_DB_ENTRY)
+    mock_resp = deepcopy(MOCK_TOOL_VERSION_ID)
+    mock_resp['id'] = MOCK_ID
     app.config['FOCA'].db.dbs['trsStore'] \
-        .collections['files'].client = mongomock.MongoClient().db.collection
-    app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
+        .collections['tools'].client = mongomock.MongoClient().db.collection
+    app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
         .client.insert_one(mock_resp)
 
     with app.app_context():
@@ -546,10 +559,11 @@ def test_toolsIdVersionsVersionIdTypeDescriptorRelativePathGet_vers_NotFound():
     app.config['FOCA'] = Config(
         db=MongoConfig(**MONGO_CONFIG)
     )
-    mock_resp = deepcopy(MOCK_FILES_DB_ENTRY)
+    mock_resp = deepcopy(MOCK_TOOL_VERSION_ID)
+    mock_resp['id'] = MOCK_ID
     app.config['FOCA'].db.dbs['trsStore'] \
-        .collections['files'].client = mongomock.MongoClient().db.collection
-    app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
+        .collections['tools'].client = mongomock.MongoClient().db.collection
+    app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
         .client.insert_one(mock_resp)
 
     with app.app_context():
@@ -572,10 +586,11 @@ def test_toolsIdVersionsVersionIdTypeDescriptorRelativePathGet_type_NotFound():
     app.config['FOCA'] = Config(
         db=MongoConfig(**MONGO_CONFIG)
     )
-    mock_resp = deepcopy(MOCK_FILES_DB_ENTRY)
+    mock_resp = deepcopy(MOCK_TOOL_VERSION_ID)
+    mock_resp['id'] = MOCK_ID
     app.config['FOCA'].db.dbs['trsStore'] \
-        .collections['files'].client = mongomock.MongoClient().db.collection
-    app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
+        .collections['tools'].client = mongomock.MongoClient().db.collection
+    app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
         .client.insert_one(mock_resp)
 
     with app.app_context():
@@ -598,10 +613,11 @@ def test_toolsIdVersionsVersionIdTypeDescriptorRelativePathGet_path_NotFound():
     app.config['FOCA'] = Config(
         db=MongoConfig(**MONGO_CONFIG)
     )
-    mock_resp = deepcopy(MOCK_FILES_DB_ENTRY)
+    mock_resp = deepcopy(MOCK_TOOL_VERSION_ID)
+    mock_resp['id'] = MOCK_ID
     app.config['FOCA'].db.dbs['trsStore'] \
-        .collections['files'].client = mongomock.MongoClient().db.collection
-    app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
+        .collections['tools'].client = mongomock.MongoClient().db.collection
+    app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
         .client.insert_one(mock_resp)
 
     with app.app_context():
@@ -623,11 +639,12 @@ def test_toolsIdVersionsVersionIdTypeFilesGet():
     app.config['FOCA'] = Config(
         db=MongoConfig(**MONGO_CONFIG)
     )
-    mock_resp = deepcopy(MOCK_FILES_DB_ENTRY)
-    mock_resp['versions'][0]['descriptors'][3]['type'] = "WDL"
-    app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
+    mock_resp = deepcopy(MOCK_TOOL_VERSION_ID)
+    mock_resp['id'] = MOCK_ID
+    mock_resp['versions'][0]['files'][4]['type'] = "WDL"
+    app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
         .client = mongomock.MongoClient().db.collection
-    app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
+    app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
         .client.insert_one(mock_resp)
 
     with app.app_context():
@@ -636,12 +653,67 @@ def test_toolsIdVersionsVersionIdTypeFilesGet():
             version_id=MOCK_ID,
             type="CWL"
         )
-        descriptors = mock_resp['versions'][0]['descriptors']
+        descriptors = [
+            _desc for _desc in mock_resp['versions'][0]['files']
+            if _desc['tool_file']['file_type'] != 'CONTAINERFILE'
+        ]
         assert res == [
             _file['tool_file'] for _file in descriptors
             if _file['type'] == "CWL"
         ]
         assert len(res) == len(descriptors) - 1
+
+
+def test_toolsIdVersionsVersionIdTypeFilesGet_tool_na_NotFound():
+    """Test for getting descriptor files associated with a specific tool version
+    identified by the given tool and version identifiers with specified tool
+    identifier not present.
+    """
+    app = Flask(__name__)
+    app.config['FOCA'] = Config(
+        db=MongoConfig(**MONGO_CONFIG)
+    )
+    mock_resp = deepcopy(MOCK_TOOL_VERSION_ID)
+    mock_resp['id'] = MOCK_ID
+    mock_resp['versions'][0]['files'][4]['type'] = "WDL"
+    app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
+        .client = mongomock.MongoClient().db.collection
+    app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
+        .client.insert_one(mock_resp)
+
+    with app.app_context():
+        with pytest.raises(NotFound):
+            toolsIdVersionsVersionIdTypeFilesGet.__wrapped__(
+                id=MOCK_ID + MOCK_ID,
+                version_id=MOCK_ID,
+                type="CWL"
+            )
+
+
+def test_toolsIdVersionsVersionIdTypeFilesGet_version_na_NotFound():
+    """Test for getting descriptor files associated with a specific tool version
+    identified by the given tool and version identifiers with specified tool
+    version identifier not present.
+    """
+    app = Flask(__name__)
+    app.config['FOCA'] = Config(
+        db=MongoConfig(**MONGO_CONFIG)
+    )
+    mock_resp = deepcopy(MOCK_TOOL_VERSION_ID)
+    mock_resp['id'] = MOCK_ID
+    mock_resp['versions'][0]['files'][4]['type'] = "WDL"
+    app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
+        .client = mongomock.MongoClient().db.collection
+    app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
+        .client.insert_one(mock_resp)
+
+    with app.app_context():
+        with pytest.raises(NotFound):
+            toolsIdVersionsVersionIdTypeFilesGet.__wrapped__(
+                id=MOCK_ID,
+                version_id=MOCK_ID + MOCK_ID,
+                type="CWL"
+            )
 
 
 def test_toolsIdVersionsVersionIdTypeFilesGet_no_tool_file_NotFound():
@@ -653,12 +725,12 @@ def test_toolsIdVersionsVersionIdTypeFilesGet_no_tool_file_NotFound():
     app.config['FOCA'] = Config(
         db=MongoConfig(**MONGO_CONFIG)
     )
-    mock_resp = deepcopy(MOCK_FILES_DB_ENTRY)
-    for version in mock_resp['versions']:
-        version['files'] = {}
+    mock_resp = deepcopy(MOCK_TOOL_VERSION_ID)
+    mock_resp['id'] = MOCK_ID
+    mock_resp['versions'][0]['files'] = []
     app.config['FOCA'].db.dbs['trsStore'] \
-        .collections['files'].client = mongomock.MongoClient().db.collection
-    app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
+        .collections['tools'].client = mongomock.MongoClient().db.collection
+    app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
         .client.insert_one(mock_resp)
 
     with app.app_context():
@@ -696,10 +768,11 @@ def test_toolsIdVersionsVersionIdTypeTestsGet():
     app.config['FOCA'] = Config(
         db=MongoConfig(**MONGO_CONFIG)
     )
-    mock_resp = deepcopy(MOCK_FILES_DB_ENTRY)
+    mock_resp = deepcopy(MOCK_TOOL_VERSION_ID)
+    mock_resp['id'] = MOCK_ID
     app.config['FOCA'].db.dbs['trsStore'] \
-        .collections['files'].client = mongomock.MongoClient().db.collection
-    app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
+        .collections['tools'].client = mongomock.MongoClient().db.collection
+    app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
         .client.insert_one(mock_resp)
 
     with app.app_context():
@@ -709,6 +782,56 @@ def test_toolsIdVersionsVersionIdTypeTestsGet():
                 version_id=MOCK_ID,
             )
         assert res == [MOCK_TEST_FILE["file_wrapper"]]
+
+
+def test_toolsIdVersionsVersionIdTypeTestsGet_tool_na_NotFound():
+    """Test for getting list of test JSONs associated with a specific tool
+    version identified by the given tool and version identifiers for the given
+    input `type` with specified tool identifier not present.
+    """
+    app = Flask(__name__)
+    app.config['FOCA'] = Config(
+        db=MongoConfig(**MONGO_CONFIG)
+    )
+    mock_resp = deepcopy(MOCK_TOOL_VERSION_ID)
+    mock_resp['id'] = MOCK_ID
+    app.config['FOCA'].db.dbs['trsStore'] \
+        .collections['tools'].client = mongomock.MongoClient().db.collection
+    app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
+        .client.insert_one(mock_resp)
+
+    with app.app_context():
+        with pytest.raises(NotFound):
+            toolsIdVersionsVersionIdTypeTestsGet.__wrapped__(
+                type='CWL',
+                id=MOCK_ID + MOCK_ID,
+                version_id=MOCK_ID,
+            )
+
+
+def test_toolsIdVersionsVersionIdTypeTestsGet_version_na_NotFound():
+    """Test for getting list of test JSONs associated with a specific tool
+    version identified by the given tool and version identifiers for the given
+    input `type` with specified tool version identifier not present.
+    """
+    app = Flask(__name__)
+    app.config['FOCA'] = Config(
+        db=MongoConfig(**MONGO_CONFIG)
+    )
+    mock_resp = deepcopy(MOCK_TOOL_VERSION_ID)
+    mock_resp['id'] = MOCK_ID
+    app.config['FOCA'].db.dbs['trsStore'] \
+        .collections['tools'].client = mongomock.MongoClient().db.collection
+    app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
+        .client.insert_one(mock_resp)
+
+    with app.app_context():
+        with pytest.raises(NotFound):
+            toolsIdVersionsVersionIdTypeTestsGet.__wrapped__(
+                type='CWL',
+                id=MOCK_ID,
+                version_id=MOCK_ID + MOCK_ID,
+            )
 
 
 def test_toolsIdVersionsVersionIdTypeTestsGet_type_NotFound():
@@ -721,10 +844,11 @@ def test_toolsIdVersionsVersionIdTypeTestsGet_type_NotFound():
     app.config['FOCA'] = Config(
         db=MongoConfig(**MONGO_CONFIG)
     )
-    mock_resp = deepcopy(MOCK_FILES_DB_ENTRY)
+    mock_resp = deepcopy(MOCK_TOOL_VERSION_ID)
+    mock_resp['id'] = MOCK_ID
     app.config['FOCA'].db.dbs['trsStore'] \
-        .collections['files'].client = mongomock.MongoClient().db.collection
-    app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
+        .collections['tools'].client = mongomock.MongoClient().db.collection
+    app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
         .client.insert_one(mock_resp)
 
     with app.app_context():
@@ -784,8 +908,6 @@ def test_postTool():
         .client = mongomock.MongoClient().db.collection
     app.config['FOCA'].db.dbs['trsStore'].collections['toolclasses'] \
         .client = mongomock.MongoClient().db.collection
-    app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
-        .client = mongomock.MongoClient().db.collection
 
     with app.test_request_context(json=deepcopy(MOCK_TOOL_VERSION_ID)):
         res = postTool.__wrapped__()
@@ -803,8 +925,6 @@ def test_putTool():
     app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
         .client = mongomock.MongoClient().db.collection
     app.config['FOCA'].db.dbs['trsStore'].collections['toolclasses'] \
-        .client = mongomock.MongoClient().db.collection
-    app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
         .client = mongomock.MongoClient().db.collection
 
     with app.test_request_context(json=deepcopy(MOCK_TOOL_VERSION_ID)):
@@ -825,11 +945,7 @@ def test_putTool_update():
         .client = mongomock.MongoClient().db.collection
     app.config['FOCA'].db.dbs['trsStore'].collections['toolclasses'] \
         .client = mongomock.MongoClient().db.collection
-    app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
-        .client = mongomock.MongoClient().db.collection
     app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
-        .client.insert_one(mock_resp)
-    app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
         .client.insert_one(mock_resp)
     app.config['FOCA'].db.dbs['trsStore'].collections['toolclasses'] \
         .client.insert_one(mock_resp)
@@ -851,11 +967,7 @@ def test_deleteTool():
     mock_resp['id'] = MOCK_ID
     app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
         .client = mongomock.MongoClient().db.collection
-    app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
-        .client = mongomock.MongoClient().db.collection
     app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
-        .client.insert_one(mock_resp)
-    app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
         .client.insert_one(mock_resp)
 
     with app.app_context():
@@ -873,11 +985,7 @@ def test_deleteTool_NotFound():
     mock_resp = deepcopy(MOCK_TOOL_VERSION_ID)
     app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
         .client = mongomock.MongoClient().db.collection
-    app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
-        .client = mongomock.MongoClient().db.collection
     app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
-        .client.insert_one(mock_resp)
-    app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
         .client.insert_one(mock_resp)
 
     with app.app_context():
@@ -899,11 +1007,7 @@ def test_postToolVersion():
     mock_resp["id"] = MOCK_ID
     app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
         .client = mongomock.MongoClient().db.collection
-    app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
-        .client = mongomock.MongoClient().db.collection
     app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
-        .client.insert_one(mock_resp)
-    app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
         .client.insert_one(mock_resp)
 
     with app.test_request_context(json=deepcopy(MOCK_VERSION_ID)):
@@ -923,11 +1027,7 @@ def test_putToolVersion():
     mock_resp["id"] = MOCK_ID
     app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
         .client = mongomock.MongoClient().db.collection
-    app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
-        .client = mongomock.MongoClient().db.collection
     app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
-        .client.insert_one(mock_resp)
-    app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
         .client.insert_one(mock_resp)
 
     with app.test_request_context(json=deepcopy(MOCK_VERSION_ID)):
@@ -949,11 +1049,7 @@ def test_putToolVersion_update():
     mock_resp["id"] = MOCK_ID
     app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
         .client = mongomock.MongoClient().db.collection
-    app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
-        .client = mongomock.MongoClient().db.collection
     app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
-        .client.insert_one(mock_resp)
-    app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
         .client.insert_one(mock_resp)
 
     with app.test_request_context(json=deepcopy(MOCK_VERSION_ID)):
@@ -979,11 +1075,7 @@ def test_deleteToolVersion():
     mock_resp['versions'].append(deepcopy(MOCK_VERSION_ID))
     app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
         .client = mongomock.MongoClient().db.collection
-    app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
-        .client = mongomock.MongoClient().db.collection
     app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
-        .client.insert_one(mock_resp)
-    app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
         .client.insert_one(mock_resp)
 
     data = deepcopy(MOCK_TOOL_VERSION_ID)
@@ -1008,11 +1100,7 @@ def test_deleteToolVersion_tool_NotFound():
     mock_resp['id'] = MOCK_ID
     app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
         .client = mongomock.MongoClient().db.collection
-    app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
-        .client = mongomock.MongoClient().db.collection
     app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
-        .client.insert_one(mock_resp)
-    app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
         .client.insert_one(mock_resp)
 
     with app.app_context():
@@ -1036,11 +1124,7 @@ def test_deleteToolVersion_version_NotFound():
     mock_resp['id'] = MOCK_ID
     app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
         .client = mongomock.MongoClient().db.collection
-    app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
-        .client = mongomock.MongoClient().db.collection
     app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
-        .client.insert_one(mock_resp)
-    app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
         .client.insert_one(mock_resp)
 
     with app.app_context():
@@ -1076,11 +1160,7 @@ def test_deleteToolVersion_InternalServerError(monkeypatch):
     mock_resp['versions'].append(deepcopy(MOCK_VERSION_ID))
     app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
         .client = mongomock.MongoClient().db.collection
-    app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
-        .client = mongomock.MongoClient().db.collection
     app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
-        .client.insert_one(mock_resp)
-    app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
         .client.insert_one(mock_resp)
 
     data = deepcopy(MOCK_TOOL_VERSION_ID)

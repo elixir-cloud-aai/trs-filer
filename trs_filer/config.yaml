@@ -18,12 +18,6 @@ db:
                               id: 1
                           options:
                             'unique': True
-                files:
-                    indexes:
-                        - keys:
-                              id: 1
-                          options:
-                            'unique': True
                 service_info:
                     indexes:
                         - keys:

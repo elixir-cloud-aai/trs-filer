@@ -86,8 +86,6 @@ class TestRegisterTool:
         )
         app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
             .client = MagicMock()
-        app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
-            .client = MagicMock()
         app.config['FOCA'].db.dbs['trsStore'].collections['toolclasses'] \
             .client = MagicMock()
 
@@ -105,8 +103,6 @@ class TestRegisterTool:
             endpoints=ENDPOINT_CONFIG,
         )
         app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
-            .client = MagicMock()
-        app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
             .client = MagicMock()
         app.config['FOCA'].db.dbs['trsStore'].collections['toolclasses'] \
             .client = MagicMock()
@@ -127,8 +123,6 @@ class TestRegisterTool:
         mock_resp = deepcopy(MOCK_TOOL_VERSION_ID)
         mock_resp["id"] = MOCK_ID
         app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
-            .client = MagicMock()
-        app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
             .client = MagicMock()
         app.config['FOCA'].db.dbs['trsStore'].collections['toolclasses'] \
             .client = MagicMock()
@@ -170,8 +164,6 @@ class TestRegisterTool:
         )
         app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
             .client = MagicMock()
-        app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
-            .client = MagicMock()
         app.config['FOCA'].db.dbs['trsStore'].collections['toolclasses'] \
             .client = MagicMock()
 
@@ -194,8 +186,6 @@ class TestRegisterTool:
         )
         app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
             .client = MagicMock()
-        app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
-            .client = MagicMock()
         app.config['FOCA'].db.dbs['trsStore'].collections['toolclasses'] \
             .client = MagicMock()
 
@@ -215,12 +205,8 @@ class TestRegisterTool:
         )
         app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
             .client = MagicMock()
-        app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
-            .client = MagicMock()
         app.config['FOCA'].db.dbs['trsStore'].collections['toolclasses'] \
             .client = MagicMock()
-        app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
-            .client.replace_one = MagicMock()
 
         data = deepcopy(MOCK_TOOL_VERSION_ID)
         with app.app_context():
@@ -237,12 +223,8 @@ class TestRegisterTool:
         )
         app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
             .client = mongomock.MongoClient().db.collection
-        app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
-            .client = mongomock.MongoClient().db.collection
         app.config['FOCA'].db.dbs['trsStore'].collections['toolclasses'] \
             .client = mongomock.MongoClient().db.collection
-        app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
-            .client.replace_one = MagicMock()
 
         data = deepcopy(MOCK_TOOL_VERSION_ID)
         data['toolclass']['id'] = MOCK_ID + MOCK_ID
@@ -260,8 +242,6 @@ class TestRegisterTool:
         )
         mock_resp = MagicMock(side_effect=[DuplicateKeyError(''), None])
         app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
-            .client = MagicMock()
-        app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
             .client = MagicMock()
         app.config['FOCA'].db.dbs['trsStore'].collections['toolclasses'] \
             .client = MagicMock()
@@ -285,8 +265,6 @@ class TestRegisterTool:
         mock_resp = deepcopy(MOCK_TOOL_VERSION_ID)
         mock_resp["id"] = MOCK_ID_ONE_CHAR
         app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
-            .client = mongomock.MongoClient().db.collection
-        app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
             .client = mongomock.MongoClient().db.collection
         app.config['FOCA'].db.dbs['trsStore'].collections['toolclasses'] \
             .client = mongomock.MongoClient().db.collection
@@ -487,11 +465,7 @@ class TestRegisterToolVersion:
         mock_resp["id"] = MOCK_ID
         app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
             .client = MagicMock()
-        app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
-            .client = MagicMock()
         app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
-            .client.insert_one(mock_resp)
-        app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
             .client.insert_one(mock_resp)
 
         data = deepcopy(MOCK_VERSION_NO_ID)
@@ -508,8 +482,6 @@ class TestRegisterToolVersion:
             endpoints=ENDPOINT_CONFIG_CHARSET_LITERAL,
         )
         app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
-            .client = MagicMock()
-        app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
             .client = MagicMock()
 
         data = deepcopy(MOCK_VERSION_NO_ID)
@@ -533,11 +505,7 @@ class TestRegisterToolVersion:
         mock_resp["id"] = MOCK_ID
         app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
             .client = MagicMock()
-        app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
-            .client = MagicMock()
         app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
-            .client.insert_one(mock_resp)
-        app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
             .client.insert_one(mock_resp)
 
         data = deepcopy(MOCK_VERSION_ID)
@@ -558,13 +526,9 @@ class TestRegisterToolVersion:
         mock_resp["versions"][0]["id"] = MOCK_ID_ONE_CHAR
         app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
             .client = mongomock.MongoClient().db.collection
-        app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
-            .client = mongomock.MongoClient().db.collection
         app.config['FOCA'].db.dbs['trsStore'].collections['toolclasses'] \
             .client = mongomock.MongoClient().db.collection
         app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
-            .client.insert_one(mock_resp)
-        app.config['FOCA'].db.dbs['trsStore'].collections['files'] \
             .client.insert_one(mock_resp)
 
         data = deepcopy(MOCK_VERSION_NO_ID)
