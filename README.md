@@ -265,5 +265,5 @@ tracker][trs-filer-issues] to request features or report bugs.
 [trs-filer-controllers]: trs_filer/ga4gh/trs/server.py
 [trs-filer-controllers-subpackage]: trs_filer/ga4gh/trs/endpoints
 [trs-filer-deployment]: deployment/README.md
-[trs-filer-exceptions]: errors/exceptions.py
+[trs-filer-exceptions]: trs_filer/errors/exceptions.py
 [trs-filer-issues]: <https://github.com/elixir-cloud-aai/trs-filer/issues>
