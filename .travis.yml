@@ -27,6 +27,9 @@ jobs:
         - flake8
         - coverage run --source trs_filer -m pytest
         - coveralls
+        - docker-compose up --build -d
+        - sleep 10
+        - pytest "${TRAVIS_BUILD_DIR}/tests/integration_tests.py"
     - <<: *test
       python: 3.7
     - <<: *test
