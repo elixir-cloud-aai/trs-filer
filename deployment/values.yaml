@@ -2,9 +2,9 @@
 # This is a YAML-formatted file.
 # Declare variables to be passed into your templates.
 
-clusterType: openshift
+clusterType: kubernetes
 
-host_name: trs-filer-test.c03.k8s-popup.csc.fi
+host_name: trs.hypatia-comp.athenarc.gr
 
 trs_filer:
   image: lvarin/trs-filer:0.1.0
@@ -14,4 +14,4 @@ apiServer: kubernetes.default.svc:443 # address of k8s API server
 
 mongodb:
   image: mongo:3.6
-  volumeSize: 1Gi
+  volumeSize: 10Gi
