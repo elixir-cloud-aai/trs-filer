@@ -18,13 +18,16 @@ spec:
 status:
   ingress: []
 {{ else if eq .Values.clusterType "kubernetes" }}
+{{ if .Values.kubernetes.ingress.enabled }}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   annotations:
     kubernetes.io/ingress.class: nginx
-    cert-manager.io/cluster-issuer: letsencrypt-prod
+    {{ if .Values.kubernetes.ingress.enabled }}
+    cert-manager.io/cluster-issuer: {{ .Values.kubernetes.https.issuer }}
     kubernetes.io/tls-acme: "true"
+    {{ end }}
   name: {{ .Values.trs_filer.appName }}-ingress
 spec:
   rules:
@@ -38,8 +41,11 @@ spec:
               number: 8080
         path: /
         pathType: Prefix
+{{ if .Values.kubernetes.https.enabled }}
   tls:
   - hosts:
     - {{ .Values.host_name }}
     secretName: {{ .Values.trs_filer.appName }}-ingress-secret
+{{ end }}
+{{ end }}
 {{ end }}

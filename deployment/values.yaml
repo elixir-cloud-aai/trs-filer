@@ -2,9 +2,9 @@
 # This is a YAML-formatted file.
 # Declare variables to be passed into your templates.
 
-clusterType: kubernetes
+clusterType: openshift
 
-host_name: trs.hypatia-comp.athenarc.gr
+host_name: trs-filer-test.c03.k8s-popup.csc.fi
 
 trs_filer:
   image: lvarin/trs-filer:0.1.0
@@ -12,6 +12,17 @@ trs_filer:
 
 apiServer: kubernetes.default.svc:443 # address of k8s API server
 
+# If you are running kubernetes select whether you would like
+# to access the service via Ingress. Also, if you have the cert manager
+# installed, you can provision a certificate for https
+kubernetes:
+  ingress:
+    enabled: true
+  https:
+    enabled: true
+    issuer: prod-issuer
+
 mongodb:
   image: mongo:3.6
-  volumeSize: 10Gi
+  volumeSize: 1Gi
+
