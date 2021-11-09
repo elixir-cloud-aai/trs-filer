@@ -20,7 +20,7 @@ kubernetes:
     enabled: true
   https:
     enabled: true
-    issuer: prod-issuer
+    issuer: letsencrypt-prod
 
 mongodb:
   image: mongo:3.6
