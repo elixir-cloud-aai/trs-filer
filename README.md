@@ -229,11 +229,11 @@ tracker][trs-filer-issues] to request features or report bugs.
 
 ![Logo_banner][img-logo-banner]
 
-[badge-build-status]:<https://travis-ci.com/elixir-cloud-aai/cloud-registry.svg?branch=dev>
-[badge-coverage]:<https://img.shields.io/coveralls/github/elixir-cloud-aai/cloud-registry>
+[badge-build-status]:<https://travis-ci.com/elixir-cloud-aai/trs-filer.svg?branch=dev>
+[badge-coverage]:<https://img.shields.io/coveralls/github/elixir-cloud-aai/trs-filer>
 [badge-license]:<https://img.shields.io/badge/license-Apache%202.0-blue.svg>
-[badge-url-build-status]:<https://travis-ci.com/elixir-cloud-aai/cloud-registry>
-[badge-url-coverage]:<https://coveralls.io/github/elixir-cloud-aai/cloud-registry>
+[badge-url-build-status]:<https://travis-ci.com/elixir-cloud-aai/trs-filer>
+[badge-url-coverage]:<https://coveralls.io/github/elixir-cloud-aai/trs-filer>
 [badge-url-license]:<http://www.apache.org/licenses/LICENSE-2.0>
 [elixir-cloud]: <https://github.com/elixir-cloud-aai/elixir-cloud-aai>
 [elixir-cloud-coc]: <https://github.com/elixir-cloud-aai/elixir-cloud-aai/blob/dev/CODE_OF_CONDUCT.md>
