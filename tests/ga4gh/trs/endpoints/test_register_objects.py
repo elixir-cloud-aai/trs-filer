@@ -233,6 +233,25 @@ class TestRegisterTool:
                 tool = RegisterTool(data=data)
                 tool.register_metadata()
 
+    def test_register_metadata_without_tool_class_identifier(self):
+        """Test for creating a tool with tool class without an identifier."""
+        app = Flask(__name__)
+        app.config['FOCA'] = Config(
+            db=MongoConfig(**MONGO_CONFIG),
+            endpoints=ENDPOINT_CONFIG_TOOL_CLASS_VALIDATION,
+        )
+        app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
+            .client = MagicMock()
+        app.config['FOCA'].db.dbs['trsStore'].collections['toolclasses'] \
+            .client = MagicMock()
+
+        data = deepcopy(MOCK_TOOL_VERSION_ID)
+        data["toolclass"].pop("id")
+        with app.app_context():
+            tool = RegisterTool(data=data)
+            tool.register_metadata()
+            assert isinstance(tool.data['id'], str)
+
     def test_register_metadata_tool_duplicate_key(self):
         """Test for creating a tool; duplicate key error occurs."""
         app = Flask(__name__)
