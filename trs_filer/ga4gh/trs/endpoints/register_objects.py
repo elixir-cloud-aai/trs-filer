@@ -116,6 +116,15 @@ class RegisterTool:
                 f"{self.api_path}/tools/{self.data['id']}"
             )
 
+            # set tool class identifier if not present
+            tool_class_id = self.data['toolclass'].get('id', None)
+            if tool_class_id is None:
+                tool_class_id = generate_id(
+                    charset=self.id_charset,
+                    length=self.id_length
+                )
+                self.data['toolclass']['id'] = tool_class_id
+
             # process version information
             version_list = [
                 v.get('id', None) for v in self.data['versions']
