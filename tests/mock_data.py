@@ -3,6 +3,7 @@
 from copy import deepcopy
 
 MOCK_ID = "mock_id"
+MOCK_ID_2 = "mock_id2"
 MOCK_ID_ONE_CHAR = "A"
 CHARSET_EXPRESSION = 'string.digits'
 INDEX_CONFIG = {

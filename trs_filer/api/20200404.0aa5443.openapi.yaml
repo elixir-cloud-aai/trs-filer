@@ -223,7 +223,7 @@ paths:
             current_offset:
               description: The current start index of the paging used for this result.
               schema:
-                type: string
+                type: integer
             current_limit:
               description: The current page record limit used for this result.
               schema:
@@ -575,6 +575,7 @@ components:
       description: Amount of records to return in a given page.
       schema:
         type: integer
+        minimum: 0
         format: int32
         default: 1000
     offset:
@@ -586,7 +587,10 @@ components:
         not specified in the request, this will start at the beginning of the
         results.
       schema:
-        type: string
+        type: integer
+        minimum: 0
+        format: int32
+        default: 0
   # securitySchemes:
   #   BEARER:
   #     type: apiKey

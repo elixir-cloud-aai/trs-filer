@@ -3,6 +3,7 @@
 from copy import deepcopy
 
 from flask import Flask
+from flask import (request)
 from foca.models.config import (Config, MongoConfig)
 import mongomock
 import pytest
@@ -11,6 +12,7 @@ from tests.mock_data import (
     ENDPOINT_CONFIG,
     HEADERS_PAGINATION,
     MOCK_ID,
+    MOCK_ID_2,
     MOCK_TOOL_CLASS,
     MOCK_TOOL_VERSION_ID,
     MOCK_VERSION_ID,
@@ -21,6 +23,7 @@ from tests.mock_data import (
     MOCK_DESCRIPTOR_SEC_FILE,
     MOCK_OTHER_FILE,
     MOCK_TEST_FILE,
+    MOCK_VERSION_NO_ID,
 )
 from trs_filer.ga4gh.trs.server import (
     deleteTool,
@@ -92,9 +95,55 @@ def test_toolsGet():
     data = deepcopy(MOCK_TOOL_VERSION_ID)
     data['id'] = MOCK_ID
     del data['versions'][0]['files']
-    with app.app_context():
+    HEADERS_PAGINATION_RESULT = deepcopy(HEADERS_PAGINATION)
+    with app.test_request_context():
+        HEADERS_PAGINATION_RESULT["self_link"] = request.url
         res = toolsGet.__wrapped__()
-        assert res == ([data], '200', HEADERS_PAGINATION)
+        assert res == ([data], '200', HEADERS_PAGINATION_RESULT)
+
+
+def test_toolsGet_pagination():
+    """Test for getting a list of all available tools; pagination values specified.
+    """
+    app = Flask(__name__)
+    app.config['FOCA'] = Config(
+        db=MongoConfig(**MONGO_CONFIG)
+    )
+    mock_resp = deepcopy(MOCK_VERSION_NO_ID)
+    mock_resp['id'] = MOCK_ID
+    app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
+        .client = mongomock.MongoClient().db.collection
+    app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
+        .client.insert_one(mock_resp)
+    mock_resp2 = deepcopy(MOCK_VERSION_NO_ID)
+    mock_resp2['id'] = MOCK_ID_2
+    app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
+        .client.insert_one(mock_resp2)
+
+    data = deepcopy(MOCK_VERSION_NO_ID)
+    data['id'] = MOCK_ID
+
+    test_limit = 1
+    test_offset = 1
+    HEADERS_PAGINATION_RESULT = deepcopy(HEADERS_PAGINATION)
+
+    with app.test_request_context(json=deepcopy(SERVICE_INFO_CONFIG)):
+        HEADERS_PAGINATION_RESULT["self_link"] = request.url
+        HEADERS_PAGINATION_RESULT["next_page"] = (
+            f"{request.base_url}?offset={test_offset + test_limit}&limit="
+            f"{test_limit}"
+        )
+        HEADERS_PAGINATION_RESULT["last_page"] = (
+            f"{request.base_url}?offset={max(0,test_offset - test_limit)}"
+            f"&limit={test_limit}"
+        )
+        HEADERS_PAGINATION_RESULT["current_offset"] = test_offset
+        HEADERS_PAGINATION_RESULT["current_limit"] = test_limit
+        res = toolsGet.__wrapped__(
+            limit=test_limit,
+            offset=test_offset,
+        )
+        assert res == ([data], '200', HEADERS_PAGINATION_RESULT)
 
 
 def test_toolsGet_filters():
@@ -115,11 +164,12 @@ def test_toolsGet_filters():
     data = deepcopy(MOCK_TOOL_VERSION_ID)
     data['id'] = MOCK_ID
     del data['versions'][0]['files']
-    with app.app_context():
+
+    HEADERS_PAGINATION_RESULT = deepcopy(HEADERS_PAGINATION)
+    with app.test_request_context(json=deepcopy(SERVICE_INFO_CONFIG)):
+        HEADERS_PAGINATION_RESULT["self_link"] = request.base_url
         res = toolsGet.__wrapped__(
             id=data['id'],
-            limit=1,
-            offset=0,
             checker=data['has_checker'],
             name=data['versions'][0]['images'][0]['image_name'],
             alias=data['aliases'][0],
@@ -131,7 +181,7 @@ def test_toolsGet_filters():
             description=data['description'],
             organization=data['organization'],
         )
-        assert res == ([data], '200', HEADERS_PAGINATION)
+        assert res == ([data], '200', HEADERS_PAGINATION_RESULT)
 
 
 # GET /tools/{id}
@@ -1247,7 +1297,7 @@ def test_deleteToolClass():
     app.config['FOCA'].db.dbs['trsStore'].collections['toolclasses'] \
         .client.insert_one(mock_resp)
 
-    with app.app_context():
+    with app.test_request_context(json=deepcopy(SERVICE_INFO_CONFIG)):
         res = deleteToolClass.__wrapped__(
             id=MOCK_ID,
         )
@@ -1271,7 +1321,7 @@ def test_deleteToolClass_NotFound():
     app.config['FOCA'].db.dbs['trsStore'].collections['toolclasses'] \
         .client.insert_one(mock_resp)
 
-    with app.app_context():
+    with app.test_request_context(json=deepcopy(SERVICE_INFO_CONFIG)):
         with pytest.raises(NotFound):
             deleteToolClass.__wrapped__(
                 id=MOCK_ID + MOCK_ID,
@@ -1298,7 +1348,7 @@ def test_deleteToolClass_BadRequest():
     app.config['FOCA'].db.dbs['trsStore'].collections['toolclasses'] \
         .client.insert_one(mock_resp_classes)
 
-    with app.app_context():
+    with app.test_request_context(json=deepcopy(SERVICE_INFO_CONFIG)):
         with pytest.raises(BadRequest):
             deleteToolClass.__wrapped__(
                 id=MOCK_ID,

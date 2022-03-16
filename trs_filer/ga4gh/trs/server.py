@@ -219,7 +219,17 @@ def toolsGet(
     records = db_coll_tools.find(
         filter=filt,
         projection={"_id": False},
+    ).sort(
+        # Sort results by descending object ID (+/- newest to oldest)
+        '_id', -1
+    ).skip(
+        # Skip number of records by given offset
+        offset
+    ).limit(
+        # Implement page size limit
+        limit
     )
+
     records = list(records)
     for record in records:
         if 'versions' in record:
@@ -227,13 +237,23 @@ def toolsGet(
                 if 'files' in _version:
                     del _version['files']
 
-    # TODO: create dummy headers; implement pagination later
+    if(limit is not None or offset is not None):
+        previous_page_url = (
+            f"{request.base_url}?offset={max(offset - limit, 0)}&limit={limit}"
+        )
+        next_page_url = (
+            f"{request.base_url}?offset={offset + limit}&limit={limit}"
+        )
+    else:
+        previous_page_url = None
+        next_page_url = None
+
     headers = {}
-    headers['next_page'] = None
-    headers['last_page'] = None
-    headers['self_link'] = None
-    headers['current_offset'] = None
-    headers['current_limit'] = None
+    headers['next_page'] = next_page_url
+    headers['last_page'] = previous_page_url
+    headers['self_link'] = f"{request.url}"
+    headers['current_offset'] = offset
+    headers['current_limit'] = limit
 
     return records, '200', headers
 
