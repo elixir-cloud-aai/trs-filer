@@ -122,7 +122,7 @@ Then simply start up the service with:
 docker-compose up --build -d
 ```
 
-_**That't it!**_
+_**That's it!**_
 
 You should now be able to use/explore the API as described in the [usage
 section](#usage).
