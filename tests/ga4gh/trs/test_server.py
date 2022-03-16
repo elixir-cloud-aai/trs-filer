@@ -127,7 +127,7 @@ def test_toolsGet_pagination():
     test_offset = 1
     HEADERS_PAGINATION_RESULT = deepcopy(HEADERS_PAGINATION)
 
-    with app.test_request_context(json=deepcopy(SERVICE_INFO_CONFIG)):
+    with app.test_request_context():
         HEADERS_PAGINATION_RESULT["self_link"] = request.url
         HEADERS_PAGINATION_RESULT["next_page"] = (
             f"{request.base_url}?offset={test_offset + test_limit}&limit="
@@ -166,7 +166,7 @@ def test_toolsGet_filters():
     del data['versions'][0]['files']
 
     HEADERS_PAGINATION_RESULT = deepcopy(HEADERS_PAGINATION)
-    with app.test_request_context(json=deepcopy(SERVICE_INFO_CONFIG)):
+    with app.test_request_context():
         HEADERS_PAGINATION_RESULT["self_link"] = request.base_url
         res = toolsGet.__wrapped__(
             id=data['id'],
