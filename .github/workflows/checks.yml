@@ -30,6 +30,11 @@ jobs:
     - name: Lint with flake8
       run: flake8
     - name: Calculate coverage
-      run: coverage run --source trs_filer -m pytest
-    - name: Upload Coverage to Codecov
-      uses: codecov/codecov-action@v2
+      run: |
+        coverage run --source trs_filer -m pytest
+        coverage xml
+    - name: Coveralls
+      uses: coverallsapp/github-action@master
+      with:
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        path-to-lcov: coverage.xml
