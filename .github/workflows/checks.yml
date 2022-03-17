@@ -23,6 +23,8 @@ jobs:
       uses: actions/setup-python@v2
       with:
         python-version: ${{ matrix.python-version }}
+    - name: Install requirements
+      run: pip install -r requirements.txt
     - name: Lint with flake8
       run: flake8
     - name: Calculate coverage
