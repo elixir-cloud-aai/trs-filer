@@ -38,7 +38,7 @@ jobs:
       env:
           COVERALLS_REPO_TOKEN: ${{ secrets.COVERALLS_REPO_TOKEN }}
       run: |
-        echo "%COVERALLS_REPO_TOKEN"
+        echo "$COVERALLS_REPO_TOKEN"
         coveralls --service=github
 
   # publish:
