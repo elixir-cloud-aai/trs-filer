@@ -37,7 +37,9 @@ jobs:
     - name: Coveralls
       env:
           COVERALLS_REPO_TOKEN: ${{ secrets.COVERALLS_REPO_TOKEN }}
-      run: coveralls --service=github
+      run: |
+        echo "%COVERALLS_REPO_TOKEN"
+        coveralls --service=github
 
   # publish:
   #   name: Build & Publish
