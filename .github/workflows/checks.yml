@@ -35,10 +35,9 @@ jobs:
         coverage run --source trs_filer -m pytest
         coverage xml
     - name: Coveralls
-      uses: coverallsapp/github-action@master
+      uses: AndreMiras/coveralls-python-action@develop
       with:
         github-token: ${{ secrets.GITHUB_TOKEN }}
-        path-to-lcov: coverage.xml
   # publish:
   #   name: Build & Publish
   #   runs-on: ubuntu-latest
