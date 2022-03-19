@@ -38,8 +38,7 @@ jobs:
       uses: coverallsapp/github-action@master
       with:
         github-token: ${{ secrets.GITHUB_TOKEN }}
-        path-to-lcov: ./coveralls/lcov.info
-
+        path-to-lcov: coverage.xml
   # publish:
   #   name: Build & Publish
   #   runs-on: ubuntu-latest
