@@ -34,12 +34,11 @@ jobs:
       run: |
         coverage run --source trs_filer -m pytest
         coverage xml
-    - name: Coveralls
-      env:
-          COVERALLS_REPO_TOKEN: ${{ secrets.COVERALLS_REPO_TOKEN }}
-      run: |
-        echo "$COVERALLS_REPO_TOKEN"
-        coveralls --service=github
+    - name: Coveralls GitHub Action
+      uses: coverallsapp/github-action@1.1.3
+      with:
+        github-token: ${{ secrets.github_token }}
+        path-to-lcov: coverage.xml
 
   # publish:
   #   name: Build & Publish
