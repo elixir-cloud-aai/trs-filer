@@ -74,5 +74,5 @@ jobs:
   #       if [ "$TRAVIS_BRANCH" = "dev" ]; then
   #         docker push "${DOCKER_REPO_NAME}:latest"
   #       fi
-  #   - name: Delete token
+    # - name: Delete token
   #     run: rm ${HOME}/.docker/config.json
