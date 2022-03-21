@@ -194,6 +194,12 @@ MOCK_FILES = [
     MOCK_DESCRIPTOR_FILE,
     MOCK_DESCRIPTOR_SEC_FILE,
 ]
+MOCK_FILES_LIST = [
+    MOCK_TEST_FILE["tool_file"],
+    MOCK_OTHER_FILE["tool_file"],
+    MOCK_DESCRIPTOR_FILE["tool_file"],
+    MOCK_DESCRIPTOR_SEC_FILE["tool_file"],
+]
 MOCK_FILES_CONTENT_URL_MISSING = deepcopy(MOCK_FILES)
 del MOCK_FILES_CONTENT_URL_MISSING[0]['file_wrapper']['content']
 del MOCK_FILES_CONTENT_URL_MISSING[0]['file_wrapper']['url']
