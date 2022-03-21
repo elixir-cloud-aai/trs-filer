@@ -25,6 +25,8 @@ jobs:
       python: 3.6
       script:
         - flake8
+        - docker-compose up --build -d
+        - sleep 10
         - coverage run --source trs_filer -m pytest
         - coveralls
     - <<: *test
