@@ -123,18 +123,18 @@ def test_toolsGet_pagination():
         .client.insert_one(mock_resp2)
 
     data = deepcopy(MOCK_VERSION_NO_ID)
-    data['id'] = MOCK_ID
+    data['id'] = MOCK_ID_2
 
     HEADERS_PAGINATION_RESULT = deepcopy(HEADERS_PAGINATION)
 
     with app.test_request_context():
         HEADERS_PAGINATION_RESULT["self_link"] = request.url
         HEADERS_PAGINATION_RESULT["next_page"] = (
-            f"{request.base_url}?offset={TEST_OFFSET + TEST_LIMIT}&limit="
+            f"{request.base_url}?offset={int(TEST_OFFSET) + TEST_LIMIT}&limit="
             f"{TEST_LIMIT}"
         )
         HEADERS_PAGINATION_RESULT["last_page"] = (
-            f"{request.base_url}?offset={max(0,TEST_OFFSET - TEST_LIMIT)}"
+            f"{request.base_url}?offset={max(0,int(TEST_OFFSET) - TEST_LIMIT)}"
             f"&limit={TEST_LIMIT}"
         )
         HEADERS_PAGINATION_RESULT["current_offset"] = TEST_OFFSET

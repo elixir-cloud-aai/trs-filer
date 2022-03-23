@@ -131,7 +131,7 @@ def toolsGet(
     author: Optional[str] = None,
     checker: Optional[bool] = None,
     limit: Optional[int] = None,
-    offset: Optional[int] = None,
+    offset: Optional[str] = None,
 ) -> Tuple[List, str, Dict]:
     """List all tools.
 
@@ -211,6 +211,14 @@ def toolsGet(
     if checker is not None:
         filt['has_checker'] = checker
 
+    # offset validation
+    if(offset is None):
+        offset_int = 0
+    else:
+        offset_int = int(offset)
+
+    logger.info(f"Limit is {limit} and offset is {offset} , {offset_int}")
+
     # fetch data
     db_coll_tools = (
         current_app.config['FOCA'].db.dbs['trsStore']
@@ -220,11 +228,11 @@ def toolsGet(
         filter=filt,
         projection={"_id": False},
     ).sort(
-        # Sort results by descending object ID (+/- newest to oldest)
-        '_id', -1
+        # Sort results by descending object ID (+/- oldest to newest)
+        '_id', 1
     ).skip(
         # Skip number of records by given offset
-        offset
+        offset_int
     ).limit(
         # Implement page size limit
         limit
@@ -239,10 +247,11 @@ def toolsGet(
 
     if(limit is not None or offset is not None):
         previous_page_url = (
-            f"{request.base_url}?offset={max(offset - limit, 0)}&limit={limit}"
+            f"{request.base_url}?offset={max(offset_int - limit, 0)}"
+            f"&limit={limit}"
         )
         next_page_url = (
-            f"{request.base_url}?offset={offset + limit}&limit={limit}"
+            f"{request.base_url}?offset={offset_int + limit}&limit={limit}"
         )
     else:
         previous_page_url = None
