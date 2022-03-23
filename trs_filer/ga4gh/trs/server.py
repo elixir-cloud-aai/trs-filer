@@ -217,8 +217,6 @@ def toolsGet(
     else:
         offset_int = int(offset)
 
-    logger.info(f"Limit is {limit} and offset is {offset} , {offset_int}")
-
     # fetch data
     db_coll_tools = (
         current_app.config['FOCA'].db.dbs['trsStore']
