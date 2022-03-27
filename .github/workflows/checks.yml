@@ -9,81 +9,35 @@ on:
   pull_request:
     branches: [ dev ]
 
-# jobs:
-#   test:
-#     name: Run linting and unit tests
-#     runs-on: ubuntu-latest
-#     strategy:
-#       fail-fast: true
-#       matrix:
-#         python-version: ["3.7", "3.8"]
-
-#     steps:
-#       - uses: actions/checkout@v2
-#       - name: Set up Python ${{ matrix.python-version }}
-#         uses: actions/setup-python@v2
-#         with:
-#           python-version: ${{ matrix.python-version }}
-#       - name: Install requirements
-#         run: |
-#           pip install -r requirements.txt
-#           pip install itsdangerous==2.0.1
-#       - name: Lint with flake8
-#         run: flake8
-#       - name: Calculate unit test coverage
-#         run: |
-#           coverage run --source trs_filer -m pytest
-#           coverage xml
-#       - name: Submit Report to Codecov
-#         uses: codecov/codecov-action@v2
-#         with:
-#           token: ${{ secrets.CODECOV_TOKEN }}
-#           files: ./coverage.xml
-#           fail_ci_if_error: true
-#           verbose: true
-
-   
 jobs:
-  lint:
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v1
-    - uses: actions/setup-python@v1
-      with:
-        python-version: 3.x
-    - name: Install dependencies
-      run: |
-        pip install flake8
-    - name: Run flake8
-      run: flake8
   test:
+    name: Run linting and unit tests
     runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v1
-    - uses: actions/setup-python@v1
-      with:
-        python-version: ${{ matrix.python-version }}
-    - name: Install dependencies
-      run: |
-        pip install -r requirements.txt
-        pip install itsdangerous==2.0.1
-        pip install https://github.com/bboe/coveralls-python/archive/github_actions.zip
-    - name: Test with pytest
-      run: coverage run --source trs_filer --module pytest
-    - env:
-        COVERALLS_PARALLEL: true
-        COVERALLS_REPO_TOKEN: ${{ secrets.COVERALLS_REPO_TOKEN }}
-      name: Submit to coveralls
-      run: coveralls
     strategy:
+      fail-fast: true
       matrix:
-        python-version: ["3.7", "3.8", "3.9"]
-  complete_coveralls:
-    needs: test
-    runs-on: ubuntu-latest
+        python-version: ["3.7", "3.8"]
+
     steps:
-    - name: Coveralls Finished
-      uses: coverallsapp/github-action@master
-      with:
-        github-token: ${{ secrets.GITHUB_TOKEN }}
-        parallel-finished: true
+      - uses: actions/checkout@v2
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v2
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install requirements
+        run: |
+          pip install -r requirements.txt
+          pip install itsdangerous==2.0.1
+      - name: Lint with flake8
+        run: flake8
+      - name: Calculate unit test coverage
+        run: |
+          coverage run --source trs_filer -m pytest
+          coverage xml
+      # - name: Submit Report to Codecov
+      #   uses: codecov/codecov-action@v2
+      #   with:
+      #     token: ${{ secrets.CODECOV_TOKEN }}
+      #     files: ./coverage.xml
+      #     fail_ci_if_error: true
+      #     verbose: true
