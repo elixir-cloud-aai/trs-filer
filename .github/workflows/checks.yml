@@ -53,8 +53,7 @@ jobs:
         python-version: 3.x
     - name: Install dependencies
       run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
+        pip install -r flake8
     - name: Run flake8
       run: flake8 . --statistics
   test:
@@ -66,7 +65,6 @@ jobs:
         python-version: ${{ matrix.python-version }}
     - name: Install dependencies
       run: |
-        python -m pip install --upgrade pip
         pip install -r requirements.txt
         pip install https://github.com/bboe/coveralls-python/archive/github_actions.zip
     - name: Test with pytest
@@ -78,7 +76,7 @@ jobs:
       run: coveralls
     strategy:
       matrix:
-        python-version: [3.5, 3.6, 3.7, 3.8]
+        python-version: ["3.7", "3.8", "3.9"]
   complete_coveralls:
     needs: test
     runs-on: ubuntu-latest
