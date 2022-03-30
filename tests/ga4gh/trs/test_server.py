@@ -25,6 +25,7 @@ from tests.mock_data import (
     MOCK_TEST_FILE,
     MOCK_VERSION_NO_ID,
     TEST_LIMIT,
+    TEST_LIMIT_2,
     TEST_OFFSET,
 )
 from trs_filer.ga4gh.trs.server import (
@@ -144,6 +145,37 @@ def test_toolsGet_pagination():
             offset=TEST_OFFSET,
         )
         assert res == ([data], '200', HEADERS_PAGINATION_RESULT)
+
+
+def test_toolsGet_pagination_negativeLimit():
+    """Test for getting a list of all available tools; pagination values specified.
+    """
+    app = Flask(__name__)
+    app.config['FOCA'] = Config(
+        db=MongoConfig(**MONGO_CONFIG)
+    )
+    mock_resp = deepcopy(MOCK_VERSION_NO_ID)
+    mock_resp['id'] = MOCK_ID
+    app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
+        .client = mongomock.MongoClient().db.collection
+    app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
+        .client.insert_one(mock_resp)
+    mock_resp2 = deepcopy(MOCK_VERSION_NO_ID)
+    mock_resp2['id'] = MOCK_ID_2
+    app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
+        .client.insert_one(mock_resp2)
+
+    data = deepcopy(MOCK_VERSION_NO_ID)
+    data['id'] = MOCK_ID_2
+
+    HEADERS_PAGINATION_RESULT = {}
+
+    with app.test_request_context():
+        res = toolsGet.__wrapped__(
+            limit=TEST_LIMIT_2,
+            offset=TEST_OFFSET,
+        )
+        assert res == ([], '422', HEADERS_PAGINATION_RESULT)
 
 
 def test_toolsGet_filters():

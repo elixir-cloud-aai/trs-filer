@@ -211,11 +211,18 @@ def toolsGet(
     if checker is not None:
         filt['has_checker'] = checker
 
+    logger.info(f"offset {offset} limit {limit} ")
     # offset validation
     if(offset is None):
         offset_int = 0
+    elif (offset is not None and int(offset) < 0):
+        return [], '422', {}
     else:
         offset_int = int(offset)
+
+    # limit validation
+    if(limit is not None and int(limit) < 0):
+        return [], '422', {}
 
     # fetch data
     db_coll_tools = (

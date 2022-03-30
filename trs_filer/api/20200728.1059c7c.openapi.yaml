@@ -583,7 +583,6 @@ components:
       description: Amount of records to return in a given page.
       schema:
         type: integer
-        minimum: 0
         format: int32
         default: 1000
     offset:
