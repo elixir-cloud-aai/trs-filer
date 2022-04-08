@@ -11,12 +11,12 @@ on:
 
 jobs:
   test:
-    name: Run linting and unit tests
+    name: Run linting and tests
     runs-on: ubuntu-latest
     strategy:
       fail-fast: true
       matrix:
-        python-version: ["3.7", "3.8"]
+        python-version: ["3.7", "3.8", "3.9", "3.10"]
 
     steps:
       - uses: actions/checkout@v2
@@ -25,19 +25,24 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install requirements
-        run: |
-          pip install -r requirements.txt
-          pip install itsdangerous==2.0.1
+        run: pip install -r requirements.txt
       - name: Lint with flake8
         run: flake8
       - name: Calculate unit test coverage
         run: |
+          docker-compose up --build -d
+          sleep 10
           coverage run --source trs_filer -m pytest
           coverage xml
-      # - name: Submit Report to Codecov
-      #   uses: codecov/codecov-action@v2
-      #   with:
-      #     token: ${{ secrets.CODECOV_TOKEN }}
-      #     files: ./coverage.xml
-      #     fail_ci_if_error: true
-      #     verbose: true
+      - name: Submit Report to Codecov
+        uses: codecov/codecov-action@v2
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./coverage.xml
+          fail_ci_if_error: true
+          verbose: true
+      - name: Run integration tests
+        run: |
+          docker-compose up --build -d
+          sleep 10
+          pytest ./tests/integration_tests.py
