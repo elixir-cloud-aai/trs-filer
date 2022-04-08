@@ -1,2 +1,2 @@
-foca==0.5.0
+foca==0.8.0
 setuptools==46.4.0
