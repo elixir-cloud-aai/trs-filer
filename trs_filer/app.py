@@ -1,18 +1,18 @@
-import os
+"""API server entry point."""
 
-from foca.foca import foca
+from pathlib import Path
+
+from foca import Foca
 
 from trs_filer.ga4gh.trs.endpoints.service_info import RegisterServiceInfo
 
 
 def main():
     # create app object
-    app = foca(
-        os.path.join(
-            os.path.dirname(__file__),
-            "config.yaml",
-        )
+    foca = Foca(
+        config_file=Path(__file__).resolve().parent / "config.yaml",
     )
+    app = foca.create_app()
 
     # register service info
     with app.app.app_context():
