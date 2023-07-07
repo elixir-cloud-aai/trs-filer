@@ -110,7 +110,7 @@ def toolsIdVersionsVersionIdGet(
     )
     try:
         version = data['versions'][0]
-        if version and'files' in version:
+        if version and 'files' in version:
             del version['files']
         return version
     except (KeyError, TypeError):
