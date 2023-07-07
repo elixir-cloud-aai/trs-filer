@@ -2,7 +2,7 @@ version: '3.6'
 services:
 
     trs:
-        image: elixircloud/trs-filer:0.1.0
+        image: elixircloud/trs-filer:latest
         build:
             context: .
             dockerfile: Dockerfile

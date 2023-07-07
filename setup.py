@@ -5,7 +5,7 @@ from setuptools import setup, find_packages
 
 root_dir = Path(__file__).parent.resolve()
 
-exec(open(root_dir / "foca" / "version.py").read())
+exec(open(root_dir / "trs_filer" / "version.py").read())
 
 file_name = root_dir / "README.md"
 with open(file_name, "r") as _file:

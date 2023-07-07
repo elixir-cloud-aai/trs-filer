@@ -1,5 +1,5 @@
 ##### BASE IMAGE #####
-FROM elixircloud/foca:20200809
+FROM elixircloud/foca:20221110-py3.10
 
 ##### METADATA ##### 
 LABEL software="TRS-filer"
