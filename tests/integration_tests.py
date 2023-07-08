@@ -18,7 +18,7 @@ from tests.mock_data import (
 )
 
 
-base_url = "http://localhost:8080/ga4gh/trs/v2"
+base_url = "http://localhost:80/ga4gh/trs/v2"
 headers = {
     'accept': '*/*',
     'Content-Type': 'application/json'

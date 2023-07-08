@@ -17,6 +17,7 @@ def init_app() -> App:
     # create app object
     foca = Foca(
         config_file=Path(__file__).resolve().parent / "config.yaml",
+        custom_config_model="trs_filer.custom_config.CustomConfig",
     )
     app = foca.create_app()
 
@@ -25,6 +26,7 @@ def init_app() -> App:
         service_info = RegisterServiceInfo()
         service_info.set_service_info_from_config()
     return app
+
 
 def run_app(app: App) -> None:
     """Run FOCA application."""

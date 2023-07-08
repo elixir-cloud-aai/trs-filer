@@ -34,14 +34,14 @@ class RegisterServiceInfo:
             db_coll_info: Database collection storing service info objects.
             conf_info: Service info details as per enpoints config.
         """
-        conf = current_app.config['FOCA'].endpoints
-        self.url_prefix = conf['service']['url_prefix']
-        self.host_name = conf['service']['external_host']
-        self.external_port = conf['service']['external_port']
-        self.api_path = conf['service']['api_path']
-        self.conf_info = conf['service_info']
+        conf = current_app.config.foca.custom
+        self.url_prefix = conf.service.url_prefix
+        self.host_name = conf.service.external_host
+        self.external_port = conf.service.external_port
+        self.api_path = conf.service.api_path
+        self.conf_info = conf.service_info.dict()
         self.db_coll_info = (
-            current_app.config['FOCA'].db.dbs['trsStore']
+            current_app.config.foca.db.dbs['trsStore']
             .collections['service_info'].client
         )
 
