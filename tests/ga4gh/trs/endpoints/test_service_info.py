@@ -18,10 +18,7 @@ from tests.mock_data import (
 from trs_filer.ga4gh.trs.endpoints.service_info import (
     RegisterServiceInfo,
 )
-from trs_filer.errors.exceptions import (
-    NotFound,
-    ValidationError,
-)
+from trs_filer.errors.exceptions import NotFound
 from trs_filer.custom_config import CustomConfig
 
 
