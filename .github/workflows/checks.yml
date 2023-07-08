@@ -53,7 +53,7 @@ jobs:
         run: sleep 20
       - name: Run integration tests
         shell: bash
-        run: pytest tests/test_integration
+        run: pytest tests/integration_tests.py
       - name: Tear down app
         run: docker-compose down
 

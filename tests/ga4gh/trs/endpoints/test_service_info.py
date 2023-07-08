@@ -9,7 +9,7 @@ from foca.models.config import (Config, MongoConfig)
 import mongomock
 
 from tests.mock_data import (
-    ENDPOINT_CONFIG,
+    CUSTOM_CONFIG,
     HEADERS_SERVICE_INFO,
     MONGO_CONFIG,
     SERVICE_CONFIG,
@@ -22,6 +22,7 @@ from trs_filer.errors.exceptions import (
     NotFound,
     ValidationError,
 )
+from trs_filer.custom_config import CustomConfig
 
 
 class TestRegisterServiceInfo:
@@ -30,9 +31,9 @@ class TestRegisterServiceInfo:
     def test_init(self):
         """Test for constructing class."""
         app = Flask(__name__)
-        app.config['FOCA'] = Config(
+        app.config.foca = Config(
             db=MongoConfig(**MONGO_CONFIG),
-            endpoints=ENDPOINT_CONFIG,
+            custom=CustomConfig(**CUSTOM_CONFIG),
         )
 
         with app.app_context():
@@ -42,14 +43,14 @@ class TestRegisterServiceInfo:
     def test_get_service_info(self):
         """Test for getting service info."""
         app = Flask(__name__)
-        app.config['FOCA'] = Config(
+        app.config.foca = Config(
             db=MongoConfig(**MONGO_CONFIG),
-            endpoints=ENDPOINT_CONFIG,
+            custom=CustomConfig(**CUSTOM_CONFIG),
         )
         mock_resp = deepcopy(SERVICE_INFO_CONFIG)
-        app.config['FOCA'].db.dbs['trsStore'].collections['service_info'] \
+        app.config.foca.db.dbs['trsStore'].collections['service_info'] \
             .client = mongomock.MongoClient().db.collection
-        app.config['FOCA'].db.dbs['trsStore'].collections['service_info'] \
+        app.config.foca.db.dbs['trsStore'].collections['service_info'] \
             .client.insert_one(mock_resp)
 
         with app.app_context():
@@ -60,11 +61,11 @@ class TestRegisterServiceInfo:
     def test_get_service_info_na(self):
         """Test for getting service info when service info is unavailable."""
         app = Flask(__name__)
-        app.config['FOCA'] = Config(
+        app.config.foca = Config(
             db=MongoConfig(**MONGO_CONFIG),
-            endpoints=ENDPOINT_CONFIG,
+            custom=CustomConfig(**CUSTOM_CONFIG),
         )
-        app.config['FOCA'].db.dbs['trsStore'].collections['service_info'] \
+        app.config.foca.db.dbs['trsStore'].collections['service_info'] \
             .client = mongomock.MongoClient().db.collection
 
         with app.app_context():
@@ -74,11 +75,11 @@ class TestRegisterServiceInfo:
     def test_set_service_info_from_config(self):
         """Test for setting service info from config."""
         app = Flask(__name__)
-        app.config['FOCA'] = Config(
+        app.config.foca = Config(
             db=MongoConfig(**MONGO_CONFIG),
-            endpoints=ENDPOINT_CONFIG,
+            custom=CustomConfig(**CUSTOM_CONFIG),
         )
-        app.config['FOCA'].db.dbs['trsStore'].collections['service_info'] \
+        app.config.foca.db.dbs['trsStore'].collections['service_info'] \
             .client = mongomock.MongoClient().db.collection
 
         with app.app_context():
@@ -86,36 +87,19 @@ class TestRegisterServiceInfo:
             service_info.set_service_info_from_config()
             assert service_info.get_service_info() == SERVICE_INFO_CONFIG
 
-    def test_set_service_info_from_config_invalid(self):
-        """Test for setting service info from corrupt config."""
-        app = Flask(__name__)
-        mock_resp = deepcopy(ENDPOINT_CONFIG)
-        del mock_resp['service_info']['id']
-        app.config['FOCA'] = Config(
-            db=MongoConfig(**MONGO_CONFIG),
-            endpoints=mock_resp,
-        )
-        app.config['FOCA'].db.dbs['trsStore'].collections['service_info'] \
-            .client = mongomock.MongoClient().db.collection
-
-        with app.app_context():
-            with pytest.raises(ValidationError):
-                service_info = RegisterServiceInfo()
-                service_info.set_service_info_from_config()
-
     def test_set_service_info_from_config_skip(self):
         """Test for skipping setting service info because identical service
         info is already available.
         """
         app = Flask(__name__)
-        app.config['FOCA'] = Config(
+        app.config.foca = Config(
             db=MongoConfig(**MONGO_CONFIG),
-            endpoints=ENDPOINT_CONFIG,
+            custom=CustomConfig(**CUSTOM_CONFIG),
         )
         mock_resp = deepcopy(SERVICE_INFO_CONFIG)
-        app.config['FOCA'].db.dbs['trsStore'].collections['service_info'] \
+        app.config.foca.db.dbs['trsStore'].collections['service_info'] \
             .client = mongomock.MongoClient().db.collection
-        app.config['FOCA'].db.dbs['trsStore'].collections['service_info'] \
+        app.config.foca.db.dbs['trsStore'].collections['service_info'] \
             .client.insert_one(mock_resp)
 
         with app.app_context():
@@ -126,11 +110,11 @@ class TestRegisterServiceInfo:
     def test_set_service_info_from_app_context(self):
         """Test for setting service info from app context."""
         app = Flask(__name__)
-        app.config['FOCA'] = Config(
+        app.config.foca = Config(
             db=MongoConfig(**MONGO_CONFIG),
-            endpoints=ENDPOINT_CONFIG,
+            custom=CustomConfig(**CUSTOM_CONFIG),
         )
-        app.config['FOCA'].db.dbs['trsStore'].collections['service_info'] \
+        app.config.foca.db.dbs['trsStore'].collections['service_info'] \
             .client = mongomock.MongoClient().db.collection
 
         with app.app_context():
@@ -143,11 +127,11 @@ class TestRegisterServiceInfo:
     def test__upsert_service_info_insert(self):
         """Test for creating service info document in database."""
         app = Flask(__name__)
-        app.config['FOCA'] = Config(
+        app.config.foca = Config(
             db=MongoConfig(**MONGO_CONFIG),
-            endpoints=ENDPOINT_CONFIG,
+            custom=CustomConfig(**CUSTOM_CONFIG),
         )
-        app.config['FOCA'].db.dbs['trsStore'].collections['service_info'] \
+        app.config.foca.db.dbs['trsStore'].collections['service_info'] \
             .client = mongomock.MongoClient().db.collection
 
         data = deepcopy(SERVICE_INFO_CONFIG)
@@ -161,14 +145,14 @@ class TestRegisterServiceInfo:
     def test__upsert_service_info_update(self):
         """Test for replacing service info document in database."""
         app = Flask(__name__)
-        app.config['FOCA'] = Config(
+        app.config.foca = Config(
             db=MongoConfig(**MONGO_CONFIG),
-            endpoints=ENDPOINT_CONFIG,
+            custom=CustomConfig(**CUSTOM_CONFIG),
         )
         mock_resp = deepcopy(SERVICE_INFO_CONFIG)
-        app.config['FOCA'].db.dbs['trsStore'].collections['service_info'] \
+        app.config.foca.db.dbs['trsStore'].collections['service_info'] \
             .client = mongomock.MongoClient().db.collection
-        app.config['FOCA'].db.dbs['trsStore'].collections['service_info'] \
+        app.config.foca.db.dbs['trsStore'].collections['service_info'] \
             .client.insert_one(mock_resp)
 
         data = deepcopy(SERVICE_INFO_CONFIG)
@@ -182,9 +166,9 @@ class TestRegisterServiceInfo:
     def test__get_headers(self):
         """Test for response headers getter."""
         app = Flask(__name__)
-        app.config['FOCA'] = Config(
+        app.config.foca = Config(
             db=MongoConfig(**MONGO_CONFIG),
-            endpoints=ENDPOINT_CONFIG,
+            custom=CustomConfig(**CUSTOM_CONFIG),
         )
 
         with app.app_context():

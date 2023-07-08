@@ -154,7 +154,7 @@ class ServiceInfoConfig(FOCABaseConfig):
         , documentationUrl='docs/abc', createdAt='2020-01-01', updatedAt='2020
         -01-01', environment='ENV', version='0.0.0')
     """
-    id: Optional[str] = None
+    id: str
     name: Optional[str] = None
     type: ServiceInfoTypeConfig = ServiceInfoTypeConfig()
     description: Optional[str] = None
@@ -318,8 +318,8 @@ class CustomConfig(FOCABaseConfig):
         version: Version config parameters.
         toolclass: Tool Class config parameters.
     """
-    service: ServiceConfig = ServiceConfig()
-    service_info: ServiceInfoConfig = ServiceInfoConfig()
+    service: ServiceConfig
+    service_info: ServiceInfoConfig
     tool: ToolConfig = ToolConfig()
     version: VersionConfig = VersionConfig()
     toolclass: ToolClassConfig = ToolClassConfig()
