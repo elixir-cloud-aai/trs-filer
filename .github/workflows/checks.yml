@@ -57,66 +57,33 @@ jobs:
       - name: Tear down app
         run: docker-compose down
 
-  Docker:
+  Publish:
+    name: Build and publish app image
     runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'push' }}
     needs: [Test]
-    strategy:
-      fail-fast: true
-      matrix:
-        py-version-img-tag: [
-          ["3.8", "3.8-slim-buster", ""],
-          ["3.9", "3.9-slim-buster", ""],
-          ["3.10", "3.10-slim-buster", "latest"],
-        ]
-
+    
     steps:
-      - name: Checkout Repository
+      - name: Check out repository
         uses: actions/checkout@v3
-      - name: Build & Publish image to DockerHub
-        env:
-          DOCKERHUB_ORG: ${{ secrets.DOCKERHUB_ORG }}
-          DOCKERHUB_LOGIN: ${{ secrets.DOCKERHUB_LOGIN }}
-          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
-          REPO_NAME: ${{ github.event.repository.name }}
+      - name: Generate tag
         run: |
-          set -x
-          export ON_LATEST=FALSE
-          export ON_DEFAULT=FALSE
-          export PY_VERSION=${{ matrix.py-version-img-tag[0] }}
-          export PY_IMAGE=${{ matrix.py-version-img-tag[1] }}
-          export PY_TAG=${{ matrix.py-version-img-tag[2] }}
-          export DEFAULT_BRANCH=${{ github.event.repository.default_branch }}
-          if [[ "$PY_TAG" == "latest" ]]; then
-              export ON_LATEST=TRUE
-          fi
-          if [[ "${GITHUB_EVENT_NAME}" == "push" ]]; then
-            export BRANCH_NAME=${GITHUB_REF##*/}
-          elif [[ "${GITHUB_EVENT_NAME}" == "pull_request" ]]; then
-            export BRANCH_NAME=${GITHUB_HEAD_REF##*/}
-          else
-            export BRANCH_NAME=INVALID_EVENT_BRANCH_UNKNOWN
-          fi
-          if [[ "$BRANCH_NAME" == "$DEFAULT_BRANCH" ]]; then
-              export TAG=$(date '+%Y%m%d')
-              export ON_DEFAULT=TRUE
-          else
-              export TAG=$BRANCH_NAME
-          fi
-          export TAG="${TAG}-py${PY_VERSION}"
-          echo "TAG: ${TAG}"
-          docker build \
-              -t ${DOCKERHUB_ORG}/${REPO_NAME}:${TAG} \
-              -f docker/Dockerfile \
-              --build-arg PY_IMAGE=${PY_IMAGE} \
-              .
-          echo $DOCKERHUB_TOKEN | \
-              docker login -u $DOCKERHUB_LOGIN --password-stdin
-          docker push ${DOCKERHUB_ORG}/${REPO_NAME}:${TAG}
-          # if on default branch, we also want to update the "latest" tag
-          if [[ "$ON_LATEST" = "TRUE" && "$ON_DEFAULT" == "TRUE" ]]; then
-              docker tag \
-                  ${DOCKERHUB_ORG}/${REPO_NAME}:${TAG} \
-                  ${DOCKERHUB_ORG}/${REPO_NAME}:latest
-              docker push ${DOCKERHUB_ORG}/${REPO_NAME}:latest
-          fi
-          rm ${HOME}/.docker/config.json
+          echo "TAG=$(date '+%Y%m%d')" >> $GITHUB_ENV
+      - name: Build and publish image
+        id: docker
+        uses: philips-software/docker-ci-scripts@v5.0.0
+        with:
+          dockerfile: .
+          image-name: "protes"
+          tags: "latest ${{ env.TAG }}"
+          push-branches: "${{ github.event.repository.default_branch }}"
+        env:
+          REGISTRY_USERNAME: ${{ secrets.DOCKERHUB_LOGIN }}
+          REGISTRY_TOKEN: "${{ secrets.DOCKERHUB_TOKEN }}"
+          DOCKER_ORGANIZATION: ${{ secrets.DOCKERHUB_ORG }}
+          GITHUB_ORGANIZATION: ${{ github.repository_owner }}
+      - name: Verify that image was pushed
+        run: |
+          echo "Push indicator: ${{ steps.docker.outputs.push-indicator }}"
+          echo "# Set to 'true' if image was pushed, empty string otherwise"
+          test "${{ steps.docker.outputs.push-indicator }}" == "true"
