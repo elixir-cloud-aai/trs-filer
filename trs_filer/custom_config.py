@@ -97,28 +97,30 @@ class ServiceInfoConfig(FOCABaseConfig):
     Args:
         id: Unique identifier for the service. If `null`, new identifier will
             be created.
-        name: Name for the service. 
+        name: Name for the service.
         type: Version control parameters for the service artifacts.
         description: Short hand description for the service usage.
         organization: Information regarding the parent organisation responsible
             for maintaining the service.
         contactUrl: Webpage URL with contact information for the service.
-        documentationUrl: Webpage URL with documentation details for the service.
+        documentationUrl: Webpage URL with documentation details for the
+            service.
         createdAt: Service version creation timestamp.
         updatedAt: Service version last update timestamp.
         environment: Service deployment enviroment name.
         version: Service release stable version.
-    
+
     Attributes:
         id: Unique identifier for the service. If `null`, new identifier will
             be created.
-        name: Name for the service. 
+        name: Name for the service.
         type: Version control parameters for the service artifacts.
         description: Short hand description for the service usage.
         organization: Information regarding the parent organisation responsible
             for maintaining the service.
         contactUrl: Webpage URL with contact information for the service.
-        documentationUrl: Webpage URL with documentation details for the service.
+        documentationUrl: Webpage URL with documentation details for the
+            service.
         createdAt: Service version creation timestamp.
         updatedAt: Service version last update timestamp.
         environment: Service deployment enviroment name.
@@ -192,7 +194,7 @@ class IdConfig(FOCABaseConfig):
 
 class MetaVersionConfig(FOCABaseConfig):
     """Model for defining meta version control configurations.
-    
+
     Args:
         init: Start index for the versioning. Defaults to `1`.
         increment: Incremental delta for the next version. Defaults to `1`.
@@ -207,7 +209,7 @@ class MetaVersionConfig(FOCABaseConfig):
 
 class ToolConfig(FOCABaseConfig):
     """Model for tool config parameters.
-    
+
     Args:
         id: Unique identifier definition for tools.
         meta_version: Version control config params.
@@ -236,7 +238,7 @@ class ToolConfig(FOCABaseConfig):
 
 class VersionConfig(FOCABaseConfig):
     """Model for version config parameters.
-    
+
     Args:
         id: Unique identifier definition for tool versions.
         meta_version: Version control config params.
@@ -256,8 +258,8 @@ class VersionConfig(FOCABaseConfig):
         ...         increment=1
         ...     )
         ... )
-        VersionConfig(id=IdConfig(length=6, charset='string.ascii_lowercase + str
-        ing.digits'), meta_version=MetaVersionConfig(init=1, increment=1))
+        VersionConfig(id=IdConfig(length=6, charset='string.ascii_lowercase +
+        string.digits'), meta_version=MetaVersionConfig(init=1, increment=1))
     """
     id: IdConfig = IdConfig()
     meta_version: MetaVersionConfig = MetaVersionConfig()
@@ -265,7 +267,7 @@ class VersionConfig(FOCABaseConfig):
 
 class ToolClassConfig(FOCABaseConfig):
     """Model for version config parameters.
-    
+
     Args:
         id: Unique identifier definition for tool classes.
         meta_version: Version control config params.
@@ -290,9 +292,9 @@ class ToolClassConfig(FOCABaseConfig):
         ...     ),
         ...     validation=False
         ... )
-        ToolClassConfig(id=IdConfig(length=6, charset='string.ascii_lowercase + s
-        tring.digits'), meta_version=MetaVersionConfig(init=1, increment=1), vali
-        dation=False)
+        ToolClassConfig(id=IdConfig(length=6, charset='string.ascii_lowercase
+        + string.digits'), meta_version=MetaVersionConfig(init=1, increment=1)
+        , validation=False)
     """
     id: IdConfig = IdConfig()
     meta_version: MetaVersionConfig = MetaVersionConfig()
