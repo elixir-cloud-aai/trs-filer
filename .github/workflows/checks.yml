@@ -89,7 +89,7 @@ jobs:
               export DOCKER_TAG=${BRANCH_NAME//_/-}
               export DOCKER_TAG=${DOCKER_TAG//\//-}
           fi
-          echo "TAG: ${TAG}"
+          echo "TAG: ${DOCKER_TAG}"
           docker build . \
             -t "${DOCKERHUB_ORG}/${REPO_NAME}:latest" \
             -t "${DOCKERHUB_ORG}/${REPO_NAME}:${DOCKER_TAG}"
