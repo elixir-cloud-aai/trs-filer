@@ -64,24 +64,24 @@ class RegisterTool:
             db_coll_classes: Database collection for storing tool class
                 objects.
         """
-        conf = current_app.config['FOCA'].endpoints
+        conf = current_app.config.foca.custom
         self.data = data
         self.data['id'] = None if id is None else id
         self.replace = True
-        self.id_charset: str = conf['tool']['id']['charset']
-        self.id_length = int(conf['tool']['id']['length'])
-        self.meta_version_init = int(conf['tool']['meta_version']['init'])
-        self.url_prefix = conf['service']['url_prefix']
-        self.host_name = conf['service']['external_host']
-        self.external_port = conf['service']['external_port']
-        self.api_path = conf['service']['api_path']
-        self.tool_class_validation = conf['toolclass']['validation']
+        self.id_charset: str = conf.tool.id.charset
+        self.id_length = int(conf.tool.id.length)
+        self.meta_version_init = int(conf.tool.meta_version.init)
+        self.url_prefix = conf.service.url_prefix
+        self.host_name = conf.service.external_host
+        self.external_port = conf.service.external_port
+        self.api_path = conf.service.api_path
+        self.tool_class_validation = conf.toolclass.validation
         self.db_coll_tools = (
-            current_app.config['FOCA'].db.dbs['trsStore']
+            current_app.config.foca.db.dbs['trsStore']
             .collections['tools'].client
         )
         self.db_coll_classes = (
-            current_app.config['FOCA'].db.dbs['trsStore']
+            current_app.config.foca.db.dbs['trsStore']
             .collections['toolclasses'].client
         )
 
@@ -238,22 +238,22 @@ class RegisterToolVersion:
                 constructing tool and version `url` properties.
             db_coll_tools: Database collection for storing tool objects.
         """
-        conf = current_app.config['FOCA'].endpoints
+        conf = current_app.config.foca.custom
         self.data: Dict = data
         self.data['id'] = None if version_id is None else version_id
         self.id: str = id
         self.replace: bool = True
-        self.id_charset: str = conf['version']['id']['charset']
-        self.id_length: int = int(conf['version']['id']['length'])
+        self.id_charset: str = conf.version.id.charset
+        self.id_length: int = int(conf.version.id.length)
         self.meta_version_init: int = int(
-            conf['version']['meta_version']['init']
+            conf.version.meta_version.init
         )
-        self.url_prefix: str = conf['service']['url_prefix']
-        self.host_name: str = conf['service']['external_host']
-        self.external_port: int = conf['service']['external_port']
-        self.api_path: str = conf['service']['api_path']
+        self.url_prefix: str = conf.service.url_prefix
+        self.host_name: str = conf.service.external_host
+        self.external_port: int = conf.service.external_port
+        self.api_path: str = conf.service.api_path
         self.db_coll_tools = (
-            current_app.config['FOCA'].db.dbs['trsStore']
+            current_app.config.foca.db.dbs['trsStore']
             .collections['tools'].client
         )
 

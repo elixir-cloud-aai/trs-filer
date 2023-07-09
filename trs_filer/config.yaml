@@ -70,7 +70,9 @@ exceptions:
     status_member: ['code']
     exceptions: trs_filer.errors.exceptions.exceptions
 
-endpoints:
+# Custom configuration
+# Available in app context as attributes of `current_app.config.foca`
+custom:
     service:
         url_prefix: https
         external_host: trs-filer-alex.c03.k8s-popup.csc.fi
