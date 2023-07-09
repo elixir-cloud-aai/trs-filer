@@ -130,7 +130,7 @@ def toolsGet(
     description: Optional[str] = None,
     author: Optional[str] = None,
     checker: Optional[bool] = None,
-    limit: Optional[int] = None,
+    limit: Optional[int] = 1000,  # default as per specs
     offset: Optional[str] = None,
 ) -> Tuple[List, str, Dict]:
     """List all tools.
@@ -266,7 +266,7 @@ def toolsGet(
     headers['next_page'] = next_page_url
     headers['last_page'] = previous_page_url
     headers['self_link'] = f"{request.url}"
-    headers['current_offset'] = offset
+    headers['current_offset'] = str(offset_int)
     headers['current_limit'] = limit
 
     return records, '200', headers

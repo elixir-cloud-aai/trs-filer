@@ -10,6 +10,8 @@ import pytest
 
 from tests.mock_data import (
     CUSTOM_CONFIG,
+    DEFAULT_LIMIT,
+    DEFAULT_OFFSET,
     HEADERS_PAGINATION,
     MOCK_ID,
     MOCK_ID_2,
@@ -103,6 +105,16 @@ def test_toolsGet():
     HEADERS_PAGINATION_RESULT = deepcopy(HEADERS_PAGINATION)
     with app.test_request_context():
         HEADERS_PAGINATION_RESULT["self_link"] = request.url
+        HEADERS_PAGINATION_RESULT["next_page"] = (
+            f"{request.base_url}?offset={int(DEFAULT_OFFSET) + DEFAULT_LIMIT}"
+            f"&limit={DEFAULT_LIMIT}"
+        )
+        HEADERS_PAGINATION_RESULT["last_page"] = (
+            f"{request.base_url}?offset={DEFAULT_OFFSET}"
+            f"&limit={DEFAULT_LIMIT}"
+        )
+        HEADERS_PAGINATION_RESULT["current_offset"] = DEFAULT_OFFSET
+        HEADERS_PAGINATION_RESULT["current_limit"] = DEFAULT_LIMIT
         res = toolsGet.__wrapped__()
         assert res == ([data], '200', HEADERS_PAGINATION_RESULT)
 
@@ -235,6 +247,16 @@ def test_toolsGet_filters():
     HEADERS_PAGINATION_RESULT = deepcopy(HEADERS_PAGINATION)
     with app.test_request_context():
         HEADERS_PAGINATION_RESULT["self_link"] = request.base_url
+        HEADERS_PAGINATION_RESULT["next_page"] = (
+            f"{request.base_url}?offset={int(DEFAULT_OFFSET) + DEFAULT_LIMIT}"
+            f"&limit={DEFAULT_LIMIT}"
+        )
+        HEADERS_PAGINATION_RESULT["last_page"] = (
+            f"{request.base_url}?offset={DEFAULT_OFFSET}"
+            f"&limit={DEFAULT_LIMIT}"
+        )
+        HEADERS_PAGINATION_RESULT["current_offset"] = DEFAULT_OFFSET
+        HEADERS_PAGINATION_RESULT["current_limit"] = DEFAULT_LIMIT
         res = toolsGet.__wrapped__(
             id=data['id'],
             checker=data['has_checker'],
