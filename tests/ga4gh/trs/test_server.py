@@ -27,6 +27,7 @@ from tests.mock_data import (
     TEST_LIMIT,
     TEST_LIMIT_2,
     TEST_OFFSET,
+    TEST_OFFSET_2,
 )
 from trs_filer.ga4gh.trs.server import (
     deleteTool,
@@ -149,7 +150,7 @@ def test_toolsGet_pagination():
 
 
 def test_toolsGet_pagination_negativeLimit():
-    """Test for getting a list of all available tools; pagination values specified.
+    """Test for getting a list of all available tools; pagination values specified given a negative limit.
     """
     app = Flask(__name__)
     app.config.foca = Config(
@@ -175,6 +176,37 @@ def test_toolsGet_pagination_negativeLimit():
         res = toolsGet.__wrapped__(
             limit=TEST_LIMIT_2,
             offset=TEST_OFFSET,
+        )
+        assert res == ([], '422', HEADERS_PAGINATION_RESULT)
+
+
+def test_toolsGet_pagination_negativeOffset():
+    """Test for getting a list of all available tools; pagination values specified, given a negative offset.
+    """
+    app = Flask(__name__)
+    app.config.foca = Config(
+        db=MongoConfig(**MONGO_CONFIG)
+    )
+    mock_resp = deepcopy(MOCK_VERSION_NO_ID)
+    mock_resp['id'] = MOCK_ID
+    app.config.foca.db.dbs['trsStore'].collections['tools'] \
+        .client = mongomock.MongoClient().db.collection
+    app.config.foca.db.dbs['trsStore'].collections['tools'] \
+        .client.insert_one(mock_resp)
+    mock_resp2 = deepcopy(MOCK_VERSION_NO_ID)
+    mock_resp2['id'] = MOCK_ID_2
+    app.config.foca.db.dbs['trsStore'].collections['tools'] \
+        .client.insert_one(mock_resp2)
+
+    data = deepcopy(MOCK_VERSION_NO_ID)
+    data['id'] = MOCK_ID_2
+
+    HEADERS_PAGINATION_RESULT = {}
+
+    with app.test_request_context():
+        res = toolsGet.__wrapped__(
+            limit=TEST_LIMIT,
+            offset=TEST_OFFSET_2,
         )
         assert res == ([], '422', HEADERS_PAGINATION_RESULT)
 
