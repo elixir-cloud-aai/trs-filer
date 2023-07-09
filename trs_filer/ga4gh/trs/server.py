@@ -130,8 +130,8 @@ def toolsGet(
     description: Optional[str] = None,
     author: Optional[str] = None,
     checker: Optional[bool] = None,
-    limit: Optional[int] = None,
-    offset: Optional[int] = None,
+    limit: Optional[int] = 1000,  # default as per specs
+    offset: Optional[str] = None,
 ) -> Tuple[List, str, Dict]:
     """List all tools.
 
@@ -211,6 +211,19 @@ def toolsGet(
     if checker is not None:
         filt['has_checker'] = checker
 
+    logger.info(f"offset {offset} limit {limit} ")
+    # offset validation
+    if(offset is None):
+        offset_int = 0
+    elif (offset is not None and int(offset) < 0):
+        return [], '422', {}
+    else:
+        offset_int = int(offset)
+
+    # limit validation
+    if(limit is not None and int(limit) < 0):
+        return [], '422', {}
+
     # fetch data
     db_coll_tools = (
         current_app.config.foca.db.dbs['trsStore']
@@ -219,7 +232,17 @@ def toolsGet(
     records = db_coll_tools.find(
         filter=filt,
         projection={"_id": False},
+    ).sort(
+        # Sort results by descending object ID (+/- oldest to newest)
+        '_id', 1
+    ).skip(
+        # Skip number of records by given offset
+        offset_int
+    ).limit(
+        # Implement page size limit
+        limit
     )
+
     records = list(records)
     for record in records:
         if 'versions' in record:
@@ -227,13 +250,20 @@ def toolsGet(
                 if 'files' in _version:
                     del _version['files']
 
-    # TODO: create dummy headers; implement pagination later
+    previous_page_url = (
+        f"{request.base_url}?offset={max(offset_int - limit, 0)}"
+        f"&limit={limit}"
+    )
+    next_page_url = (
+        f"{request.base_url}?offset={offset_int + limit}&limit={limit}"
+    )
+
     headers = {}
-    headers['next_page'] = None
-    headers['last_page'] = None
-    headers['self_link'] = None
-    headers['current_offset'] = None
-    headers['current_limit'] = None
+    headers['next_page'] = next_page_url
+    headers['last_page'] = previous_page_url
+    headers['self_link'] = f"{request.url}"
+    headers['current_offset'] = str(offset_int)
+    headers['current_limit'] = limit
 
     return records, '200', headers
 

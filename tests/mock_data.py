@@ -3,8 +3,15 @@
 from copy import deepcopy
 
 MOCK_ID = "mock_id"
+MOCK_ID_2 = "mock_id2"
 MOCK_ID_ONE_CHAR = "A"
 CHARSET_EXPRESSION = 'string.digits'
+TEST_LIMIT = 1
+TEST_LIMIT_2 = -1
+DEFAULT_LIMIT = 1000
+DEFAULT_OFFSET = "0"
+TEST_OFFSET = "1"
+TEST_OFFSET_2 = "-1"
 INDEX_CONFIG = {
     'keys': [('id', 1)]
 }

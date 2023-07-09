@@ -3,14 +3,18 @@
 from copy import deepcopy
 
 from flask import Flask
+from flask import (request)
 from foca.models.config import (Config, MongoConfig)
 import mongomock
 import pytest
 
 from tests.mock_data import (
     CUSTOM_CONFIG,
+    DEFAULT_LIMIT,
+    DEFAULT_OFFSET,
     HEADERS_PAGINATION,
     MOCK_ID,
+    MOCK_ID_2,
     MOCK_TOOL_CLASS,
     MOCK_TOOL_VERSION_ID,
     MOCK_VERSION_ID,
@@ -21,6 +25,11 @@ from tests.mock_data import (
     MOCK_DESCRIPTOR_SEC_FILE,
     MOCK_OTHER_FILE,
     MOCK_TEST_FILE,
+    MOCK_VERSION_NO_ID,
+    TEST_LIMIT,
+    TEST_LIMIT_2,
+    TEST_OFFSET,
+    TEST_OFFSET_2,
 )
 from trs_filer.ga4gh.trs.server import (
     deleteTool,
@@ -93,9 +102,127 @@ def test_toolsGet():
     data = deepcopy(MOCK_TOOL_VERSION_ID)
     data['id'] = MOCK_ID
     del data['versions'][0]['files']
-    with app.app_context():
+    HEADERS_PAGINATION_RESULT = deepcopy(HEADERS_PAGINATION)
+    with app.test_request_context():
+        HEADERS_PAGINATION_RESULT["self_link"] = request.url
+        HEADERS_PAGINATION_RESULT["next_page"] = (
+            f"{request.base_url}?offset={int(DEFAULT_OFFSET) + DEFAULT_LIMIT}"
+            f"&limit={DEFAULT_LIMIT}"
+        )
+        HEADERS_PAGINATION_RESULT["last_page"] = (
+            f"{request.base_url}?offset={DEFAULT_OFFSET}"
+            f"&limit={DEFAULT_LIMIT}"
+        )
+        HEADERS_PAGINATION_RESULT["current_offset"] = DEFAULT_OFFSET
+        HEADERS_PAGINATION_RESULT["current_limit"] = DEFAULT_LIMIT
         res = toolsGet.__wrapped__()
-        assert res == ([data], '200', HEADERS_PAGINATION)
+        assert res == ([data], '200', HEADERS_PAGINATION_RESULT)
+
+
+def test_toolsGet_pagination():
+    """Test for getting a list of all available tools; pagination values specified.
+    """
+    app = Flask(__name__)
+    app.config.foca = Config(
+        db=MongoConfig(**MONGO_CONFIG)
+    )
+    mock_resp = deepcopy(MOCK_VERSION_NO_ID)
+    mock_resp['id'] = MOCK_ID
+    app.config.foca.db.dbs['trsStore'].collections['tools'] \
+        .client = mongomock.MongoClient().db.collection
+    app.config.foca.db.dbs['trsStore'].collections['tools'] \
+        .client.insert_one(mock_resp)
+    mock_resp2 = deepcopy(MOCK_VERSION_NO_ID)
+    mock_resp2['id'] = MOCK_ID_2
+    app.config.foca.db.dbs['trsStore'].collections['tools'] \
+        .client.insert_one(mock_resp2)
+
+    data = deepcopy(MOCK_VERSION_NO_ID)
+    data['id'] = MOCK_ID_2
+
+    HEADERS_PAGINATION_RESULT = deepcopy(HEADERS_PAGINATION)
+
+    with app.test_request_context():
+        HEADERS_PAGINATION_RESULT["self_link"] = request.url
+        HEADERS_PAGINATION_RESULT["next_page"] = (
+            f"{request.base_url}?offset={int(TEST_OFFSET) + TEST_LIMIT}&limit="
+            f"{TEST_LIMIT}"
+        )
+        HEADERS_PAGINATION_RESULT["last_page"] = (
+            f"{request.base_url}?offset={max(0,int(TEST_OFFSET) - TEST_LIMIT)}"
+            f"&limit={TEST_LIMIT}"
+        )
+        HEADERS_PAGINATION_RESULT["current_offset"] = TEST_OFFSET
+        HEADERS_PAGINATION_RESULT["current_limit"] = TEST_LIMIT
+        res = toolsGet.__wrapped__(
+            limit=TEST_LIMIT,
+            offset=TEST_OFFSET,
+        )
+        assert res == ([data], '200', HEADERS_PAGINATION_RESULT)
+
+
+def test_toolsGet_pagination_negativeLimit():
+    """Test for getting a list of all available tools; pagination values
+    specified, given a negative limit.
+    """
+    app = Flask(__name__)
+    app.config.foca = Config(
+        db=MongoConfig(**MONGO_CONFIG)
+    )
+    mock_resp = deepcopy(MOCK_VERSION_NO_ID)
+    mock_resp['id'] = MOCK_ID
+    app.config.foca.db.dbs['trsStore'].collections['tools'] \
+        .client = mongomock.MongoClient().db.collection
+    app.config.foca.db.dbs['trsStore'].collections['tools'] \
+        .client.insert_one(mock_resp)
+    mock_resp2 = deepcopy(MOCK_VERSION_NO_ID)
+    mock_resp2['id'] = MOCK_ID_2
+    app.config.foca.db.dbs['trsStore'].collections['tools'] \
+        .client.insert_one(mock_resp2)
+
+    data = deepcopy(MOCK_VERSION_NO_ID)
+    data['id'] = MOCK_ID_2
+
+    HEADERS_PAGINATION_RESULT = {}
+
+    with app.test_request_context():
+        res = toolsGet.__wrapped__(
+            limit=TEST_LIMIT_2,
+            offset=TEST_OFFSET,
+        )
+        assert res == ([], '422', HEADERS_PAGINATION_RESULT)
+
+
+def test_toolsGet_pagination_negativeOffset():
+    """Test for getting a list of all available tools; pagination values
+    specified, given a negative offset.
+    """
+    app = Flask(__name__)
+    app.config.foca = Config(
+        db=MongoConfig(**MONGO_CONFIG)
+    )
+    mock_resp = deepcopy(MOCK_VERSION_NO_ID)
+    mock_resp['id'] = MOCK_ID
+    app.config.foca.db.dbs['trsStore'].collections['tools'] \
+        .client = mongomock.MongoClient().db.collection
+    app.config.foca.db.dbs['trsStore'].collections['tools'] \
+        .client.insert_one(mock_resp)
+    mock_resp2 = deepcopy(MOCK_VERSION_NO_ID)
+    mock_resp2['id'] = MOCK_ID_2
+    app.config.foca.db.dbs['trsStore'].collections['tools'] \
+        .client.insert_one(mock_resp2)
+
+    data = deepcopy(MOCK_VERSION_NO_ID)
+    data['id'] = MOCK_ID_2
+
+    HEADERS_PAGINATION_RESULT = {}
+
+    with app.test_request_context():
+        res = toolsGet.__wrapped__(
+            limit=TEST_LIMIT,
+            offset=TEST_OFFSET_2,
+        )
+        assert res == ([], '422', HEADERS_PAGINATION_RESULT)
 
 
 def test_toolsGet_filters():
@@ -116,11 +243,22 @@ def test_toolsGet_filters():
     data = deepcopy(MOCK_TOOL_VERSION_ID)
     data['id'] = MOCK_ID
     del data['versions'][0]['files']
-    with app.app_context():
+
+    HEADERS_PAGINATION_RESULT = deepcopy(HEADERS_PAGINATION)
+    with app.test_request_context():
+        HEADERS_PAGINATION_RESULT["self_link"] = request.base_url
+        HEADERS_PAGINATION_RESULT["next_page"] = (
+            f"{request.base_url}?offset={int(DEFAULT_OFFSET) + DEFAULT_LIMIT}"
+            f"&limit={DEFAULT_LIMIT}"
+        )
+        HEADERS_PAGINATION_RESULT["last_page"] = (
+            f"{request.base_url}?offset={DEFAULT_OFFSET}"
+            f"&limit={DEFAULT_LIMIT}"
+        )
+        HEADERS_PAGINATION_RESULT["current_offset"] = DEFAULT_OFFSET
+        HEADERS_PAGINATION_RESULT["current_limit"] = DEFAULT_LIMIT
         res = toolsGet.__wrapped__(
             id=data['id'],
-            limit=1,
-            offset=0,
             checker=data['has_checker'],
             name=data['versions'][0]['images'][0]['image_name'],
             alias=data['aliases'][0],
@@ -132,7 +270,7 @@ def test_toolsGet_filters():
             description=data['description'],
             organization=data['organization'],
         )
-        assert res == ([data], '200', HEADERS_PAGINATION)
+        assert res == ([data], '200', HEADERS_PAGINATION_RESULT)
 
 
 # GET /tools/{id}
@@ -1248,7 +1386,7 @@ def test_deleteToolClass():
     app.config.foca.db.dbs['trsStore'].collections['toolclasses'] \
         .client.insert_one(mock_resp)
 
-    with app.app_context():
+    with app.test_request_context():
         res = deleteToolClass.__wrapped__(
             id=MOCK_ID,
         )
@@ -1272,7 +1410,7 @@ def test_deleteToolClass_NotFound():
     app.config.foca.db.dbs['trsStore'].collections['toolclasses'] \
         .client.insert_one(mock_resp)
 
-    with app.app_context():
+    with app.test_request_context():
         with pytest.raises(NotFound):
             deleteToolClass.__wrapped__(
                 id=MOCK_ID + MOCK_ID,
@@ -1299,7 +1437,7 @@ def test_deleteToolClass_BadRequest():
     app.config.foca.db.dbs['trsStore'].collections['toolclasses'] \
         .client.insert_one(mock_resp_classes)
 
-    with app.app_context():
+    with app.test_request_context():
         with pytest.raises(BadRequest):
             deleteToolClass.__wrapped__(
                 id=MOCK_ID,
