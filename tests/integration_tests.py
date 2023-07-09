@@ -99,7 +99,7 @@ def test_get_tools_with_params_success():
         "description": "",
         "author": "",
         "checker": False,
-        "offset": "",
+        "offset": None,
         "limit": 10,
     }
     response = requests.get(
