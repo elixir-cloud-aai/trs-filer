@@ -150,7 +150,8 @@ def test_toolsGet_pagination():
 
 
 def test_toolsGet_pagination_negativeLimit():
-    """Test for getting a list of all available tools; pagination values specified given a negative limit.
+    """Test for getting a list of all available tools; pagination values
+    specified, given a negative limit.
     """
     app = Flask(__name__)
     app.config.foca = Config(
@@ -181,7 +182,8 @@ def test_toolsGet_pagination_negativeLimit():
 
 
 def test_toolsGet_pagination_negativeOffset():
-    """Test for getting a list of all available tools; pagination values specified, given a negative offset.
+    """Test for getting a list of all available tools; pagination values
+    specified, given a negative offset.
     """
     app = Flask(__name__)
     app.config.foca = Config(
