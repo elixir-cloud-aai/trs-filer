@@ -250,17 +250,13 @@ def toolsGet(
                 if 'files' in _version:
                     del _version['files']
 
-    if(limit is not None or offset is not None):
-        previous_page_url = (
-            f"{request.base_url}?offset={max(offset_int - limit, 0)}"
-            f"&limit={limit}"
-        )
-        next_page_url = (
-            f"{request.base_url}?offset={offset_int + limit}&limit={limit}"
-        )
-    else:
-        previous_page_url = None
-        next_page_url = None
+    previous_page_url = (
+        f"{request.base_url}?offset={max(offset_int - limit, 0)}"
+        f"&limit={limit}"
+    )
+    next_page_url = (
+        f"{request.base_url}?offset={offset_int + limit}&limit={limit}"
+    )
 
     headers = {}
     headers['next_page'] = next_page_url
