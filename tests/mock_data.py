@@ -9,6 +9,7 @@ CHARSET_EXPRESSION = 'string.digits'
 TEST_LIMIT = 1
 TEST_LIMIT_2 = -1
 TEST_OFFSET = "1"
+TEST_OFFSET_2 = "-1"
 INDEX_CONFIG = {
     'keys': [('id', 1)]
 }
