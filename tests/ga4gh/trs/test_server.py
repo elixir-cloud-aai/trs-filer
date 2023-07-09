@@ -110,18 +110,18 @@ def test_toolsGet_pagination():
     """Test for getting a list of all available tools; pagination values specified.
     """
     app = Flask(__name__)
-    app.config['FOCA'] = Config(
+    app.config.foca = Config(
         db=MongoConfig(**MONGO_CONFIG)
     )
     mock_resp = deepcopy(MOCK_VERSION_NO_ID)
     mock_resp['id'] = MOCK_ID
-    app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
+    app.config.foca.db.dbs['trsStore'].collections['tools'] \
         .client = mongomock.MongoClient().db.collection
-    app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
+    app.config.foca.db.dbs['trsStore'].collections['tools'] \
         .client.insert_one(mock_resp)
     mock_resp2 = deepcopy(MOCK_VERSION_NO_ID)
     mock_resp2['id'] = MOCK_ID_2
-    app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
+    app.config.foca.db.dbs['trsStore'].collections['tools'] \
         .client.insert_one(mock_resp2)
 
     data = deepcopy(MOCK_VERSION_NO_ID)
@@ -152,18 +152,18 @@ def test_toolsGet_pagination_negativeLimit():
     """Test for getting a list of all available tools; pagination values specified.
     """
     app = Flask(__name__)
-    app.config['FOCA'] = Config(
+    app.config.foca = Config(
         db=MongoConfig(**MONGO_CONFIG)
     )
     mock_resp = deepcopy(MOCK_VERSION_NO_ID)
     mock_resp['id'] = MOCK_ID
-    app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
+    app.config.foca.db.dbs['trsStore'].collections['tools'] \
         .client = mongomock.MongoClient().db.collection
-    app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
+    app.config.foca.db.dbs['trsStore'].collections['tools'] \
         .client.insert_one(mock_resp)
     mock_resp2 = deepcopy(MOCK_VERSION_NO_ID)
     mock_resp2['id'] = MOCK_ID_2
-    app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
+    app.config.foca.db.dbs['trsStore'].collections['tools'] \
         .client.insert_one(mock_resp2)
 
     data = deepcopy(MOCK_VERSION_NO_ID)
