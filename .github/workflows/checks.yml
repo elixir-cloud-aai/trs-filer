@@ -60,30 +60,33 @@ jobs:
   Publish:
     name: Build and publish app image
     runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'push' }}
     needs: [Test]
     
     steps:
-      - name: Check out repository
+      - name: Checkout Repository
         uses: actions/checkout@v3
-      - name: Generate tag
-        run: |
-          echo "TAG=$(date '+%Y%m%d')" >> $GITHUB_ENV
-      - name: Build and publish image
-        id: docker
-        uses: philips-software/docker-ci-scripts@v5.0.0
-        with:
-          dockerfile: .
-          image-name: "trs-filer"
-          tags: "latest ${{ env.TAG }}"
-          push-branches: "${{ github.event.repository.default_branch }}"
+      - name: Build & Publish image to DockerHub
         env:
-          REGISTRY_USERNAME: ${{ secrets.DOCKERHUB_LOGIN }}
-          REGISTRY_TOKEN: "${{ secrets.DOCKERHUB_TOKEN }}"
-          DOCKER_ORGANIZATION: ${{ secrets.DOCKERHUB_ORG }}
-          GITHUB_ORGANIZATION: ${{ github.repository_owner }}
-      - name: Verify that image was pushed
+          DOCKERHUB_ORG: ${{ secrets.DOCKERHUB_ORG }}
+          DOCKERHUB_LOGIN: ${{ secrets.DOCKERHUB_LOGIN }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+          REPO_NAME: ${{ github.event.repository.name }}
         run: |
-          echo "Push indicator: ${{ steps.docker.outputs.push-indicator }}"
-          echo "# Set to 'true' if image was pushed, empty string otherwise"
-          test "${{ steps.docker.outputs.push-indicator }}" == "true"
+          set -x
+          export DEFAULT_BRANCH=${{ github.event.repository.default_branch }}
+          if [ "$BRANCH_NAME" == "$DEFAULT_BRANCH" ]; then
+              export DOCKER_TAG="$(date '+%Y%m%d')"
+          else
+              export DOCKER_TAG=${BRANCH_NAME//_/-}
+              export DOCKER_TAG=${DOCKER_TAG//\//-}
+          fi
+          echo "TAG: ${TAG}"
+          docker build . \
+            -t "${DOCKERHUB_ORG}/${REPO_NAME}:latest" \
+            -t "${DOCKERHUB_ORG}/${REPO_NAME}:${DOCKER_TAG}"
+          echo $DOCKERHUB_TOKEN | \
+              docker login -u $DOCKERHUB_LOGIN --password-stdin
+          if [ "$BRANCH_NAME" == "$DEFAULT_BRANCH" ]; then
+            docker push "${DOCKERHUB_ORG}/${REPO_NAME}:latest"
+          fi
+          rm ${HOME}/.docker/config.json  # delete token
