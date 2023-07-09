@@ -1,5 +1,5 @@
 ##### BASE IMAGE #####
-FROM elixircloud/foca:20200809
+FROM elixircloud/foca:20221110-py3.10
 
 ##### METADATA ##### 
 LABEL software="TRS-filer"
@@ -9,14 +9,13 @@ LABEL software.license="https://spdx.org/licenses/Apache-2.0"
 LABEL maintainer="nagorikushagra9@gmail.com"
 LABEL maintainer.organisation="ELIXIR Cloud & AAI"
 
-## Copy app files
-COPY ./ /app
+WORKDIR /app
+COPY ./requirements.txt /app/requirements.txt
+RUN pip install -r requirements.txt
+COPY ./ .
+RUN pip install -e .
 
-## Install app
-RUN cd /app \
-  && python setup.py develop \
-  && cd / \
-  && chmod g+w /app/trs_filer/api/ \
-  && pip install yq
+## Add permissions for storing updated API specification
+## (required by FOCA)
+RUN chmod -R a+rwx /app/trs_filer/api
 
-CMD ["bash", "-c", "cd /app/trs_filer; python app.py"]

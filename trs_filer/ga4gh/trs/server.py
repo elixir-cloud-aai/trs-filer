@@ -42,7 +42,7 @@ def toolsIdGet(
         NotFound if no object mapping with given id present.
     """
     db_coll_tools = (
-        current_app.config['FOCA'].db.dbs['trsStore']
+        current_app.config.foca.db.dbs['trsStore']
         .collections['tools'].client
     )
     obj = db_coll_tools.find_one({"id": id})
@@ -93,7 +93,7 @@ def toolsIdVersionsVersionIdGet(
         version with given id not found.
     """
     db_coll_tools = (
-        current_app.config['FOCA'].db.dbs['trsStore']
+        current_app.config.foca.db.dbs['trsStore']
         .collections['tools'].client
     )
     proj = {
@@ -110,7 +110,7 @@ def toolsIdVersionsVersionIdGet(
     )
     try:
         version = data['versions'][0]
-        if version and'files' in version:
+        if version and 'files' in version:
             del version['files']
         return version
     except (KeyError, TypeError):
@@ -213,7 +213,7 @@ def toolsGet(
 
     # fetch data
     db_coll_tools = (
-        current_app.config['FOCA'].db.dbs['trsStore']
+        current_app.config.foca.db.dbs['trsStore']
         .collections['tools'].client
     )
     records = db_coll_tools.find(
@@ -259,7 +259,7 @@ def toolsIdVersionsVersionIdTypeDescriptorGet(
     validate_descriptor_type(type=type)
     ret = {}
     db_coll_tools = (
-        current_app.config['FOCA'].db.dbs['trsStore']
+        current_app.config.foca.db.dbs['trsStore']
         .collections['tools'].client
     )
     proj = {
@@ -318,7 +318,7 @@ def toolsIdVersionsVersionIdTypeDescriptorRelativePathGet(
     ret = {}
     validate_descriptor_type(type=type)
     db_coll_tools = (
-        current_app.config['FOCA'].db.dbs['trsStore']
+        current_app.config.foca.db.dbs['trsStore']
         .collections['tools'].client
     )
     proj = {
@@ -377,7 +377,7 @@ def toolsIdVersionsVersionIdTypeTestsGet(
     validate_descriptor_type(type=type)
 
     db_coll_tools = (
-        current_app.config['FOCA'].db.dbs['trsStore']
+        current_app.config.foca.db.dbs['trsStore']
         .collections['tools'].client
     )
 
@@ -435,7 +435,7 @@ def toolsIdVersionsVersionIdTypeFilesGet(
     """
     validate_descriptor_type(type=type)
     db_coll_tools = (
-        current_app.config['FOCA'].db.dbs['trsStore']
+        current_app.config.foca.db.dbs['trsStore']
         .collections['tools'].client
     )
     proj = {
@@ -479,7 +479,7 @@ def toolsIdVersionsVersionIdContainerfileGet(
         List of wrapped containerfile objects.
     """
     db_coll_tools = (
-        current_app.config['FOCA'].db.dbs['trsStore']
+        current_app.config.foca.db.dbs['trsStore']
         .collections['tools'].client
     )
     proj = {
@@ -512,7 +512,7 @@ def toolClassesGet(
         List of tool class objects.
     """
     db_collection_class = (
-        current_app.config['FOCA'].db.dbs['trsStore']
+        current_app.config.foca.db.dbs['trsStore']
         .collections['toolclasses'].client
     )
     records = db_collection_class.find(
@@ -590,7 +590,7 @@ def deleteTool(
         Previous identifier of deleted tool.
     """
     db_coll_tools = (
-        current_app.config['FOCA'].db.dbs['trsStore']
+        current_app.config.foca.db.dbs['trsStore']
         .collections['tools'].client
     )
     del_obj_tools = db_coll_tools.delete_one({'id': id})
@@ -661,7 +661,7 @@ def deleteToolVersion(
         the only remaining tool version.
     """
     db_coll_tools = (
-        current_app.config['FOCA'].db.dbs['trsStore']
+        current_app.config.foca.db.dbs['trsStore']
         .collections['tools'].client
     )
 
@@ -735,7 +735,7 @@ def deleteToolClass(
         is associated with any tool.
     """
     db_coll_classes = (
-        current_app.config['FOCA'].db.dbs['trsStore']
+        current_app.config.foca.db.dbs['trsStore']
         .collections['toolclasses'].client
     )
 

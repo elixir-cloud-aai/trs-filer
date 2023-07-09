@@ -18,7 +18,7 @@ from tests.mock_data import (
 )
 
 
-base_url = "http://localhost:8080/ga4gh/trs/v2"
+base_url = "http://localhost:80/ga4gh/trs/v2"
 headers = {
     'accept': '*/*',
     'Content-Type': 'application/json'
@@ -367,7 +367,7 @@ def test_tool_delete_obj_not_found():
 
 def test_tool_class_post_success():
     """Test `POST /toolClasses` for creating tool classes."""
-    endpoint = f"/toolClasses"
+    endpoint = "/toolClasses"
     mock_tool_class = deepcopy(MOCK_TOOL_CLASS)
     mock_tool_class.pop("id")
     response = requests.post(
@@ -382,7 +382,7 @@ def test_tool_class_post_malformed_request():
     """Test `POST /toolClasses` for creating tool classes given invalid
     payload.
     """
-    endpoint = f"/toolClasses"
+    endpoint = "/toolClasses"
     response = requests.post(base_url + endpoint, json="", headers=headers)
     assert response.status_code == 400
 

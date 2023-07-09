@@ -12,10 +12,10 @@ import pytest
 import requests
 
 from tests.mock_data import (
-    ENDPOINT_CONFIG,
-    ENDPOINT_CONFIG_CHARSET_LITERAL,
-    ENDPOINT_CONFIG_ONE_ID,
-    ENDPOINT_CONFIG_TOOL_CLASS_VALIDATION,
+    CUSTOM_CONFIG,
+    CUSTOM_CONFIG_CHARSET_LITERAL,
+    CUSTOM_CONFIG_ONE_ID,
+    CUSTOM_CONFIG_TOOL_CLASS_VALIDATION,
     MOCK_CONTAINER_FILE,
     MOCK_DESCRIPTOR_FILE,
     MOCK_DESCRIPTOR_SEC_FILE,
@@ -39,6 +39,7 @@ from trs_filer.ga4gh.trs.endpoints.register_objects import (
     RegisterTool,
     RegisterToolVersion,
 )
+from trs_filer.custom_config import CustomConfig
 
 
 def _raise(exception) -> None:
@@ -52,9 +53,9 @@ class TestRegisterTool:
     def test_init(self):
         """Test for constructing class."""
         app = Flask(__name__)
-        app.config['FOCA'] = Config(
+        app.config.foca = Config(
             db=MongoConfig(**MONGO_CONFIG),
-            endpoints=ENDPOINT_CONFIG,
+            custom=CustomConfig(**CUSTOM_CONFIG),
         )
 
         data = deepcopy(MOCK_TOOL)
@@ -66,9 +67,9 @@ class TestRegisterTool:
     def test_process_metadata(self):
         """Test for processing metadata."""
         app = Flask(__name__)
-        app.config['FOCA'] = Config(
+        app.config.foca = Config(
             db=MongoConfig(**MONGO_CONFIG),
-            endpoints=ENDPOINT_CONFIG_CHARSET_LITERAL,
+            custom=CustomConfig(**CUSTOM_CONFIG_CHARSET_LITERAL),
         )
 
         data = deepcopy(MOCK_TOOL)
@@ -80,13 +81,13 @@ class TestRegisterTool:
     def test_register_metadata(self):
         """Test for creating a tool with a randomly assigned identifier."""
         app = Flask(__name__)
-        app.config['FOCA'] = Config(
+        app.config.foca = Config(
             db=MongoConfig(**MONGO_CONFIG),
-            endpoints=ENDPOINT_CONFIG,
+            custom=CustomConfig(**CUSTOM_CONFIG),
         )
-        app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
+        app.config.foca.db.dbs['trsStore'].collections['tools'] \
             .client = MagicMock()
-        app.config['FOCA'].db.dbs['trsStore'].collections['toolclasses'] \
+        app.config.foca.db.dbs['trsStore'].collections['toolclasses'] \
             .client = MagicMock()
 
         data = deepcopy(MOCK_TOOL_VERSION_ID)
@@ -98,13 +99,13 @@ class TestRegisterTool:
     def test_register_metadata_with_id(self):
         """Test for creating a tool with a user-supplied identifier."""
         app = Flask(__name__)
-        app.config['FOCA'] = Config(
+        app.config.foca = Config(
             db=MongoConfig(**MONGO_CONFIG),
-            endpoints=ENDPOINT_CONFIG,
+            custom=CustomConfig(**CUSTOM_CONFIG),
         )
-        app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
+        app.config.foca.db.dbs['trsStore'].collections['tools'] \
             .client = MagicMock()
-        app.config['FOCA'].db.dbs['trsStore'].collections['toolclasses'] \
+        app.config.foca.db.dbs['trsStore'].collections['toolclasses'] \
             .client = MagicMock()
 
         data = deepcopy(MOCK_TOOL_VERSION_ID)
@@ -116,17 +117,17 @@ class TestRegisterTool:
     def test_register_metadata_with_id_replace(self):
         """Test for updating an existing tool."""
         app = Flask(__name__)
-        app.config['FOCA'] = Config(
+        app.config.foca = Config(
             db=MongoConfig(**MONGO_CONFIG),
-            endpoints=ENDPOINT_CONFIG,
+            custom=CustomConfig(**CUSTOM_CONFIG),
         )
         mock_resp = deepcopy(MOCK_TOOL_VERSION_ID)
         mock_resp["id"] = MOCK_ID
-        app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
+        app.config.foca.db.dbs['trsStore'].collections['tools'] \
             .client = MagicMock()
-        app.config['FOCA'].db.dbs['trsStore'].collections['toolclasses'] \
+        app.config.foca.db.dbs['trsStore'].collections['toolclasses'] \
             .client = MagicMock()
-        app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
+        app.config.foca.db.dbs['trsStore'].collections['tools'] \
             .client.insert_one(mock_resp)
 
         data = deepcopy(MOCK_TOOL_VERSION_ID)
@@ -138,13 +139,13 @@ class TestRegisterTool:
     def test_register_metadata_duplicate_version_ids_BadRequest(self):
         """Test for creating a tool; duplicate version identifiers supplied."""
         app = Flask(__name__)
-        app.config['FOCA'] = Config(
+        app.config.foca = Config(
             db=MongoConfig(**MONGO_CONFIG),
-            endpoints=ENDPOINT_CONFIG,
+            custom=CustomConfig(**CUSTOM_CONFIG),
         )
-        app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
+        app.config.foca.db.dbs['trsStore'].collections['tools'] \
             .client = MagicMock()
-        app.config['FOCA'].db.dbs['trsStore'] \
+        app.config.foca.db.dbs['trsStore'] \
             .collections['tools'].client.insert_one = MagicMock()
 
         data = deepcopy(MOCK_TOOL_DUPLICATE_VERSION_IDS)
@@ -158,13 +159,13 @@ class TestRegisterTool:
         missing.
         """
         app = Flask(__name__)
-        app.config['FOCA'] = Config(
+        app.config.foca = Config(
             db=MongoConfig(**MONGO_CONFIG),
-            endpoints=ENDPOINT_CONFIG,
+            custom=CustomConfig(**CUSTOM_CONFIG),
         )
-        app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
+        app.config.foca.db.dbs['trsStore'].collections['tools'] \
             .client = MagicMock()
-        app.config['FOCA'].db.dbs['trsStore'].collections['toolclasses'] \
+        app.config.foca.db.dbs['trsStore'].collections['toolclasses'] \
             .client = MagicMock()
 
         temp_data = deepcopy(MOCK_TOOL_VERSION_ID)
@@ -180,13 +181,13 @@ class TestRegisterTool:
         production tool.
         """
         app = Flask(__name__)
-        app.config['FOCA'] = Config(
+        app.config.foca = Config(
             db=MongoConfig(**MONGO_CONFIG),
-            endpoints=ENDPOINT_CONFIG,
+            custom=CustomConfig(**CUSTOM_CONFIG),
         )
-        app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
+        app.config.foca.db.dbs['trsStore'].collections['tools'] \
             .client = MagicMock()
-        app.config['FOCA'].db.dbs['trsStore'].collections['toolclasses'] \
+        app.config.foca.db.dbs['trsStore'].collections['toolclasses'] \
             .client = MagicMock()
 
         data = deepcopy(MOCK_TOOL_VERSION_ID)
@@ -199,13 +200,13 @@ class TestRegisterTool:
     def test_register_metadata_with_tool_class_validation(self):
         """Test for creating a tool with tool class validation passing."""
         app = Flask(__name__)
-        app.config['FOCA'] = Config(
+        app.config.foca = Config(
             db=MongoConfig(**MONGO_CONFIG),
-            endpoints=ENDPOINT_CONFIG_TOOL_CLASS_VALIDATION,
+            custom=CustomConfig(**CUSTOM_CONFIG_TOOL_CLASS_VALIDATION),
         )
-        app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
+        app.config.foca.db.dbs['trsStore'].collections['tools'] \
             .client = MagicMock()
-        app.config['FOCA'].db.dbs['trsStore'].collections['toolclasses'] \
+        app.config.foca.db.dbs['trsStore'].collections['toolclasses'] \
             .client = MagicMock()
 
         data = deepcopy(MOCK_TOOL_VERSION_ID)
@@ -217,13 +218,13 @@ class TestRegisterTool:
     def test_register_metadata_with_tool_class_validation_BadRequest(self):
         """Test for creating a tool with tool class validation failing."""
         app = Flask(__name__)
-        app.config['FOCA'] = Config(
+        app.config.foca = Config(
             db=MongoConfig(**MONGO_CONFIG),
-            endpoints=ENDPOINT_CONFIG_TOOL_CLASS_VALIDATION,
+            custom=CustomConfig(**CUSTOM_CONFIG_TOOL_CLASS_VALIDATION),
         )
-        app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
+        app.config.foca.db.dbs['trsStore'].collections['tools'] \
             .client = mongomock.MongoClient().db.collection
-        app.config['FOCA'].db.dbs['trsStore'].collections['toolclasses'] \
+        app.config.foca.db.dbs['trsStore'].collections['toolclasses'] \
             .client = mongomock.MongoClient().db.collection
 
         data = deepcopy(MOCK_TOOL_VERSION_ID)
@@ -236,13 +237,13 @@ class TestRegisterTool:
     def test_register_metadata_without_tool_class_identifier(self):
         """Test for creating a tool with tool class without an identifier."""
         app = Flask(__name__)
-        app.config['FOCA'] = Config(
+        app.config.foca = Config(
             db=MongoConfig(**MONGO_CONFIG),
-            endpoints=ENDPOINT_CONFIG_TOOL_CLASS_VALIDATION,
+            custom=CustomConfig(**CUSTOM_CONFIG_TOOL_CLASS_VALIDATION),
         )
-        app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
+        app.config.foca.db.dbs['trsStore'].collections['tools'] \
             .client = MagicMock()
-        app.config['FOCA'].db.dbs['trsStore'].collections['toolclasses'] \
+        app.config.foca.db.dbs['trsStore'].collections['toolclasses'] \
             .client = MagicMock()
 
         data = deepcopy(MOCK_TOOL_VERSION_ID)
@@ -255,16 +256,16 @@ class TestRegisterTool:
     def test_register_metadata_tool_duplicate_key(self):
         """Test for creating a tool; duplicate key error occurs."""
         app = Flask(__name__)
-        app.config['FOCA'] = Config(
+        app.config.foca = Config(
             db=MongoConfig(**MONGO_CONFIG),
-            endpoints=ENDPOINT_CONFIG,
+            custom=CustomConfig(**CUSTOM_CONFIG),
         )
         mock_resp = MagicMock(side_effect=[DuplicateKeyError(''), None])
-        app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
+        app.config.foca.db.dbs['trsStore'].collections['tools'] \
             .client = MagicMock()
-        app.config['FOCA'].db.dbs['trsStore'].collections['toolclasses'] \
+        app.config.foca.db.dbs['trsStore'].collections['toolclasses'] \
             .client = MagicMock()
-        app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
+        app.config.foca.db.dbs['trsStore'].collections['tools'] \
             .client.insert_one = mock_resp
 
         temp_data = deepcopy(MOCK_TOOL)
@@ -277,17 +278,17 @@ class TestRegisterTool:
     def test_register_metadata_duplicate_keys_repeated(self):
         """Test for creating a tool; running out of unique identifiers."""
         app = Flask(__name__)
-        app.config['FOCA'] = Config(
+        app.config.foca = Config(
             db=MongoConfig(**MONGO_CONFIG),
-            endpoints=ENDPOINT_CONFIG_ONE_ID,
+            custom=CustomConfig(**CUSTOM_CONFIG_ONE_ID),
         )
         mock_resp = deepcopy(MOCK_TOOL_VERSION_ID)
         mock_resp["id"] = MOCK_ID_ONE_CHAR
-        app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
+        app.config.foca.db.dbs['trsStore'].collections['tools'] \
             .client = mongomock.MongoClient().db.collection
-        app.config['FOCA'].db.dbs['trsStore'].collections['toolclasses'] \
+        app.config.foca.db.dbs['trsStore'].collections['toolclasses'] \
             .client = mongomock.MongoClient().db.collection
-        app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
+        app.config.foca.db.dbs['trsStore'].collections['tools'] \
             .client.insert_one(mock_resp)
 
         data = deepcopy(MOCK_TOOL)
@@ -306,9 +307,9 @@ class TestRegisterToolVersion:
     def test_init(self):
         """Test for constructing class."""
         app = Flask(__name__)
-        app.config['FOCA'] = Config(
+        app.config.foca = Config(
             db=MongoConfig(**MONGO_CONFIG),
-            endpoints=ENDPOINT_CONFIG,
+            custom=CustomConfig(**CUSTOM_CONFIG),
         )
 
         data = deepcopy(MOCK_VERSION_NO_ID)
@@ -320,9 +321,9 @@ class TestRegisterToolVersion:
     def test_process_metadata(self):
         """Test for processing metadata."""
         app = Flask(__name__)
-        app.config['FOCA'] = Config(
+        app.config.foca = Config(
             db=MongoConfig(**MONGO_CONFIG),
-            endpoints=ENDPOINT_CONFIG_CHARSET_LITERAL,
+            custom=CustomConfig(**CUSTOM_CONFIG_CHARSET_LITERAL),
         )
 
         data = deepcopy(MOCK_VERSION_NO_ID)
@@ -334,9 +335,9 @@ class TestRegisterToolVersion:
     def test_process_files_invalid_descriptor_type(self):
         """Test for processing files with an invalid descriptor type."""
         app = Flask(__name__)
-        app.config['FOCA'] = Config(
+        app.config.foca = Config(
             db=MongoConfig(**MONGO_CONFIG),
-            endpoints=ENDPOINT_CONFIG_CHARSET_LITERAL,
+            custom=CustomConfig(**CUSTOM_CONFIG_CHARSET_LITERAL),
         )
 
         data = deepcopy(MOCK_VERSION_NO_ID)
@@ -353,9 +354,9 @@ class TestRegisterToolVersion:
         annotated as primary descriptor.
         """
         app = Flask(__name__)
-        app.config['FOCA'] = Config(
+        app.config.foca = Config(
             db=MongoConfig(**MONGO_CONFIG),
-            endpoints=ENDPOINT_CONFIG_CHARSET_LITERAL,
+            custom=CustomConfig(**CUSTOM_CONFIG_CHARSET_LITERAL),
         )
 
         data = deepcopy(MOCK_VERSION_NO_ID)
@@ -373,9 +374,9 @@ class TestRegisterToolVersion:
         primary descriptor file.
         """
         app = Flask(__name__)
-        app.config['FOCA'] = Config(
+        app.config.foca = Config(
             db=MongoConfig(**MONGO_CONFIG),
-            endpoints=ENDPOINT_CONFIG_CHARSET_LITERAL,
+            custom=CustomConfig(**CUSTOM_CONFIG_CHARSET_LITERAL),
         )
 
         data = deepcopy(MOCK_VERSION_NO_ID)
@@ -389,9 +390,9 @@ class TestRegisterToolVersion:
     def test_process_files_invalid_container_type(self):
         """Test for processing files with an invalid container type."""
         app = Flask(__name__)
-        app.config['FOCA'] = Config(
+        app.config.foca = Config(
             db=MongoConfig(**MONGO_CONFIG),
-            endpoints=ENDPOINT_CONFIG_CHARSET_LITERAL,
+            custom=CustomConfig(**CUSTOM_CONFIG_CHARSET_LITERAL),
         )
 
         data = deepcopy(MOCK_VERSION_NO_ID)
@@ -408,9 +409,9 @@ class TestRegisterToolVersion:
         with a given descriptor type share the same path.
         """
         app = Flask(__name__)
-        app.config['FOCA'] = Config(
+        app.config.foca = Config(
             db=MongoConfig(**MONGO_CONFIG),
-            endpoints=ENDPOINT_CONFIG_CHARSET_LITERAL,
+            custom=CustomConfig(**CUSTOM_CONFIG_CHARSET_LITERAL),
         )
 
         data = deepcopy(MOCK_VERSION_NO_ID)
@@ -428,9 +429,9 @@ class TestRegisterToolVersion:
     def test_process_files_no_content(self, monkeypatch):
         """Test for processing files with no content provided."""
         app = Flask(__name__)
-        app.config['FOCA'] = Config(
+        app.config.foca = Config(
             db=MongoConfig(**MONGO_CONFIG),
-            endpoints=ENDPOINT_CONFIG_CHARSET_LITERAL,
+            custom=CustomConfig(**CUSTOM_CONFIG_CHARSET_LITERAL),
         )
 
         class MockResponse:
@@ -454,9 +455,9 @@ class TestRegisterToolVersion:
         URL.
         """
         app = Flask(__name__)
-        app.config['FOCA'] = Config(
+        app.config.foca = Config(
             db=MongoConfig(**MONGO_CONFIG),
-            endpoints=ENDPOINT_CONFIG_CHARSET_LITERAL,
+            custom=CustomConfig(**CUSTOM_CONFIG_CHARSET_LITERAL),
         )
 
         monkeypatch.setattr(
@@ -476,15 +477,15 @@ class TestRegisterToolVersion:
     def test_register_metadata(self):
         """Test for creating a version with a randomly assigned identifier."""
         app = Flask(__name__)
-        app.config['FOCA'] = Config(
+        app.config.foca = Config(
             db=MongoConfig(**MONGO_CONFIG),
-            endpoints=ENDPOINT_CONFIG_CHARSET_LITERAL,
+            custom=CustomConfig(**CUSTOM_CONFIG_CHARSET_LITERAL),
         )
         mock_resp = deepcopy(MOCK_TOOL_VERSION_ID)
         mock_resp["id"] = MOCK_ID
-        app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
+        app.config.foca.db.dbs['trsStore'].collections['tools'] \
             .client = MagicMock()
-        app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
+        app.config.foca.db.dbs['trsStore'].collections['tools'] \
             .client.insert_one(mock_resp)
 
         data = deepcopy(MOCK_VERSION_NO_ID)
@@ -496,11 +497,11 @@ class TestRegisterToolVersion:
     def test_register_metadata_with_id(self):
         """Test for creating a version with a user-supplied identifier."""
         app = Flask(__name__)
-        app.config['FOCA'] = Config(
+        app.config.foca = Config(
             db=MongoConfig(**MONGO_CONFIG),
-            endpoints=ENDPOINT_CONFIG_CHARSET_LITERAL,
+            custom=CustomConfig(**CUSTOM_CONFIG_CHARSET_LITERAL),
         )
-        app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
+        app.config.foca.db.dbs['trsStore'].collections['tools'] \
             .client = MagicMock()
 
         data = deepcopy(MOCK_VERSION_NO_ID)
@@ -516,15 +517,15 @@ class TestRegisterToolVersion:
     def test_register_metadata_with_id_replace(self):
         """Test for updating an existing version."""
         app = Flask(__name__)
-        app.config['FOCA'] = Config(
+        app.config.foca = Config(
             db=MongoConfig(**MONGO_CONFIG),
-            endpoints=ENDPOINT_CONFIG_CHARSET_LITERAL,
+            custom=CustomConfig(**CUSTOM_CONFIG_CHARSET_LITERAL),
         )
         mock_resp = deepcopy(MOCK_TOOL_VERSION_ID)
         mock_resp["id"] = MOCK_ID
-        app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
+        app.config.foca.db.dbs['trsStore'].collections['tools'] \
             .client = MagicMock()
-        app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
+        app.config.foca.db.dbs['trsStore'].collections['tools'] \
             .client.insert_one(mock_resp)
 
         data = deepcopy(MOCK_VERSION_ID)
@@ -536,18 +537,18 @@ class TestRegisterToolVersion:
     def test_register_metadata_duplicate_keys(self):
         """Test for creating a version; running out of unique identifiers."""
         app = Flask(__name__)
-        app.config['FOCA'] = Config(
+        app.config.foca = Config(
             db=MongoConfig(**MONGO_CONFIG),
-            endpoints=ENDPOINT_CONFIG_ONE_ID,
+            custom=CustomConfig(**CUSTOM_CONFIG_ONE_ID),
         )
         mock_resp = deepcopy(MOCK_TOOL_VERSION_ID)
         mock_resp["id"] = MOCK_ID
         mock_resp["versions"][0]["id"] = MOCK_ID_ONE_CHAR
-        app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
+        app.config.foca.db.dbs['trsStore'].collections['tools'] \
             .client = mongomock.MongoClient().db.collection
-        app.config['FOCA'].db.dbs['trsStore'].collections['toolclasses'] \
+        app.config.foca.db.dbs['trsStore'].collections['toolclasses'] \
             .client = mongomock.MongoClient().db.collection
-        app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
+        app.config.foca.db.dbs['trsStore'].collections['tools'] \
             .client.insert_one(mock_resp)
 
         data = deepcopy(MOCK_VERSION_NO_ID)
@@ -561,15 +562,15 @@ class TestRegisterToolVersion:
     def test_register_metadata_tool_na(self):
         """Test for creating/updating a version; tool not available."""
         app = Flask(__name__)
-        app.config['FOCA'] = Config(
+        app.config.foca = Config(
             db=MongoConfig(**MONGO_CONFIG),
-            endpoints=ENDPOINT_CONFIG_ONE_ID,
+            custom=CustomConfig(**CUSTOM_CONFIG_ONE_ID),
         )
         mock_resp = deepcopy(MOCK_TOOL_VERSION_ID)
         mock_resp["id"] = MOCK_ID_ONE_CHAR
-        app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
+        app.config.foca.db.dbs['trsStore'].collections['tools'] \
             .client = mongomock.MongoClient().db.collection
-        app.config['FOCA'].db.dbs['trsStore'].collections['tools'] \
+        app.config.foca.db.dbs['trsStore'].collections['tools'] \
             .client.insert_one(mock_resp)
 
         data = deepcopy(MOCK_VERSION_NO_ID)
