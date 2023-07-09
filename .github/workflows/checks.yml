@@ -74,6 +74,13 @@ jobs:
         run: |
           set -x
           export DEFAULT_BRANCH=${{ github.event.repository.default_branch }}
+          if [[ "${GITHUB_EVENT_NAME}" == "push" ]]; then
+            export BRANCH_NAME=${GITHUB_REF##*/}
+          elif [[ "${GITHUB_EVENT_NAME}" == "pull_request" ]]; then
+            export BRANCH_NAME=${GITHUB_HEAD_REF##*/}
+          else
+            export BRANCH_NAME=INVALID_EVENT_BRANCH_UNKNOWN
+          fi
           echo "DEFAULT_BRANCH: ${DEFAULT_BRANCH}"
           echo "BRANCH_NAME: ${BRANCH_NAME}"
           if [ "$BRANCH_NAME" == "$DEFAULT_BRANCH" ]; then
