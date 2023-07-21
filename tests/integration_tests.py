@@ -91,7 +91,7 @@ def test_get_tools_with_params_success():
         "id": "",
         "alias": "",
         "toolClass": "",
-        "descriptorType": "",
+        "descriptorType": "CWL",
         "registry": "",
         "organization": "",
         "name": "",
