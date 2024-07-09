@@ -12,6 +12,17 @@ trs_filer:
 
 apiServer: kubernetes.default.svc:443 # address of k8s API server
 
+# If you are running kubernetes select whether you would like
+# to access the service via Ingress. Also, if you have the cert manager
+# installed, you can provision a certificate for https
+kubernetes:
+  ingress:
+    enabled: true
+  https:
+    enabled: true
+    issuer: letsencrypt-prod
+
 mongodb:
   image: mongo:3.6
   volumeSize: 1Gi
+

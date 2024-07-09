@@ -92,8 +92,7 @@ curl -X GET "http://localhost:8080/ga4gh/trs/v2/tools" -H "accept: application/j
 To quickly install the service for development/testing purposes, we recommend
 deployment via [`docker-compose`][res-docker-compose], as described below. For
 more durable deployments on cloud native infrastructure, we also provide a
-[Helm][res-helm] chart and [basic deployment instructions][trs-filer-
-deployment] (details may need to be adapted for your specific infrastructure).
+[Helm][res-helm] chart and [basic deployment instructions][trs-filer-deployment] (details may need to be adapted for your specific infrastructure).
 
 ### Requirements
 
