@@ -5,7 +5,7 @@
 host_name: trs-filer-test.2.rahtiapp.fi
 
 trs_filer:
-  image: elixircloud/trs-filer:0.1.0
+  image: elixircloud/trs-filer:20211110
   appName: trs-filer
 
 apiServer: kubernetes.default.svc:443 # address of k8s API server
