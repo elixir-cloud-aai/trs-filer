@@ -28,6 +28,8 @@ spec:
           value: {{ .Values.trs_filer.appName }}
         - name: HOST_NAME
           value:  {{ .Values.host_name }}
+        - name: MONGO_HOST
+          value: mongodb-{{ .Values.trs_filer.appName }}
       restartPolicy: Never
       serviceAccountName: {{ .Values.trs_filer.appName }}-configurer
 status: {}
