@@ -11,7 +11,7 @@ then
 	exit 1
 fi
 
-if [[ -z "$MONGO_HOST" ]];
+if [ -z "$MONGO_HOST" ];
 then
   MONGO_HOST='mongodb'
 fi
