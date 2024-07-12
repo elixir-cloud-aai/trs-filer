@@ -45,6 +45,7 @@ spec:
           items:
             - key: config.yaml
               path: config.yaml
-          name: app-config
+          name: app-config-{{ .Values.trs_filer.appName }}
+
         name: config-yaml
 status:
