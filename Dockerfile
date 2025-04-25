@@ -19,3 +19,4 @@ RUN pip install -e .
 ## (required by FOCA)
 RUN chmod -R a+rwx /app/trs_filer/api
 
+CMD ["bash", "-c", "cd /app/trs_filer && gunicorn -c gunicorn.py wsgi:app"]
