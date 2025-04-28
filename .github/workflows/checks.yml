@@ -49,14 +49,14 @@ jobs:
           fail_ci_if_error: true
           verbose: true
       - name: Deploy app
-        run: docker-compose up -d --build
+        run: docker compose up -d --build
       - name: Wait for app startup
         run: sleep 20
       - name: Run integration tests
         shell: bash
         run: pytest tests/integration_tests.py
       - name: Tear down app
-        run: docker-compose down
+        run: docker compose down
 
   Publish:
     name: Build and publish app image
