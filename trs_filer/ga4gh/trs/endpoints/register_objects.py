@@ -342,8 +342,8 @@ class RegisterToolVersion:
                 raise BadRequest
             if (
                 self.data['is_production'] and
-                'checksum' not in _file['file_wrapper'] or
-                not _file['file_wrapper']['checksum']
+                ('checksum' not in _file['file_wrapper'] or
+                 not _file['file_wrapper']['checksum'])
             ):
                 logger.error(
                     "Production tools must contain checksum information for "
