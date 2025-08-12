@@ -4,6 +4,8 @@ from copy import deepcopy
 
 from flask import Flask
 from flask import (request)
+from io import BytesIO
+from zipfile import ZipFile
 from foca.models.config import (Config, MongoConfig)
 import mongomock
 import pytest
@@ -896,6 +898,158 @@ def test_toolsIdVersionsVersionIdTypeFilesGet_wrong_type_BadRequest():
                 type='foo'
             )
 
+
+# GET /tools/{id}/versions/{version_id}/{type}/files?format=zip
+def test_toolsIdVersionsVersionIdTypeFilesGet_zip_success_content():
+    """Zip response contains expected files with inline content and headers."""
+    app = Flask(__name__)
+    app.config.foca = Config(
+        db=MongoConfig(**MONGO_CONFIG)
+    )
+    mock_resp = deepcopy(MOCK_TOOL_VERSION_ID)
+    mock_resp['id'] = MOCK_ID
+    # Ensure descriptor types are CWL for selected files
+    app.config.foca.db.dbs['trsStore'].collections['tools'] \
+        .client = mongomock.MongoClient().db.collection
+    app.config.foca.db.dbs['trsStore'].collections['tools'] \
+        .client.insert_one(mock_resp)
+
+    with app.app_context():
+        resp = toolsIdVersionsVersionIdTypeFilesGet.__wrapped__(
+            id=MOCK_ID,
+            version_id=MOCK_ID,
+            type="CWL",
+            format="zip",
+        )
+        assert resp.mimetype == 'application/zip'
+        content_disp = resp.headers.get('Content-Disposition', '')
+        assert 'attachment' in content_disp
+        assert f"{MOCK_ID}_{MOCK_ID}_CWL.zip" in content_disp
+
+        data = resp.get_data()
+        with ZipFile(BytesIO(data)) as zf:
+            names = set(zf.namelist())
+            expected = {
+                'path_test_cwl',
+                'path_other_cwl',
+                'path_prim_desc_cwl',
+                'path_sec_desc_cwl',
+            }
+            assert names == expected
+            for name in expected:
+                assert zf.read(name).decode('utf-8') == 'content'
+
+
+def test_toolsIdVersionsVersionIdTypeFilesGet_zip_success_url(monkeypatch):
+    """Zip response pulls bytes via URL for files without inline content."""
+    class _Resp:
+        def __enter__(self):
+            return self
+        def __exit__(self, exc_type, exc, tb):
+            return False
+        def read(self):
+            return b'from-url'
+
+    monkeypatch.setattr('trs_filer.ga4gh.trs.server.urlopen', lambda url: _Resp())
+
+    app = Flask(__name__)
+    app.config.foca = Config(
+        db=MongoConfig(**MONGO_CONFIG)
+    )
+    mock_resp = deepcopy(MOCK_TOOL_VERSION_ID)
+    mock_resp['id'] = MOCK_ID
+    # Remove inline content for one selected CWL file to force URL path
+    for f in mock_resp['versions'][0]['files']:
+        if f['type'] == 'CWL' and f['tool_file']['file_type'] != 'CONTAINERFILE':
+            f['file_wrapper'].pop('content', None)
+            f['file_wrapper']['url'] = 'http://example.com/file.txt'
+            break
+    app.config.foca.db.dbs['trsStore'].collections['tools'] \
+        .client = mongomock.MongoClient().db.collection
+    app.config.foca.db.dbs['trsStore'].collections['tools'] \
+        .client.insert_one(mock_resp)
+
+    with app.app_context():
+        resp = toolsIdVersionsVersionIdTypeFilesGet.__wrapped__(
+            id=MOCK_ID,
+            version_id=MOCK_ID,
+            type="CWL",
+            format="zip",
+        )
+        assert resp.mimetype == 'application/zip'
+        data = resp.get_data()
+        with ZipFile(BytesIO(data)) as zf:
+            # Ensure all four expected files present
+            names = set(zf.namelist())
+            assert names == {
+                'path_test_cwl',
+                'path_other_cwl',
+                'path_prim_desc_cwl',
+                'path_sec_desc_cwl',
+            }
+
+
+def test_toolsIdVersionsVersionIdTypeFilesGet_zip_missing_content_url_NotFound():
+    """Zip building fails when a selected file lacks both content and URL."""
+    app = Flask(__name__)
+    app.config.foca = Config(
+        db=MongoConfig(**MONGO_CONFIG)
+    )
+    mock_resp = deepcopy(MOCK_TOOL_VERSION_ID)
+    mock_resp['id'] = MOCK_ID
+    # Remove content and url for one selected CWL file
+    for f in mock_resp['versions'][0]['files']:
+        if f['type'] == 'CWL' and f['tool_file']['file_type'] != 'CONTAINERFILE':
+            f['file_wrapper'].pop('content', None)
+            f['file_wrapper'].pop('url', None)
+            break
+    app.config.foca.db.dbs['trsStore'].collections['tools'] \
+        .client = mongomock.MongoClient().db.collection
+    app.config.foca.db.dbs['trsStore'].collections['tools'] \
+        .client.insert_one(mock_resp)
+
+    with app.app_context():
+        with pytest.raises(NotFound):
+            toolsIdVersionsVersionIdTypeFilesGet.__wrapped__(
+                id=MOCK_ID,
+                version_id=MOCK_ID,
+                type="CWL",
+                format="zip",
+            )
+
+
+def test_toolsIdVersionsVersionIdTypeFilesGet_zip_urlopen_exception_NotFound(monkeypatch):
+    """Zip building fails when URL fetching raises an exception."""
+    def _raise(url):
+        raise Exception('network error')
+
+    monkeypatch.setattr('trs_filer.ga4gh.trs.server.urlopen', _raise)
+
+    app = Flask(__name__)
+    app.config.foca = Config(
+        db=MongoConfig(**MONGO_CONFIG)
+    )
+    mock_resp = deepcopy(MOCK_TOOL_VERSION_ID)
+    mock_resp['id'] = MOCK_ID
+    # Force URL branch by removing inline content for one file
+    for f in mock_resp['versions'][0]['files']:
+        if f['type'] == 'CWL' and f['tool_file']['file_type'] != 'CONTAINERFILE':
+            f['file_wrapper'].pop('content', None)
+            f['file_wrapper']['url'] = 'http://example.com/file.txt'
+            break
+    app.config.foca.db.dbs['trsStore'].collections['tools'] \
+        .client = mongomock.MongoClient().db.collection
+    app.config.foca.db.dbs['trsStore'].collections['tools'] \
+        .client.insert_one(mock_resp)
+
+    with app.app_context():
+        with pytest.raises(NotFound):
+            toolsIdVersionsVersionIdTypeFilesGet.__wrapped__(
+                id=MOCK_ID,
+                version_id=MOCK_ID,
+                type="CWL",
+                format="zip",
+            )
 
 # GET /tools/{id}/versions/{version_id}/{type}/tests
 def test_toolsIdVersionsVersionIdTypeTestsGet():
