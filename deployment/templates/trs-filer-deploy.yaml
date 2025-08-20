@@ -24,6 +24,19 @@ spec:
       - image: {{ .Values.trs_filer.image }}
         imagePullPolicy: Always
         name: {{ .Values.trs_filer.appName }}
+        env:
+        - name: FILE_STORAGE_STRATEGY
+          value: {{ .Values.fileStorage.strategy }}
+        - name: MINIO_ENDPOINT
+          value: {{ .Values.minio.endpoint }}
+        - name: MINIO_PUBLIC_ENDPOINT
+          value: {{ .Values.minio.publicEndpoint }}
+        - name: MINIO_ACCESS_KEY
+          value: {{ .Values.minio.accessKey }}
+        - name: MINIO_SECRET_KEY
+          value: {{ .Values.minio.secretKey }}
+        - name: MINIO_BUCKET
+          value: {{ .Values.minio.bucket }}
         ports:
         - containerPort: 8080
           protocol: TCP
@@ -46,6 +59,5 @@ spec:
             - key: config.yaml
               path: config.yaml
           name: app-config-{{ .Values.trs_filer.appName }}
-
         name: config-yaml
 status:

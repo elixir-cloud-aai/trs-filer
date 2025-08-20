@@ -21,6 +21,20 @@ kubernetes:
     issuer: letsencrypt-prod
 
 mongodb:
-  image: mongo:3.6
+  image: mongo:8.0.9
   volumeSize: 1Gi
+
+minio:
+  image: minio/minio:latest
+  accessKey: minioadmin
+  secretKey: minioadmin
+  bucket: trs-files
+  volumeSize: 10Gi
+  consolePort: 9001
+  apiPort: 9000
+  endpoint: http://minio-trs-filer:9000
+  publicEndpoint: http://localhost:9000
+
+fileStorage:
+  strategy: minio
 

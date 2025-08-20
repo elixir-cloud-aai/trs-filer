@@ -3,6 +3,7 @@
 import logging
 from typing import (Optional, Dict, List, Tuple)
 from urllib.parse import unquote
+import re
 from io import BytesIO
 from zipfile import ZipFile, ZIP_DEFLATED
 from urllib.request import urlopen
@@ -26,8 +27,25 @@ from trs_filer.ga4gh.trs.endpoints.register_tool_classes import (
 from trs_filer.ga4gh.trs.endpoints.service_info import (
     RegisterServiceInfo,
 )
+from trs_filer.file_storage import FileStorageManager
 
 logger = logging.getLogger(__name__)
+
+
+def _get_file_storage():
+    """Get or create file storage manager."""
+    return FileStorageManager()
+
+
+def _prepare_file_wrapper(wrapper: Dict) -> Dict:
+    """Prepare a FileWrapper for response based on storage strategy."""
+    storage = _get_file_storage()
+    url = storage.get_file_url(wrapper)
+    if url:
+        wrapper['url'] = url
+        if 'content' in wrapper:
+            del wrapper['content']
+    return wrapper
 
 
 @log_traffic
@@ -129,6 +147,7 @@ def toolsGet(
     descriptorType: Optional[str] = None,
     registry: Optional[str] = None,
     organization: Optional[str] = None,
+    source: Optional[str] = None,
     name: Optional[str] = None,
     toolname: Optional[str] = None,
     description: Optional[str] = None,
@@ -190,6 +209,11 @@ def toolsGet(
         }
     if organization is not None:
         filt['organization'] = organization
+    if source is not None:
+        filt['url'] = {
+            '$regex': re.escape(source),
+            '$options': 'i'
+        }
     if name is not None:
         filt['versions'] = {
             '$elemMatch': {
@@ -201,7 +225,10 @@ def toolsGet(
             },
         }
     if toolname is not None:
-        filt['name'] = toolname
+        filt['name'] = {
+            '$regex': re.escape(toolname),
+            '$options': 'i'
+        }
     if description is not None:
         filt['description'] = description
     if author:
@@ -237,8 +264,8 @@ def toolsGet(
         filter=filt,
         projection={"_id": False},
     ).sort(
-        # Sort results by descending object ID (+/- oldest to newest)
-        '_id', 1
+        # Sort results by ascending object ID (+/- oldest to newest)
+        '_id', -1
     ).skip(
         # Skip number of records by given offset
         offset_int
@@ -315,7 +342,7 @@ def toolsIdVersionsVersionIdTypeDescriptorGet(
                 _d['tool_file']['file_type'] == 'PRIMARY_DESCRIPTOR' and
                 _d['type'] == type
             ):
-                ret = _d['file_wrapper']
+                ret = _prepare_file_wrapper(_d['file_wrapper'])
     except (IndexError, KeyError, TypeError):
         raise NotFound
     if not ret:
@@ -382,7 +409,7 @@ def toolsIdVersionsVersionIdTypeDescriptorRelativePathGet(
                 _d['tool_file']['file_type'] in file_types and
                 _d['type'] == type
             ):
-                ret = _d['file_wrapper']
+                ret = _prepare_file_wrapper(_d['file_wrapper'])
     except (IndexError, KeyError, TypeError):
         raise NotFound
     if not ret:
@@ -443,7 +470,7 @@ def toolsIdVersionsVersionIdTypeTestsGet(
                 _d['tool_file']['file_type'] == 'TEST_FILE' and
                 _d['type'] == type
             ):
-                ret_array.append(_d['file_wrapper'])
+                ret_array.append(_prepare_file_wrapper(_d['file_wrapper']))
     except (IndexError, KeyError, TypeError):
         raise NotFound
     return ret_array
@@ -499,29 +526,19 @@ def toolsIdVersionsVersionIdTypeFilesGet(
 
     if format == 'zip':
         try:
+            storage = _get_file_storage()
             mem_zip = BytesIO()
             with ZipFile(mem_zip, mode='w', compression=ZIP_DEFLATED) as zf:
                 for file_entry in selected_files:
                     path_in_zip = file_entry['tool_file']['path']
                     wrapper = file_entry.get('file_wrapper', {})
                     content_bytes = None
-                    if 'content' in wrapper and wrapper['content'] is not None:
-                        content = wrapper['content']
-                        if isinstance(content, bytes):
-                            content_bytes = content
-                        elif isinstance(content, str):
-                            content_bytes = content.encode('utf-8')
-                        else:
-                            # Fallback: convert to string then encode
-                            content_bytes = str(content).encode('utf-8')
-                    elif 'url' in wrapper and wrapper['url']:
-                        try:
-                            with urlopen(wrapper['url']) as resp:
-                                content_bytes = resp.read()
-                        except Exception:
-                            raise NotFound
-                    else:
-                        # No content available
+                    try:
+                        content_bytes = storage.retrieve_file_content(wrapper)
+                    except Exception as e:
+                        logger.error(
+                            f"Failed to retrieve file '{path_in_zip}': {e}"
+                        )
                         raise NotFound
 
                     # Ensure we have bytes to write
@@ -573,7 +590,7 @@ def toolsIdVersionsVersionIdContainerfileGet(
     try:
         data = data['versions'][0]
         ret = [
-            d['file_wrapper'] for d in data['files']
+            _prepare_file_wrapper(d['file_wrapper']) for d in data['files']
             if d['tool_file']['file_type'] == 'CONTAINERFILE'
         ]
     except (IndexError, KeyError, TypeError):
@@ -636,6 +653,16 @@ def postTool() -> str:
     tool.register_metadata()
     return tool.data['id']
 
+@log_traffic
+def postToolsBulk() -> str:
+    """Import tool in bulk."""
+    data = request.json
+    for trsObject in data:
+        tool = RegisterTool(
+            data=trsObject,
+        )
+        tool.register_metadata()
+    return "200"
 
 @log_traffic
 def putTool(
@@ -662,10 +689,8 @@ def deleteTool(
     id: str,
 ) -> str:
     """Delete tool.
-
     Args:
         id: Identifier of tool to be deleted.
-
     Returns:
         Previous identifier of deleted tool.
     """
@@ -673,9 +698,23 @@ def deleteTool(
         current_app.config.foca.db.dbs['trsStore']
         .collections['tools'].client
     )
+    obj = db_coll_tools.find_one(
+        filter={'id': id},
+    )
+    if obj is None:
+        raise NotFound
     del_obj_tools = db_coll_tools.delete_one({'id': id})
 
     if del_obj_tools.deleted_count:
+        storage = _get_file_storage()
+        try:
+            for version in obj['versions']:
+                for _file in version.get('files', []):
+                    storage.delete_file(
+                        file_wrapper=_file['file_wrapper'],
+                    )
+        except (KeyError, TypeError):
+            pass
         return id
     else:
         raise NotFound
@@ -730,11 +769,9 @@ def deleteToolVersion(
     version_id: str,
 ) -> str:
     """Delete tool version.
-
     Args:
         id: Identifier of tool to be modified.
         version_id: Identifier of tool version to be deleted.
-
     Returns:
         Previous identifier of deleted tool version. Note that a
         `BadRequest/400` error response is returned if attempting to delete
@@ -744,6 +781,12 @@ def deleteToolVersion(
         current_app.config.foca.db.dbs['trsStore']
         .collections['tools'].client
     )
+
+    obj = db_coll_tools.find_one(
+        filter={'id': id},
+    )
+    if obj is None:
+        raise NotFound
 
     filt = {
         'id': id,
@@ -764,6 +807,16 @@ def deleteToolVersion(
     elif not del_ver_tools.modified_count:
         raise InternalServerError
     else:
+        storage = _get_file_storage()
+        try:
+            for version in obj['versions']:
+                if version['id'] == version_id:
+                    for _file in version.get('files', []):
+                        storage.delete_file(
+                            file_wrapper=_file['file_wrapper'],
+                        )
+        except (KeyError, TypeError):
+            pass
         return version_id
 
 
