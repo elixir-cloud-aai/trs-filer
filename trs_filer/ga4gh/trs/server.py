@@ -506,8 +506,14 @@ def toolsIdVersionsVersionIdTypeFilesGet(
                     wrapper = file_entry.get('file_wrapper', {})
                     content_bytes = None
                     if 'content' in wrapper and wrapper['content'] is not None:
-                        # Treat content as text; encode to bytes
-                        content_bytes = str(wrapper['content']).encode('utf-8')
+                        content = wrapper['content']
+                        if isinstance(content, bytes):
+                            content_bytes = content
+                        elif isinstance(content, str):
+                            content_bytes = content.encode('utf-8')
+                        else:
+                            # Fallback: convert to string then encode
+                            content_bytes = str(content).encode('utf-8')
                     elif 'url' in wrapper and wrapper['url']:
                         try:
                             with urlopen(wrapper['url']) as resp:
