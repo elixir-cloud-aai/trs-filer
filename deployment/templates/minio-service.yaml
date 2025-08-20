@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: minio-{{ .Values.trs_filer.appName }}
+  labels:
+    app: minio-{{ .Values.trs_filer.appName }}
+spec:
+  ports:
+  - name: api
+    port: {{ .Values.minio.apiPort }}
+    protocol: TCP
+    targetPort: {{ .Values.minio.apiPort }}
+  - name: console
+    port: {{ .Values.minio.consolePort }}
+    protocol: TCP
+    targetPort: {{ .Values.minio.consolePort }}
+  selector:
+    app: minio-{{ .Values.trs_filer.appName }}
+  sessionAffinity: None
+  type: ClusterIP
+status:
+  loadBalancer: {}

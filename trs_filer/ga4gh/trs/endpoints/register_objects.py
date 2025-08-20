@@ -22,6 +22,8 @@ from trs_filer.ga4gh.trs.endpoints.register_tool_classes import (
 from trs_filer.ga4gh.trs.endpoints.utils import (
     generate_id,
 )
+from trs_filer.file_storage import FileStorageManager
+
 
 logger = logging.getLogger(__name__)
 
@@ -66,7 +68,12 @@ class RegisterTool:
         """
         conf = current_app.config.foca.custom
         self.data = data
-        self.data['id'] = None if id is None else id
+        if id is not None:
+            self.data['id'] = id
+        elif self.data.get('id') is not None:
+            self.data['id'] = self.data['id']
+        else:
+            self.data['id'] = None
         self.replace = True
         self.id_charset: str = conf.tool.id.charset
         self.id_length = int(conf.tool.id.length)
@@ -84,6 +91,7 @@ class RegisterTool:
             current_app.config.foca.db.dbs['trsStore']
             .collections['toolclasses'].client
         )
+        self.file_storage = FileStorageManager()
 
     def process_metadata(self) -> None:
         """Process tool metadata."""
@@ -111,10 +119,11 @@ class RegisterTool:
                 )
 
             # set self reference URL
-            self.data['url'] = (
-                f"{self.url_prefix}://{self.host_name}:{self.external_port}/"
-                f"{self.api_path}/tools/{self.data['id']}"
-            )
+            if not self.data.get('url'):
+                self.data['url'] = (
+                    f"{self.url_prefix}://{self.host_name}:{self.external_port}/"
+                    f"{self.api_path}/tools/{self.data['id']}"
+                )
 
             # set tool class identifier if not present
             tool_class_id = self.data['toolclass'].get('id', None)
@@ -198,6 +207,7 @@ class RegisterToolVersion:
         'WDL',
         'NFL',
         'GALAXY',
+        'SMK'
     ]
     image_types = [
         'Docker',
@@ -256,6 +266,7 @@ class RegisterToolVersion:
             current_app.config.foca.db.dbs['trsStore']
             .collections['tools'].client
         )
+        self.file_storage = FileStorageManager()
 
     def process_metadata(self) -> None:
         """Process version metadata."""
@@ -277,11 +288,12 @@ class RegisterToolVersion:
             )
 
         # set self reference url
-        self.data['url'] = (
-            f"{self.url_prefix}://{self.host_name}:{self.external_port}/"
-            f"{self.api_path}/tools/{self.id}/versions/"
-            f"{self.data['id']}"
-        )
+        if not self.data.get('url'):
+            self.data['url'] = (
+                f"{self.url_prefix}://{self.host_name}:{self.external_port}/"
+                f"{self.api_path}/tools/{self.id}/versions/"
+                f"{self.data['id']}"
+            )
 
         # process files
         self.process_files()
@@ -340,38 +352,25 @@ class RegisterToolVersion:
                     "`content`."
                 )
                 raise BadRequest
+            if 'content' in _file['file_wrapper']:
+                storage_meta = self.file_storage.store_file(
+                    file_content=_file['file_wrapper']['content'],
+                    file_path=_file['tool_file']['path'],
+                    file_type=_file['tool_file']['file_type'],
+                )
+                del _file['file_wrapper']['content']
+                _file['file_wrapper'].update(storage_meta)
+
             if (
-                self.data['is_production'] and
+                self.data.get('is_production', False) and
                 ('checksum' not in _file['file_wrapper'] or
-                 not _file['file_wrapper']['checksum'])
+                not _file['file_wrapper']['checksum'])
             ):
                 logger.error(
                     "Production tools must contain checksum information for "
                     "all files."
                 )
                 raise BadRequest
-
-            # store contents accessible at url in database
-            # TODO: this needs more checks on the content
-            if (
-                'url' in _file['file_wrapper'] and
-                'content' not in _file['file_wrapper']
-            ):
-                _w = _file['file_wrapper']
-                try:
-                    _w['content'] = requests.get(_w['url']).text
-                except (
-                    requests.exceptions.ConnectionError,
-                    requests.exceptions.MissingSchema,
-                    socket.gaierror,
-                    urllib3.exceptions.NewConnectionError,
-                ):
-                    logger.error(
-                        "Could not retrieve content via the URL "
-                        f"'{_w['url']}' provided for file "
-                        f"'{_file['tool_file']['path']}'."
-                    )
-                    raise BadRequest
 
             # validate descriptor file types
             descriptor_set = (
@@ -385,11 +384,11 @@ class RegisterToolVersion:
                     logger.error("Invalid descriptor type.")
                     raise BadRequest
 
-            # validate image file types
-            elif _file['tool_file']['file_type'] == "CONTAINERFILE":
-                if _file['type'] not in self.image_types:
-                    logger.error("Missing or invalid image file type.")
-                    raise BadRequest
+            # # validate image file types
+            # elif _file['tool_file']['file_type'] == "CONTAINERFILE":
+            #     if _file['type'] not in self.image_types:
+            #         logger.error("Missing or invalid image file type.")
+            #         raise BadRequest
 
     def register_metadata(self) -> None:
         """Register version with tool."""
@@ -397,6 +396,18 @@ class RegisterToolVersion:
         obj = self.db_coll_tools.find_one(filter={'id': self.id})
         if obj is None:
             raise NotFound
+
+        # delete stored files if replacing
+        if self.replace:
+            try:
+                for version in obj['versions']:
+                    if version['id'] == self.data['id']:
+                        for _file in version.get('files', []):
+                            self.file_storage.delete_file(
+                                file_wrapper=_file['file_wrapper'],
+                            )
+            except (KeyError, TypeError):
+                pass
 
         # keep trying to generate unique ID
         i = 0
