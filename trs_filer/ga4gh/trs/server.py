@@ -3,9 +3,13 @@
 import logging
 from typing import (Optional, Dict, List, Tuple)
 from urllib.parse import unquote
+from io import BytesIO
+from zipfile import ZipFile, ZIP_DEFLATED
+from urllib.request import urlopen
 
 from flask import (request, current_app)
 from foca.utils.logging import log_traffic
+from flask import send_file
 
 from trs_filer.errors.exceptions import (
     BadRequest,
@@ -485,12 +489,58 @@ def toolsIdVersionsVersionIdTypeFilesGet(
     ]
     try:
         data = data['versions'][0]
-        ret = [
-            d['tool_file'] for d in data['files']
+        selected_files = [
+            d for d in data['files']
             if d['type'] == type and d['tool_file']['file_type'] in file_types
         ]
+        ret = [d['tool_file'] for d in selected_files]
     except (IndexError, KeyError, TypeError):
         raise NotFound
+
+    if format == 'zip':
+        try:
+            mem_zip = BytesIO()
+            with ZipFile(mem_zip, mode='w', compression=ZIP_DEFLATED) as zf:
+                for file_entry in selected_files:
+                    path_in_zip = file_entry['tool_file']['path']
+                    wrapper = file_entry.get('file_wrapper', {})
+                    content_bytes = None
+                    if 'content' in wrapper and wrapper['content'] is not None:
+                        content = wrapper['content']
+                        if isinstance(content, bytes):
+                            content_bytes = content
+                        elif isinstance(content, str):
+                            content_bytes = content.encode('utf-8')
+                        else:
+                            # Fallback: convert to string then encode
+                            content_bytes = str(content).encode('utf-8')
+                    elif 'url' in wrapper and wrapper['url']:
+                        try:
+                            with urlopen(wrapper['url']) as resp:
+                                content_bytes = resp.read()
+                        except Exception:
+                            raise NotFound
+                    else:
+                        # No content available
+                        raise NotFound
+
+                    # Ensure we have bytes to write
+                    if content_bytes is None:
+                        raise NotFound
+                    zf.writestr(path_in_zip, content_bytes)
+            mem_zip.seek(0)
+            download_name = f"{id}_{version_id}_{type}.zip"
+            return send_file(
+                mem_zip,
+                mimetype='application/zip',
+                as_attachment=True,
+                download_name=download_name,
+            )
+        except NotFound:
+            raise
+        except Exception:
+            raise InternalServerError
+
     return ret
 
 
