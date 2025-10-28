@@ -24,10 +24,15 @@ spec:
       - image: {{ .Values.trs_filer.image }}
         imagePullPolicy: Always
         name: {{ .Values.trs_filer.appName }}
+        # https://github.com/elixir-cloud-aai/trs-filer/blob/9116b702bce2ef5b2e04130a6fe5db2a89d465f3/trs_filer/gunicorn.py#L26
+        # If not set in values.yaml, it will use trs-filer-db
+        env:
+          - name: MONGO_DBNAME
+            value: {{ .Values.mongodb.dbName | default "trs-filer-db" }}
         ports:
         - containerPort: 8080
           protocol: TCP
-        resources: {}
+        resources: {{- toYaml .Values.trs_filer.resources | nindent 10 }}
         terminationMessagePath: /dev/termination-log
         terminationMessagePolicy: File
         volumeMounts:
@@ -46,6 +51,5 @@ spec:
             - key: config.yaml
               path: config.yaml
           name: app-config-{{ .Values.trs_filer.appName }}
-
         name: config-yaml
-status:
+

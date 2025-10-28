@@ -4,7 +4,7 @@ metadata:
   name: mongodb-{{ .Values.trs_filer.appName }}
 spec:
   accessModes:
-  - ReadWriteOnce
+    - ReadWriteOnce
   resources:
     requests:
       storage: {{ .Values.mongodb.volumeSize }}
