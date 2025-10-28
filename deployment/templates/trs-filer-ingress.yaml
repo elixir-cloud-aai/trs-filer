@@ -15,7 +15,7 @@ spec:
       http:
         paths:
           - path: /
-            pathType: prefix
+            pathType: Prefix
             backend:
               service:
                 name: {{ .Values.trs_filer.appName }}
