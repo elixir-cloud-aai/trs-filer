@@ -1,0 +1,45 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mongo-init-script
+data:
+  init-script.js: |
+    db = db.getSiblingDB('trsStore');
+    // https://github.com/elixir-cloud-aai/trs-filer/blob/9116b702bce2ef5b2e04130a6fe5db2a89d465f3/trs_filer/gunicorn.py#L26
+    // If not set in values.yaml, it will use trs-filer-db
+    dbTRS = db.getSiblingDB('{{ tpl (default "trs-filer-db" .Values.mongodb.dbName) . }}');
+
+    // Create the 'tools', 'service_info' and 'toolclasses' collections
+    // Database configuration from https://github.com/elixir-cloud-aai/trs-filer/blob/9116b702bce2ef5b2e04130a6fe5db2a89d465f3/trs_filer/config.yaml#L9
+    db.createCollection('tools');
+    db.tools.createIndex(
+      { id: 1 },
+      { unique: true }
+    );
+    db.createCollection('service_info');
+    db.service_info.createIndex(
+      { id: 1 },
+      { unique: true }
+    );
+    db.createCollection('toolclasses');
+    db.toolclasses.createIndex(
+      { id: 1 },
+      { unique: true }
+    );
+
+    dbTRS.createCollection('tools');
+    dbTRS.tools.createIndex(
+      { id: 1 },
+      { unique: true }
+    );
+    dbTRS.createCollection('service_info');
+    dbTRS.service_info.createIndex(
+      { id: 1 },
+      { unique: true }
+    );
+    dbTRS.createCollection('toolclasses');
+    dbTRS.toolclasses.createIndex(
+      { id: 1 },
+      { unique: true }
+    );
+

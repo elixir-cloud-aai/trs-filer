@@ -27,12 +27,15 @@ spec:
         ports:
         - containerPort: 27017
           protocol: TCP
-        resources: {}
+        resources: {{- toYaml .Values.mongodb.resources | nindent 10 }}
         terminationMessagePath: /dev/termination-log
         terminationMessagePolicy: File
         volumeMounts:
         - mountPath: /data/db/
           name: mongodb-{{ .Values.trs_filer.appName }}
+        - name: init-script
+          mountPath: /docker-entrypoint-initdb.d/init-script.js
+          subPath: init-script.js
       dnsPolicy: ClusterFirst
       restartPolicy: Always
       schedulerName: default-scheduler
@@ -42,4 +45,6 @@ spec:
       - name: mongodb-{{ .Values.trs_filer.appName }}
         persistentVolumeClaim:
           claimName: mongodb-{{ .Values.trs_filer.appName }}
-status:
+      - name: init-script
+        configMap:
+          name: mongo-init-script

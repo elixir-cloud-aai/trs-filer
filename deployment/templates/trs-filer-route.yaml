@@ -1,8 +1,8 @@
-{{ if .Capabilities.APIVersions.Has "route.openshift.io/v1" }}
+{{ if ( and (.Capabilities.APIVersions.Has "route.openshift.io/v1") (not .Values.trs_filer.ingress.enabled)) }}
 apiVersion: route.openshift.io/v1
 kind: Route
 metadata:
-  name: {{ .Values.trs_filer.appName }}
+  name: {{ .Values.trs_filer.appName }}-route
 spec:
   host: {{ .Values.host_name }}
   port:
@@ -17,35 +17,4 @@ spec:
   wildcardPolicy: None
 status:
   ingress: []
-{{ else if .Capabilities.APIVersions.Has "networking.k8s.io/v1" }}
-{{ if .Values.kubernetes.ingress.enabled }}
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  annotations:
-    kubernetes.io/ingress.class: nginx
-    {{ if .Values.kubernetes.ingress.enabled }}
-    cert-manager.io/cluster-issuer: {{ .Values.kubernetes.https.issuer }}
-    kubernetes.io/tls-acme: "true"
-    {{ end }}
-  name: {{ .Values.trs_filer.appName }}-ingress
-spec:
-  rules:
-  - host: {{ .Values.host_name }}
-    http:
-      paths:
-      - backend:
-          service:
-            name: {{ .Values.trs_filer.appName }}
-            port:
-              number: 8080
-        path: /
-        pathType: Prefix
-{{ if .Values.kubernetes.https.enabled }}
-  tls:
-  - hosts:
-    - {{ .Values.host_name }}
-    secretName: {{ .Values.trs_filer.appName }}-ingress-secret
-{{ end }}
-{{ end }}
 {{ end }}

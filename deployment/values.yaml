@@ -2,25 +2,38 @@
 # This is a YAML-formatted file.
 # Declare variables to be passed into your templates.
 
-host_name: trs-filer-test.2.rahtiapp.fi
+host_name: ""
 
 trs_filer:
+  # if ingress.enabled: false, it will deploy an OpenShift Route (https://docs.redhat.com/en/documentation/openshift_container_platform/4.19/html/network_apis/route-route-openshift-io-v1)
+  ingress:
+    enabled: true
+    https:
+      enabled: false
+      issuer: letsencrypt-prod
   image: elixircloud/trs-filer:latest
   appName: trs-filer
+  resources:
+    limits:
+      cpu: 100m
+      memory: 128Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
 
 apiServer: kubernetes.default.svc:443 # address of k8s API server
 
-# If you are running kubernetes select whether you would like
-# to access the service via Ingress. Also, if you have the cert manager
-# installed, you can provision a certificate for https
-kubernetes:
-  ingress:
-    enabled: true
-  https:
-    enabled: true
-    issuer: letsencrypt-prod
-
 mongodb:
-  image: mongo:3.6
+  image: docker.io/library/mongo:noble
+  # https://github.com/elixir-cloud-aai/trs-filer/blob/9116b702bce2ef5b2e04130a6fe5db2a89d465f3/trs_filer/gunicorn.py#L26
+  # If not set, it will use trs-filer-db
+  dbName: ""
   volumeSize: 1Gi
+  resources:
+    limits:
+      cpu: 200m
+      memory: 512Mi
+    requests:
+      cpu: 200m
+      memory: 512Mi
 

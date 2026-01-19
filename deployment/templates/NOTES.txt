@@ -1,0 +1,11 @@
+Elixir Cloud TRS-Filer is being deployed!
+
+Once deployed:
+
+  1. Access the API via https://{{ .Values.host_name }}/ga4gh/trs/v2/
+
+     To test the connection, you can run:
+
+       curl -X GET "https://{{ .Values.host_name }}/ga4gh/trs/v2/service-info" -H "Accept: application/json"
+
+  2. Access the Swagger UI via https://{{ .Values.host_name }}/ga4gh/trs/v2/ui
