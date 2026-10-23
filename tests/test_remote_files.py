@@ -266,6 +266,10 @@ class TestConfig:
             {"total_timeout": 0},
             {"max_size": 0},
             {"max_redirects": -1},
+            {"max_redirects": True},
+            {"max_size": 1.9},
+            {"total_timeout": float("inf")},
+            {"connect_timeout": float("nan")},
         ],
     )
     def test_invalid(self, values: dict[str, Any]) -> None:
@@ -318,6 +322,8 @@ class TestCheckURL:
             "https://files.example.org:99999/",
             "https://files.example.org:x/",
             "https://:443/",
+            "https://[::1/",
+            "https://a.example\uff20b.example/",
         ],
     )
     def test_invalid(self, url: object) -> None:
@@ -363,6 +369,8 @@ class TestDestinationCheck:
             (f"64:ff9b::{PUBLIC}", True),
             ("::7f00:1", False),
             ("::a00:5", False),
+            ("fec0::1", False),
+            ("3fff::1", False),
             ("2002:7f00:1::", False),
             ("2002:5db8:d822::", True),
             ("2001:0:4136:e378:8000:63bf:80ff:fffe", False),
@@ -437,6 +445,28 @@ class TestFetchRemoteFile:
         assert request.startswith(b"GET /a.cwl HTTP/1.1\r\n")
         assert b"Host: files.example.org\r\n" in request
         assert b"Accept-Encoding: identity\r\n" in request
+
+    def test_requoted(
+        self, network: FakeNetwork, config: RemoteFilesConfig
+    ) -> None:
+        """Characters that URLs only allow percent-encoded are encoded.
+
+        Args:
+            network: Fake network.
+            config: Settings for retrieving files.
+        """
+        network.responses[PUBLIC] = [
+            _response(
+                status="302 Found",
+                headers={"Location": "/b c.cwl"},
+                body=b"",
+            ),
+            _response(),
+        ]
+        file = fetch_remote_file(f"http://{PUBLIC}/a b.cwl", config)
+        assert file.content == b"content"
+        assert network.sockets[0].sent.startswith(b"GET /a%20b.cwl ")
+        assert network.sockets[1].sent.startswith(b"GET /b%20c.cwl ")
 
     def test_success_without_length(
         self, network: FakeNetwork, config: RemoteFilesConfig

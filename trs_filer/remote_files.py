@@ -28,6 +28,7 @@ from urllib.parse import urljoin, urlsplit
 
 import requests
 from requests.adapters import HTTPAdapter
+from requests.utils import requote_uri
 from urllib3.connection import HTTPConnection, HTTPSConnection
 from urllib3.connectionpool import HTTPConnectionPool, HTTPSConnectionPool
 from urllib3.exceptions import (
@@ -57,6 +58,13 @@ _URL_REGEX = (
 # IPv4 addresses: NAT64 well-known prefix (RFC 6052) and IPv4-compatible
 # addresses (deprecated, RFC 4291); 6to4 and Teredo addresses are checked
 # via `ipaddress`
+# IPv6 networks that aren't public, but not refused by `ipaddress` on all
+# supported Python versions: site-local (deprecated, RFC 3879) and
+# documentation (RFC 9637) addresses
+_NOT_PUBLIC_IPV6 = (
+    ipaddress.IPv6Network("fec0::/10"),
+    ipaddress.IPv6Network("3fff::/20"),
+)
 _IPV4_EMBEDDING = (
     ipaddress.IPv6Network("64:ff9b::/96"),
     ipaddress.IPv6Network("::/96"),
@@ -81,7 +89,10 @@ def check_url(url: object, schemes: Collection[str]) -> None:
     """
     if not isinstance(url, str) or re.fullmatch(_URL_REGEX, url) is None:
         raise InvalidURL(f"Not an HTTP(S) URL with a host: {url!r}")
-    parts = urlsplit(url)
+    try:
+        parts = urlsplit(url)
+    except ValueError as exc:
+        raise InvalidURL(f"Invalid URL: {url!r}") from exc
     if parts.scheme.lower() not in schemes:
         raise InvalidURL(
             f"Scheme '{parts.scheme}' is not allowed (allowed: "
@@ -161,6 +172,8 @@ def is_public_address(address: str) -> bool:
             embedded = [ipaddress.IPv4Address(int(ip) & 0xFFFFFFFF)]
         if embedded:
             return all(is_public_address(str(ipv4)) for ipv4 in embedded)
+        if any(ip in network for network in _NOT_PUBLIC_IPV6):
+            return False
     return ip.is_global and not ip.is_multicast
 
 
@@ -570,7 +583,9 @@ def _fetch(
         requests.RequestException: The request failed, e.g., timed out
             (an `OSError`).
     """
-    current = url
+    # Characters that URLs only allow percent-encoded (e.g., spaces) are
+    # encoded, as `requests` would do
+    current = requote_uri(url)
     with _make_session(config, deadline) as session:
         for _ in range(config.max_redirects + 1):
             check_url(current, schemes=config.schemes)
@@ -593,7 +608,9 @@ def _fetch(
                 raise InvalidURL(f"Not an HTTP(S) URL: {current!r}")
             with response:
                 if response.is_redirect:
-                    current = urljoin(current, response.headers["Location"])
+                    current = requote_uri(
+                        urljoin(current, response.headers["Location"])
+                    )
                     continue
                 if not response.ok:
                     raise RemoteFileError(

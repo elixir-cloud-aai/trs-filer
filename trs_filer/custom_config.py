@@ -1,11 +1,12 @@
 """Custom app config models."""
 
 import ipaddress
+import math
 import string
 from typing import List, Literal, Optional, Union
 
 from foca.models.config import FOCABaseConfig
-from pydantic import Field, validator
+from pydantic import Field, conint, validator
 
 
 class ServiceConfig(FOCABaseConfig):
@@ -361,7 +362,8 @@ class RemoteFilesConfig(FOCABaseConfig):
 
     Raises:
         pydantic.ValidationError: No scheme is allowed, an allowed host is
-            empty, or a timeout or limit is out of range.
+            empty, a timeout is out of range or not finite, or a limit is
+            out of range or not an integer.
 
     Example:
         >>> RemoteFilesConfig(allowed_hosts=['files.local', '10.0.0.0/8'])
@@ -375,8 +377,25 @@ class RemoteFilesConfig(FOCABaseConfig):
     connect_timeout: float = Field(5.0, gt=0)
     read_timeout: float = Field(10.0, gt=0)
     total_timeout: float = Field(30.0, gt=0)
-    max_size: int = Field(1048576, gt=0)
-    max_redirects: int = Field(5, ge=0)
+    max_size: conint(strict=True, gt=0) = 1048576  # type: ignore[valid-type]
+    max_redirects: conint(strict=True, ge=0) = 5  # type: ignore[valid-type]
+
+    @validator("connect_timeout", "read_timeout", "total_timeout")
+    def check_timeout(cls, value: float) -> float:
+        """Check that a timeout is finite.
+
+        Args:
+            value: Timeout, in seconds.
+
+        Returns:
+            Timeout, in seconds.
+
+        Raises:
+            ValueError: The timeout is not finite.
+        """
+        if not math.isfinite(value):
+            raise ValueError("Timeouts must be finite")
+        return value
 
     @validator("schemes")
     def check_schemes(cls, value: List[str]) -> List[str]:
