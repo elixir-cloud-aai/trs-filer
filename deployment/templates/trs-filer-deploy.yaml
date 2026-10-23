@@ -29,6 +29,14 @@ spec:
         env:
           - name: MONGO_DBNAME
             value: {{ .Values.mongodb.dbName | default "trs-filer-db" }}
+          # The config that the Job renders, merged into the base config
+          - name: FOCA_CONFIG_OVERLAY
+            value: /etc/trs-filer/config.yaml
+          # Trust `X-Forwarded-*` of the ingress (or route), which terminates
+          # TLS, so that links in responses keep `https`; the pod is reached
+          # through its Service only (TEMPORARY, until #135)
+          - name: FORWARDED_ALLOW_IPS
+            value: "*"
         ports:
         - containerPort: 8080
           protocol: TCP
@@ -36,7 +44,7 @@ spec:
         terminationMessagePath: /dev/termination-log
         terminationMessagePolicy: File
         volumeMounts:
-        - mountPath: /app/trs_filer/config.yaml
+        - mountPath: /etc/trs-filer/config.yaml
           name: config-yaml
           subPath: config.yaml
       dnsPolicy: ClusterFirst

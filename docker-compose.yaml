@@ -1,28 +1,57 @@
-version: '3.6'
 services:
 
-    trs:
-        image: elixircloud/trs-filer:latest
-        build:
-            context: .
-            dockerfile: Dockerfile
-        restart: unless-stopped
-        links:
-            - mongodb
-        ports:
-            - "80:8080"
+  trs-filer:
+    image: trs-filer:local
+    # Always build locally instead of pulling an image of that name
+    pull_policy: build
+    build:
+      context: .
+      dockerfile: Dockerfile
+      # App version (the build gets no Git metadata); `0.0.0.dev0` if
+      # unset
+      args:
+        SETUPTOOLS_SCM_PRETEND_VERSION: ${SETUPTOOLS_SCM_PRETEND_VERSION:-}
+    restart: unless-stopped
+    # Longer than Gunicorn's graceful timeout (20 seconds), which idle
+    # keep-alive connections (e.g., of browsers) use up on shutdown
+    stop_grace_period: 30s
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    # Published on the host's loopback interface only, as anybody who
+    # can reach the app can register, change and delete tools; to publish
+    # it on other interfaces, override `ports` in a
+    # `docker-compose.override.yaml` (with your own config)
+    ports:
+      - "127.0.0.1:8080:8080"
+    # Development settings (`config.dev.yaml`): the public URL as
+    # published here
+    # The image's command serves the app with Gunicorn; options from the
+    # host's `GUNICORN_CMD_ARGS` (e.g., `--workers 2`) override its settings
+    # (not `--bind`, which would break the published port and health check)
+    environment:
+      FOCA_CONFIG_OVERLAY: /etc/trs-filer/config.dev.yaml
+      GUNICORN_CMD_ARGS: ${GUNICORN_CMD_ARGS:-}
+    volumes:
+      - ./config.dev.yaml:/etc/trs-filer/config.dev.yaml:ro
 
-    mongodb:
-        # Current PyMongo releases refuse to connect to MongoDB 3.6; MongoDB
-        # 8.0 does not start on Linux kernels 6.19 to 7.0.13
-        # (https://jira.mongodb.org/browse/SERVER-121912). MongoDB 7.0 can't
-        # open data of MongoDB 3.6: migrate existing data first (e.g.,
-        # `mongodump` with 3.6, `mongorestore` with 7.0), into the database
-        # `trsStore` (or set `MONGO_DBNAME` of `trs` to the old
-        # `trs-filer-db`)
-        image: mongo:7.0
-        restart: unless-stopped
-        volumes:
-            - ../data/trs/db:/data/db
-        ports:
-            - "27017:27017"
+  # Port 27017 is reachable from the app only; to connect from the host,
+  # add `ports: ["127.0.0.1:27017:27017"]` in a `docker-compose.override.yaml`
+  mongodb:
+    # MongoDB 8.0 refuses to start on Linux kernels 6.19 to 7.0.13
+    # (https://jira.mongodb.org/browse/SERVER-121912)
+    image: mongo:7.0
+    restart: unless-stopped
+    # Data in a named volume; setups before #123 kept it in `../data/trs/db`
+    # (migrate it with `mongodump`/`mongorestore` if needed)
+    volumes:
+      - mongodb-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+volumes:
+  mongodb-data:

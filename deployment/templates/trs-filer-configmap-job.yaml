@@ -8,7 +8,9 @@ metadata:
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: configmap-job-{{ .Values.trs_filer.appName }}
+  # Named by release revision, as the pod template of a Job is immutable: an
+  # upgrade replaces the Job (and reruns it) instead of patching it
+  name: configmap-job-{{ .Values.trs_filer.appName }}-{{ .Release.Revision }}
 spec:
   template:
     spec:
@@ -22,8 +24,10 @@ spec:
           value: {{ .Values.apiServer }}
         - name: CONFIG_MAP_NAME
           value: app-config-{{ .Values.trs_filer.appName }}
+        # The base config, installed with the package (TEMPORARY, with the
+        # Job, until the chart uses the FOCA library chart: #135)
         - name: APP_CONFIG_PATH
-          value: /app/trs_filer/config.yaml
+          value: /usr/local/lib/python3.13/site-packages/trs_filer/config.yaml
         - name: APP_NAME
           value: {{ .Values.trs_filer.appName }}
         - name: HOST_NAME

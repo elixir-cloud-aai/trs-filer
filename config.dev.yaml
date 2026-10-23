@@ -1,0 +1,10 @@
+# Config overlay for local development with Docker Compose; NOT for
+# deployments, which must set their own service info and public URL instead
+# (see `trs_filer/config.yaml`)
+custom:
+  # Public URL of the app as published by `docker-compose.yaml`, for the
+  # `url` properties of tools and versions
+  service:
+    url_prefix: http
+    external_host: localhost
+    external_port: 8080

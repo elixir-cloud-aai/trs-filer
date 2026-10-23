@@ -1,4 +1,9 @@
-"""API server entry point."""
+"""App factory, and entry point for development.
+
+The image serves the app with Gunicorn (`trs_filer.app:create_app()`, see
+`trs_filer.gunicorn_config`); `python -m trs_filer.app` runs it with Flask's
+development server.
+"""
 
 import logging
 from pathlib import Path
@@ -44,8 +49,8 @@ def warn_placeholder_service_info() -> None:
         )
 
 
-def init_app() -> App:
-    """Initialize FOCA application.
+def create_app() -> App:
+    """Create the app from the config, with the app's checks.
 
     FOCA validates the config, including the custom config
     (`trs_filer.custom_config.CustomConfig`) and the service info
@@ -53,8 +58,12 @@ def init_app() -> App:
     (`server.max_content_length`). The app additionally requires such a
     limit and warns of placeholders in the service info.
 
+    Gunicorn calls this in each worker, after forking (MongoDB clients must
+    not be shared across forks), so the checks run in each worker; if they
+    fail, the worker fails to boot and Gunicorn exits.
+
     Returns:
-        FOCA application.
+        Connexion app.
 
     Raises:
         RuntimeError: Request bodies are not limited in size
@@ -83,11 +92,14 @@ def init_app() -> App:
     return app
 
 
-def run_app(app: App) -> None:
-    """Run FOCA application."""
+def main() -> None:
+    """Run the app with Flask's development server, on the configured port.
+
+    For development; not for production.
+    """
+    app = create_app()
     app.run(port=app.port)
 
 
 if __name__ == "__main__":
-    my_app = init_app()
-    run_app(my_app)
+    main()
