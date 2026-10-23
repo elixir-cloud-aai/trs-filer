@@ -23,4 +23,3 @@ helm upgrade trs-filer . -n namespace
 ```
 `namespace` is the name of the namespace where the cluster was installed.
 `trs-filer` is the name given when installing. In order to see the correct name, do a `helm ls -n namespace`.
-
