@@ -46,10 +46,6 @@ known-first-party = ["trs_filer", "tests"]
 [tool.ruff.lint.per-file-ignores]
 # pytest checks with `assert`
 "tests/**" = ["S101"]
-# TEMPORARY: until these tests are rewritten (#147)
-"tests/ga4gh/trs/test_server.py" = ["D205"]
-"tests/ga4gh/trs/endpoints/test_register_objects.py" = ["D205"]
-"tests/integration_tests.py" = ["D205", "PLW0603", "S113"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
@@ -73,16 +69,6 @@ ignore_missing_imports = true
 [[tool.mypy.overrides]]
 module = ["gunicorn", "gunicorn.*"]
 ignore_missing_imports = true
-
-# TEMPORARY: until these tests are typed (#147)
-[[tool.mypy.overrides]]
-module = [
-    "tests.ga4gh.trs.test_server",
-    "tests.ga4gh.trs.endpoints.test_register_objects",
-    "tests.ga4gh.trs.endpoints.test_register_tool_classes",
-    "tests.integration_tests",
-]
-ignore_errors = true
 
 [tool.coverage.run]
 source = ["trs_filer", "scripts"]
