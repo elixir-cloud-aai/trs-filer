@@ -50,7 +50,7 @@ def test_get_service_info_success() -> None:
 
 
 def test_post_tool_success() -> None:
-    """Test `POST /tools` for create tool objects."""
+    """Test `POST /tools` for creating a tool."""
     endpoint = "/tools"
     response = requests.post(
         base_url + endpoint, json=MOCK_TOOL, headers=headers, timeout=TIMEOUT
@@ -59,7 +59,7 @@ def test_post_tool_success() -> None:
 
 
 def test_post_tool_bad_request() -> None:
-    """Test `POST /tools` for create tool objects with invalid payload."""
+    """Test `POST /tools` given an invalid payload."""
     endpoint = "/tools"
     response = requests.post(
         base_url + endpoint, json={}, headers=headers, timeout=TIMEOUT
@@ -68,21 +68,21 @@ def test_post_tool_bad_request() -> None:
 
 
 def test_get_tools_success() -> None:
-    """Test `GET /tools` for retrieving tool list."""
+    """Test `GET /tools` for retrieving the tools."""
     endpoint = "/tools"
     response = requests.get(base_url + endpoint, headers=headers, timeout=TIMEOUT)
+    assert response.status_code == 200
     obj_list = json.loads(response.content)
+    assert isinstance(obj_list, list)
     state["tool"] = obj_list[0]
     state["tool_id"] = state["tool"]["id"]
     state["versions"] = state["tool"]["versions"]
     state["version"] = state["versions"][0]
     state["version_id"] = state["version"]["id"]
-    assert response.status_code == 200
-    assert isinstance(obj_list, list)
 
 
 def test_get_tools_with_params_success() -> None:
-    """Test `GET /tools` for retrieving tool list given param inputs."""
+    """Test `GET /tools` given filters."""
     endpoint = "/tools"
     params: dict[str, Any] = {
         "id": "",
@@ -130,10 +130,7 @@ def test_get_tool_id_versions_success() -> None:
 
 
 def test_get_tool_version_by_id_success() -> None:
-    """Test `GET /tools/{id}/versions/{version_id}` for retrieving a version.
-
-    The tool `id` and `version_id` are valid.
-    """
+    """Test `GET /tools/{id}/versions/{version_id}` for retrieving a version."""
     endpoint = f"/tools/{state['tool_id']}/versions/{state['version_id']}"
     response = requests.get(base_url + endpoint, headers=headers, timeout=TIMEOUT)
     assert response.status_code == 200
@@ -148,10 +145,7 @@ def test_get_tool_version_by_id_obj_not_found() -> None:
 
 
 def test_get_tool_descriptor_success() -> None:
-    """Test `GET /tools/{id}/versions/{version_id}/{type}/descriptor`.
-
-    The descriptor is retrieved given tool `id`, `version_id` and `type`.
-    """
+    """Test `GET /tools/{id}/versions/{version_id}/{type}/descriptor`."""
     endpoint = (
         f"/tools/{state['tool_id']}/versions/{state['version_id']}/CWL/descriptor"
     )
@@ -161,20 +155,14 @@ def test_get_tool_descriptor_success() -> None:
 
 
 def test_get_tool_descriptor_not_found() -> None:
-    """Test `GET /tools/{id}/versions/{version_id}/{type}/descriptor`.
-
-    The descriptor is not found given invalid params.
-    """
+    """Test `GET /tools/{id}/versions/{version_id}/{type}/descriptor`, not found."""
     endpoint = f"/tools/{MOCK_ID}/versions/{MOCK_ID}/CWL/descriptor"
     response = requests.get(base_url + endpoint, headers=headers, timeout=TIMEOUT)
     assert response.status_code == 404
 
 
 def test_get_tool_descriptor_given_relative_path_success() -> None:
-    """Test retrieving a descriptor given its relative path.
-
-    Endpoint: `GET /tools/{id}/versions/{version_id}/{type}/descriptor/{relative_path}`.
-    """
+    """Test `GET /tools/{id}/versions/{version_id}/{type}/descriptor/{path}`."""
     relative_path = MOCK_DESCRIPTOR_FILE["tool_file"]["path"]
     endpoint = (
         f"/tools/{state['tool_id']}/versions/{state['version_id']}/CWL/descriptor/"
@@ -186,10 +174,7 @@ def test_get_tool_descriptor_given_relative_path_success() -> None:
 
 
 def test_get_tool_descriptor_given_relative_path_obj_not_found() -> None:
-    """Test retrieving a descriptor given an invalid relative path.
-
-    Endpoint: `GET /tools/{id}/versions/{version_id}/{type}/descriptor/{relative_path}`.
-    """
+    """Test `GET .../{type}/descriptor/{relative_path}` given an invalid path."""
     relative_path = "temp"
     endpoint = (
         f"/tools/{state['tool_id']}/versions/{state['version_id']}/CWL/descriptor/"
@@ -200,10 +185,7 @@ def test_get_tool_descriptor_given_relative_path_obj_not_found() -> None:
 
 
 def test_get_tool_tests_success() -> None:
-    """Test `GET /tools/{id}/versions/{version_id}/{type}/tests`.
-
-    The test JSONs are retrieved given tool `id`, `version_id` and `type`.
-    """
+    """Test `GET /tools/{id}/versions/{version_id}/{type}/tests`."""
     endpoint = f"/tools/{state['tool_id']}/versions/{state['version_id']}/CWL/tests"
     response = requests.get(base_url + endpoint, headers=headers, timeout=TIMEOUT)
     assert response.status_code == 200
@@ -211,20 +193,14 @@ def test_get_tool_tests_success() -> None:
 
 
 def test_get_tool_tests_obj_not_found() -> None:
-    """Test `GET /tools/{id}/versions/{version_id}/{type}/tests`.
-
-    The test JSONs are not found given invalid params.
-    """
+    """Test `GET /tools/{id}/versions/{version_id}/{type}/tests`, not found."""
     endpoint = f"/tools/{MOCK_ID}/versions/{MOCK_ID}/CWL/tests"
     response = requests.get(base_url + endpoint, headers=headers, timeout=TIMEOUT)
     assert response.status_code == 404
 
 
 def test_get_tool_files_success() -> None:
-    """Test `GET /tools/{id}/versions/{version_id}/{type}/files`.
-
-    The file list is retrieved given tool `id`, `version_id` and `type`.
-    """
+    """Test `GET /tools/{id}/versions/{version_id}/{type}/files`."""
     endpoint = f"/tools/{state['tool_id']}/versions/{state['version_id']}/CWL/files"
     response = requests.get(base_url + endpoint, headers=headers, timeout=TIMEOUT)
     assert response.status_code == 200
@@ -232,20 +208,14 @@ def test_get_tool_files_success() -> None:
 
 
 def test_get_tool_files_obj_not_found() -> None:
-    """Test `GET /tools/{id}/versions/{version_id}/{type}/files`.
-
-    The file list is not found given invalid params.
-    """
+    """Test `GET /tools/{id}/versions/{version_id}/{type}/files`, not found."""
     endpoint = f"/tools/{MOCK_ID}/versions/{MOCK_ID}/CWL/files"
     response = requests.get(base_url + endpoint, headers=headers, timeout=TIMEOUT)
     assert response.status_code == 404
 
 
 def test_get_tool_container_files_success() -> None:
-    """Test `GET /tools/{id}/versions/{version_id}/containerfile`.
-
-    The container files are retrieved given tool `id` and `version_id`.
-    """
+    """Test `GET /tools/{id}/versions/{version_id}/containerfile`."""
     endpoint = f"/tools/{state['tool_id']}/versions/{state['version_id']}/containerfile"
     response = requests.get(base_url + endpoint, headers=headers, timeout=TIMEOUT)
     assert response.status_code == 200
@@ -253,10 +223,7 @@ def test_get_tool_container_files_success() -> None:
 
 
 def test_get_tool_container_files_obj_not_found() -> None:
-    """Test `GET /tools/{id}/versions/{version_id}/containerfile`.
-
-    The container files are not found given invalid params.
-    """
+    """Test `GET /tools/{id}/versions/{version_id}/containerfile`, not found."""
     endpoint = f"/tools/{MOCK_ID}/versions/{MOCK_ID}/containerfile"
     response = requests.get(base_url + endpoint, headers=headers, timeout=TIMEOUT)
     assert response.status_code == 404
@@ -271,7 +238,7 @@ def test_get_tool_classes_success() -> None:
 
 
 def test_tool_put_success() -> None:
-    """Test `PUT /tools/{id}` for updating tool data given tool `id`."""
+    """Test `PUT /tools/{id}` for updating a tool."""
     endpoint = f"/tools/{state['tool_id']}"
     response = requests.put(
         base_url + endpoint, json=MOCK_TOOL, headers=headers, timeout=TIMEOUT
@@ -289,7 +256,7 @@ def test_tool_put_malformed_request() -> None:
 
 
 def test_tool_version_post_success() -> None:
-    """Test `POST /tools/{id}/versions` for adding tool version data given tool `id`."""
+    """Test `POST /tools/{id}/versions` for adding a version."""
     endpoint = f"/tools/{state['tool_id']}/versions"
     response = requests.post(
         base_url + endpoint,
@@ -345,14 +312,14 @@ def test_tool_version_delete_obj_not_found() -> None:
 
 
 def test_tool_delete_success() -> None:
-    """Test `DELETE /tools/{id}` for deleting tool data given tool `id`."""
+    """Test `DELETE /tools/{id}` for deleting a tool."""
     endpoint = f"/tools/{state['tool_id']}"
     response = requests.delete(base_url + endpoint, headers=headers, timeout=TIMEOUT)
     assert response.status_code == 200
 
 
 def test_tool_delete_obj_not_found() -> None:
-    """Test `DELETE /tools/{id}` for deleting tool data given invalid tool `id`."""
+    """Test `DELETE /tools/{id}` given a deleted tool."""
     endpoint = f"/tools/{state['tool_id']}"
     response = requests.delete(base_url + endpoint, headers=headers, timeout=TIMEOUT)
     assert response.status_code == 404
@@ -371,7 +338,7 @@ def test_tool_class_post_success() -> None:
 
 
 def test_tool_class_post_malformed_request() -> None:
-    """Test `POST /toolClasses` for creating tool classes given invalid payload."""
+    """Test `POST /toolClasses` given an invalid payload."""
     endpoint = "/toolClasses"
     response = requests.post(
         base_url + endpoint, json="", headers=headers, timeout=TIMEOUT
@@ -380,7 +347,7 @@ def test_tool_class_post_malformed_request() -> None:
 
 
 def test_tool_class_put_success() -> None:
-    """Test `PUT /toolClasses` for creating tool classes given tool_class `id`."""
+    """Test `PUT /toolClasses/{id}` for updating a tool class."""
     endpoint = f"/toolClasses/{state['tool_class_id']}"
     mock_tool_class = deepcopy(MOCK_TOOL_CLASS)
     mock_tool_class.pop("id")
