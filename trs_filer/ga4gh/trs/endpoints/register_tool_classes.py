@@ -70,7 +70,8 @@ class RegisterToolClass:
         """Register toolClass with TRS.
 
         Raises:
-            InternalServerError: No unique identifier could be generated.
+            InternalServerError: No unique identifier could be generated, or the
+                object could not be stored.
         """
         # set unique ID, dependent values and register object
         i = 0

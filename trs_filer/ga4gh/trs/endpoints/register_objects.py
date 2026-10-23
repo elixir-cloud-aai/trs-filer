@@ -84,7 +84,8 @@ class RegisterTool:
             BadRequest: Version identifiers are duplicated, the files of a
                 version are invalid, or the tool class does not exist while
                 tool classes are validated.
-            InternalServerError: No unique identifier could be generated.
+            InternalServerError: No unique identifier could be generated, or the
+                object could not be stored.
             trs_filer.errors.exceptions.RemoteFileError: The content of a file
                 could not be retrieved from its URL.
         """
@@ -374,7 +375,8 @@ class RegisterToolVersion:
 
         Raises:
             BadRequest: The files of the version are invalid.
-            InternalServerError: No unique identifier could be generated.
+            InternalServerError: No unique identifier could be generated, or the
+                object could not be stored.
             NotFound: The tool does not exist.
             trs_filer.errors.exceptions.RemoteFileError: The content of a file
                 could not be retrieved from its URL.
