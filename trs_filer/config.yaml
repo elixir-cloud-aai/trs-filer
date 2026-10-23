@@ -1,24 +1,39 @@
+# FOCA configuration
+# Available in app context as attributes of `foca.get_config()`
+# Automatically validated via FOCA
+# Cf. https://foca.readthedocs.io/en/latest/configuration/
+# Relative file paths are resolved against the directory of this file
+
+# Server configuration
+# Cf. https://foca.readthedocs.io/en/latest/configuration/server/
+# `host` and `port` apply to the development server
+# (`python -m trs_filer.app`) only: the image serves the app with Gunicorn
+# (`trs_filer/gunicorn.py`)
 server:
     host: '0.0.0.0'
     port: 8080
-    debug: True
-    environment: development
+    # Debug mode allows executing arbitrary code; only enable it for local
+    # development, on a loopback host
+    debug: False
     testing: False
-    use_reloader: False
+    # Size limit of request bodies, in bytes (1 MiB); larger requests (also
+    # chunked ones) are rejected with `413 Content Too Large` before they
+    # are parsed. Raise it together with the limits of any proxies in front
+    # of the app; the app refuses to start without a limit
+    max_content_length: 1048576
 
+# Database configuration
+# Cf. https://foca.readthedocs.io/en/latest/configuration/db/
+# With environment variable `MONGO_DBNAME` set, FOCA uses that database name
+# instead of `trsStore`
 db:
+    # MongoDB service of Docker Compose
     host: mongodb
     port: 27017
     dbs:
         trsStore:
             collections:
                 tools:
-                    indexes:
-                        - keys:
-                              id: 1
-                          options:
-                            'unique': True
-                service_info:
                     indexes:
                         - keys:
                               id: 1
@@ -31,22 +46,54 @@ db:
                           options:
                             'unique': True
 
+# API configuration
+# Cf. https://foca.readthedocs.io/en/latest/configuration/api/
+# Named (`trs`), so that config overlays can change the spec by its name,
+# e.g., add `patches`
 api:
     specs:
-        - path:
-            - api/20200131.11d2c12.service-info.yaml
-            - api/20230406.1dd4bf8.openapi.yaml
-            - api/additions.openapi.yaml
-          append: null
-          add_operation_fields:
-              x-openapi-router-controller: ga4gh.trs.server
-          connexion:
-              strict_validation: True
-              validate_responses: True
-              options:
-                  swagger_ui: True
-                  serve_spec: True
+        trs:
+            path:
+                - api/20200131.11d2c12.service-info.yaml
+                - api/20230406.1dd4bf8.openapi.yaml
+                - api/additions.openapi.yaml
+            add_operation_fields:
+                x-openapi-router-controller: trs_filer.ga4gh.trs.server
+            connexion:
+                strict_validation: True
+                validate_responses: True
+                options:
+                    swagger_ui: True
+                    serve_spec: True
 
+# Service info, served at `GET /service-info` by FOCA, according to the GA4GH
+# `Service` schema (validated on startup); `version` defaults to the version
+# of the installed package (`package`). Deployments set their own `id`,
+# `name`, `description`, `organization`, `contactUrl` and `environment`; `id`
+# and `organization` are placeholders with reserved example domains (RFC
+# 2606), which the app warns of on startup
+# Cf. https://foca.readthedocs.io/en/latest/configuration/service-info/
+service_info:
+    package: trs-filer
+    service:
+        id: "org.example.trs-filer"
+        name: "TRS-Filer"
+        type:
+            group: "org.ga4gh"
+            artifact: "trs"
+            version: "2.0.1"
+        description: "GA4GH Tool Registry Service (TRS) implementation."
+        organization:
+            name: "Example Organization"
+            url: "https://example.org"
+        documentationUrl: "https://github.com/elixir-cloud-aai/trs-filer"
+        environment: "dev"
+        # Optional timestamps (RFC 3339), served only if set, e.g.:
+        # createdAt: "2020-01-01T00:00:00Z"
+        # updatedAt: "2026-10-23T00:00:00Z"
+
+# Logging configuration
+# Cf. https://foca.readthedocs.io/en/latest/configuration/log/
 log:
     version: 1
     disable_existing_loggers: False
@@ -65,57 +112,51 @@ log:
         level: 10
         handlers: [console]
 
+# Exception handling: problem details of exceptions, sent with the media type
+# of error responses of the GA4GH specifications (instead of FOCA's default
+# `application/problem+json`)
+# Cf. https://foca.readthedocs.io/en/latest/configuration/exceptions/
 exceptions:
-    required_members: [['message'], ['code']]
-    status_member: ['code']
-    exceptions: trs_filer.errors.exceptions.exceptions
+    mapping: trs_filer.errors.exceptions.exceptions
+    media_type: application/json
 
 # Custom configuration
-# Available in app context as attributes of `current_app.config.foca`
+# Available in app context via `trs_filer.utils.get_custom_config()`
+# (validated with `trs_filer.custom_config.CustomConfig`)
 custom:
+    # Public URL of the app, for the `url` properties of tools and versions
+    # (`<url_prefix>://<external_host>:<external_port>/<api_path>/...`);
+    # deployments set their own
     service:
-        url_prefix: https
-        external_host: trs-filer-alex.c03.k8s-popup.csc.fi
-        external_port: 443
+        url_prefix: http
+        external_host: localhost
+        external_port: 8080
         api_path: ga4gh/trs/v2
-    service_info:
-        id: "TEMPID1"
-        name: "TEMP_STUB"
-        type:
-            group: "TEMP_GROUP"
-            artifact: "TEMP_ARTIFACT"
-            version: "v1"
-        description: "Description of service."
-        organization:
-            name: "Parent organization"
-            url: "parent/abc"
-        contactUrl: "contact/abc"
-        documentationUrl: "docs/abc"
-        createdAt: "2020-01-01"
-        updatedAt: "2020-01-01"
-        environment: "ENV"
-        version: "0.0.0"
+    # Identifiers are drawn from the characters of `charset` (the characters
+    # themselves, not an expression)
     tool:
         id:
-            charset: string.ascii_uppercase + string.digits
+            charset: ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789
             length: 6
         meta_version:
             init: 1
             increment: 1
     version:
         id:
-            charset: string.ascii_lowercase + string.digits
+            charset: abcdefghijklmnopqrstuvwxyz0123456789
             length: 6
         meta_version:
             init: 1
             increment: 1
     toolclass:
         id:
-            charset: string.ascii_lowercase + string.digits
+            charset: abcdefghijklmnopqrstuvwxyz0123456789
             length: 6
         meta_version:
             init: 1
             increment: 1
+        # Whether tools may only be registered with existing tool classes;
+        # if false, unknown tool classes are created
         validation: False
     # Retrieval of file content from URLs: on registration, for files with a
     # `url` but no `content`, and for zip archives of files without stored

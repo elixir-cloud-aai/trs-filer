@@ -11,7 +11,6 @@ import pytest
 
 from tests.mock_data import (
     CUSTOM_CONFIG,
-    CUSTOM_CONFIG_CHARSET_LITERAL,
     CUSTOM_CONFIG_ONE_ID,
     MOCK_ID,
     MOCK_ID_ONE_CHAR,
@@ -27,6 +26,21 @@ from trs_filer.ga4gh.trs.endpoints.register_tool_classes import (
 from trs_filer.custom_config import CustomConfig
 
 
+def _mock_collections(app: Flask) -> None:
+    """Register in-memory collections for unregistered ones.
+
+    FOCA 0.17's `get_collection()` refuses unregistered collections, which
+    the classes look up on construction.
+
+    Args:
+        app: App whose FOCA config has the database config.
+    """
+    for db in app.config.foca.db.dbs.values():
+        for collection in db.collections.values():
+            if collection.client is None:
+                collection.client = mongomock.MongoClient().db.collection
+
+
 class TestRegisterToolClass:
     """Tests for `RegisterToolClass` class."""
 
@@ -37,26 +51,13 @@ class TestRegisterToolClass:
             db=MongoConfig(**MONGO_CONFIG),
             custom=CustomConfig(**CUSTOM_CONFIG),
         )
+        _mock_collections(app)
 
         data = deepcopy(MOCK_TOOL_CLASS)
         with app.app_context():
             tool = RegisterToolClass(data)
             assert tool.data['description'] == MOCK_TOOL_CLASS['description']
             assert tool.data['id'] is None
-
-    def test_process_metadata(self):
-        """Test for processing metadata."""
-        app = Flask(__name__)
-        app.config.foca = Config(
-            db=MongoConfig(**MONGO_CONFIG),
-            custom=CustomConfig(**CUSTOM_CONFIG_CHARSET_LITERAL),
-        )
-
-        data = deepcopy(MOCK_TOOL_CLASS)
-        with app.app_context():
-            tool = RegisterToolClass(data)
-            tool.process_metadata()
-            assert isinstance(tool.id_charset, str)
 
     def test_register_metadata(self):
         """Test for creating a tool class with a randomly assigned identifier.
@@ -66,6 +67,7 @@ class TestRegisterToolClass:
             db=MongoConfig(**MONGO_CONFIG),
             custom=CustomConfig(**CUSTOM_CONFIG),
         )
+        _mock_collections(app)
         app.config.foca.db.dbs['trsStore'].collections['toolclasses'] \
             .client = MagicMock()
 
@@ -82,6 +84,7 @@ class TestRegisterToolClass:
             db=MongoConfig(**MONGO_CONFIG),
             custom=CustomConfig(**CUSTOM_CONFIG),
         )
+        _mock_collections(app)
         app.config.foca.db.dbs['trsStore'].collections['toolclasses'] \
             .client = MagicMock()
 
@@ -98,6 +101,7 @@ class TestRegisterToolClass:
             db=MongoConfig(**MONGO_CONFIG),
             custom=CustomConfig(**CUSTOM_CONFIG),
         )
+        _mock_collections(app)
         mock_resp = deepcopy(MOCK_TOOL_CLASS)
         app.config.foca.db.dbs['trsStore'].collections['toolclasses'] \
             .client = mongomock.MongoClient().db.collection
@@ -118,6 +122,7 @@ class TestRegisterToolClass:
             db=MongoConfig(**MONGO_CONFIG),
             custom=CustomConfig(**CUSTOM_CONFIG),
         )
+        _mock_collections(app)
         mock_resp = MagicMock(side_effect=[DuplicateKeyError(''), None])
         app.config.foca.db.dbs['trsStore'].collections['toolclasses'] \
             .client = MagicMock()
@@ -139,6 +144,7 @@ class TestRegisterToolClass:
             db=MongoConfig(**MONGO_CONFIG),
             custom=CustomConfig(**CUSTOM_CONFIG_ONE_ID),
         )
+        _mock_collections(app)
         mock_resp = deepcopy(MOCK_TOOL_CLASS)
         mock_resp["id"] = MOCK_ID_ONE_CHAR
         app.config.foca.db.dbs['trsStore'].collections['toolclasses'] \

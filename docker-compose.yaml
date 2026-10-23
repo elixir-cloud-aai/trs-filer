@@ -13,7 +13,14 @@ services:
             - "80:8080"
 
     mongodb:
-        image: mongo:3.6
+        # Current PyMongo releases refuse to connect to MongoDB 3.6; MongoDB
+        # 8.0 does not start on Linux kernels 6.19 to 7.0.13
+        # (https://jira.mongodb.org/browse/SERVER-121912). MongoDB 7.0 can't
+        # open data of MongoDB 3.6: migrate existing data first (e.g.,
+        # `mongodump` with 3.6, `mongorestore` with 7.0), into the database
+        # `trsStore` (or set `MONGO_DBNAME` of `trs` to the old
+        # `trs-filer-db`)
+        image: mongo:7.0
         restart: unless-stopped
         volumes:
             - ../data/trs/db:/data/db

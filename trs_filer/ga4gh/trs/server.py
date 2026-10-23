@@ -6,7 +6,7 @@ from urllib.parse import unquote
 from io import BytesIO
 from zipfile import ZipFile, ZIP_DEFLATED
 
-from flask import (request, current_app)
+from flask import request
 from foca.utils.logging import log_traffic
 from flask import send_file
 
@@ -24,9 +24,7 @@ from trs_filer.ga4gh.trs.endpoints.register_tool_classes import (
     RegisterToolClass
 )
 from trs_filer.remote_files import fetch_remote_file
-from trs_filer.ga4gh.trs.endpoints.service_info import (
-    RegisterServiceInfo,
-)
+from trs_filer.utils import get_collection, get_custom_config
 
 logger = logging.getLogger(__name__)
 
@@ -46,10 +44,7 @@ def toolsIdGet(
     Raise:
         NotFound if no object mapping with given id present.
     """
-    db_coll_tools = (
-        current_app.config.foca.db.dbs['trsStore']
-        .collections['tools'].client
-    )
+    db_coll_tools = get_collection('tools')
     obj = db_coll_tools.find_one({"id": id})
     if obj is None:
         raise NotFound
@@ -97,10 +92,7 @@ def toolsIdVersionsVersionIdGet(
         NotFound if no tool object present for give id mapping. Also, if
         version with given id not found.
     """
-    db_coll_tools = (
-        current_app.config.foca.db.dbs['trsStore']
-        .collections['tools'].client
-    )
+    db_coll_tools = get_collection('tools')
     proj = {
         '_id': False,
         'versions': {
@@ -218,7 +210,7 @@ def toolsGet(
 
     logger.info(f"offset {offset} limit {limit} ")
     # offset validation
-    if(offset is None):
+    if offset is None:
         offset_int = 0
     elif (offset is not None and int(offset) < 0):
         return [], '422', {}
@@ -226,14 +218,11 @@ def toolsGet(
         offset_int = int(offset)
 
     # limit validation
-    if(limit is not None and int(limit) < 0):
+    if limit is not None and int(limit) < 0:
         return [], '422', {}
 
     # fetch data
-    db_coll_tools = (
-        current_app.config.foca.db.dbs['trsStore']
-        .collections['tools'].client
-    )
+    db_coll_tools = get_collection('tools')
     records = db_coll_tools.find(
         filter=filt,
         projection={"_id": False},
@@ -293,10 +282,7 @@ def toolsIdVersionsVersionIdTypeDescriptorGet(
     """
     validate_descriptor_type(type=type)
     ret = {}
-    db_coll_tools = (
-        current_app.config.foca.db.dbs['trsStore']
-        .collections['tools'].client
-    )
+    db_coll_tools = get_collection('tools')
     proj = {
         '_id': False,
         'versions': {
@@ -352,10 +338,7 @@ def toolsIdVersionsVersionIdTypeDescriptorRelativePathGet(
     logger.debug(f"Decoded relative path: '{relative_path}'")
     ret = {}
     validate_descriptor_type(type=type)
-    db_coll_tools = (
-        current_app.config.foca.db.dbs['trsStore']
-        .collections['tools'].client
-    )
+    db_coll_tools = get_collection('tools')
     proj = {
         '_id': False,
         'versions': {
@@ -411,10 +394,7 @@ def toolsIdVersionsVersionIdTypeTestsGet(
     """
     validate_descriptor_type(type=type)
 
-    db_coll_tools = (
-        current_app.config.foca.db.dbs['trsStore']
-        .collections['tools'].client
-    )
+    db_coll_tools = get_collection('tools')
 
     proj = {
         '_id': False,
@@ -469,10 +449,7 @@ def toolsIdVersionsVersionIdTypeFilesGet(
         List of file JSON responses.
     """
     validate_descriptor_type(type=type)
-    db_coll_tools = (
-        current_app.config.foca.db.dbs['trsStore']
-        .collections['tools'].client
-    )
+    db_coll_tools = get_collection('tools')
     proj = {
         '_id': False,
         'versions': {'$elemMatch': {'id': version_id}},
@@ -519,10 +496,7 @@ def toolsIdVersionsVersionIdTypeFilesGet(
                         try:
                             content_bytes = fetch_remote_file(
                                 url=wrapper['url'],
-                                config=(
-                                    current_app.config.foca.custom
-                                    .remote_files
-                                ),
+                                config=get_custom_config().remote_files,
                             ).content
                         except RemoteFileError:
                             raise NotFound
@@ -564,10 +538,7 @@ def toolsIdVersionsVersionIdContainerfileGet(
     Returns:
         List of wrapped containerfile objects.
     """
-    db_coll_tools = (
-        current_app.config.foca.db.dbs['trsStore']
-        .collections['tools'].client
-    )
+    db_coll_tools = get_collection('tools')
     proj = {
         '_id': False,
         'versions': {'$elemMatch': {'id': version_id}},
@@ -597,38 +568,12 @@ def toolClassesGet(
     Returns:
         List of tool class objects.
     """
-    db_collection_class = (
-        current_app.config.foca.db.dbs['trsStore']
-        .collections['toolclasses'].client
-    )
+    db_collection_class = get_collection('toolclasses')
     records = db_collection_class.find(
         filter={},
         projection={"_id": False},
     )
     return list(records)
-
-
-@log_traffic
-def getServiceInfo() -> Dict:
-    """Show information about this service.
-
-    Returns:
-        An empty 201 response with headers.
-    """
-    service_info = RegisterServiceInfo()
-    return service_info.get_service_info()
-
-
-@log_traffic
-def postServiceInfo() -> Tuple[None, str, Dict]:
-    """Show information about this service.
-
-    Returns:
-        An empty 201 response with headers.
-    """
-    service_info = RegisterServiceInfo()
-    headers = service_info.set_service_info_from_app_context(data=request.json)
-    return None, '201', headers
 
 
 @log_traffic
@@ -675,10 +620,7 @@ def deleteTool(
     Returns:
         Previous identifier of deleted tool.
     """
-    db_coll_tools = (
-        current_app.config.foca.db.dbs['trsStore']
-        .collections['tools'].client
-    )
+    db_coll_tools = get_collection('tools')
     del_obj_tools = db_coll_tools.delete_one({'id': id})
 
     if del_obj_tools.deleted_count:
@@ -746,10 +688,7 @@ def deleteToolVersion(
         `BadRequest/400` error response is returned if attempting to delete
         the only remaining tool version.
     """
-    db_coll_tools = (
-        current_app.config.foca.db.dbs['trsStore']
-        .collections['tools'].client
-    )
+    db_coll_tools = get_collection('tools')
 
     filt = {
         'id': id,
@@ -820,10 +759,7 @@ def deleteToolClass(
         error response is returned if attempting to delete a tool class that
         is associated with any tool.
     """
-    db_coll_classes = (
-        current_app.config.foca.db.dbs['trsStore']
-        .collections['toolclasses'].client
-    )
+    db_coll_classes = get_collection('toolclasses')
 
     # do not allow deleting tool class associated with tool
     if id in [t['toolclass']['id'] for t in toolsGet.__wrapped__()[0]]:

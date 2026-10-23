@@ -21,7 +21,6 @@ from tests.mock_data import (
     MOCK_TOOL_VERSION_ID,
     MOCK_VERSION_ID,
     MONGO_CONFIG,
-    SERVICE_INFO_CONFIG,
     MOCK_CONTAINER_FILE,
     MOCK_DESCRIPTOR_FILE,
     MOCK_DESCRIPTOR_SEC_FILE,
@@ -37,8 +36,6 @@ from trs_filer.ga4gh.trs.server import (
     deleteTool,
     deleteToolClass,
     deleteToolVersion,
-    getServiceInfo,
-    postServiceInfo,
     postTool,
     postToolClass,
     postToolVersion,
@@ -124,7 +121,8 @@ def test_toolsGet():
 
 
 def test_toolsGet_pagination():
-    """Test for getting a list of all available tools; pagination values specified.
+    """Test for getting a list of all available tools; pagination values
+    specified.
     """
     app = Flask(__name__)
     app.config.foca = Config(
@@ -153,7 +151,8 @@ def test_toolsGet_pagination():
             f"{TEST_LIMIT}"
         )
         HEADERS_PAGINATION_RESULT["last_page"] = (
-            f"{request.base_url}?offset={max(0,int(TEST_OFFSET) - TEST_LIMIT)}"
+            f"{request.base_url}"
+            f"?offset={max(0, int(TEST_OFFSET) - TEST_LIMIT)}"
             f"&limit={TEST_LIMIT}"
         )
         HEADERS_PAGINATION_RESULT["current_offset"] = TEST_OFFSET
@@ -775,8 +774,8 @@ def test_toolsIdVersionsVersionIdTypeDescriptorRelativePathGet_path_NotFound():
 
 # GET /tools/{id}/versions/{version_id}/{type}/files
 def test_toolsIdVersionsVersionIdTypeFilesGet():
-    """Test for getting descriptor files associated with a specific tool version
-    identified by the given tool and version identifiers.
+    """Test for getting descriptor files associated with a specific tool
+    version identified by the given tool and version identifiers.
     """
     app = Flask(__name__)
     app.config.foca = Config(
@@ -808,9 +807,9 @@ def test_toolsIdVersionsVersionIdTypeFilesGet():
 
 
 def test_toolsIdVersionsVersionIdTypeFilesGet_tool_na_NotFound():
-    """Test for getting descriptor files associated with a specific tool version
-    identified by the given tool and version identifiers with specified tool
-    identifier not present.
+    """Test for getting descriptor files associated with a specific tool
+    version identified by the given tool and version identifiers, with
+    the specified tool identifier not present.
     """
     app = Flask(__name__)
     app.config.foca = Config(
@@ -834,9 +833,9 @@ def test_toolsIdVersionsVersionIdTypeFilesGet_tool_na_NotFound():
 
 
 def test_toolsIdVersionsVersionIdTypeFilesGet_version_na_NotFound():
-    """Test for getting descriptor files associated with a specific tool version
-    identified by the given tool and version identifiers with specified tool
-    version identifier not present.
+    """Test for getting descriptor files associated with a specific tool
+    version identified by the given tool and version identifiers, with
+    the specified tool version identifier not present.
     """
     app = Flask(__name__)
     app.config.foca = Config(
@@ -1202,42 +1201,6 @@ def test_toolsIdVersionsVersionIdTypeTestsGet_type_NotFound():
                 id=MOCK_ID,
                 version_id=MOCK_ID,
             )
-
-
-# GET /service-info
-def test_getServiceInfo():
-    """Test for getting service info."""
-    app = Flask(__name__)
-    app.config.foca = Config(
-        db=MongoConfig(**MONGO_CONFIG),
-        custom=CustomConfig(**CUSTOM_CONFIG),
-    )
-    mock_resp = deepcopy(SERVICE_INFO_CONFIG)
-    app.config.foca.db.dbs['trsStore'].collections['service_info'] \
-        .client = mongomock.MongoClient().db.collection
-    app.config.foca.db.dbs['trsStore'].collections['service_info'] \
-        .client.insert_one(mock_resp)
-
-    with app.app_context():
-        res = getServiceInfo.__wrapped__()
-        assert res == SERVICE_INFO_CONFIG
-
-
-# POST /service-info
-def test_postServiceInfo():
-    """Test for creating service info."""
-    app = Flask(__name__)
-    app.config.foca = Config(
-        db=MongoConfig(**MONGO_CONFIG),
-        custom=CustomConfig(**CUSTOM_CONFIG),
-    )
-    app.config.foca.db.dbs['trsStore'].collections['service_info'] \
-        .client = mongomock.MongoClient().db.collection
-
-    with app.test_request_context(json=deepcopy(SERVICE_INFO_CONFIG)):
-        postServiceInfo.__wrapped__()
-        res = getServiceInfo.__wrapped__()
-        assert res == SERVICE_INFO_CONFIG
 
 
 # POST /tools

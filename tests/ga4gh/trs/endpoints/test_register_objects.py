@@ -43,6 +43,21 @@ from trs_filer.remote_files import RemoteFile
 from trs_filer.custom_config import CustomConfig
 
 
+def _mock_collections(app: Flask) -> None:
+    """Register in-memory collections for unregistered ones.
+
+    FOCA 0.17's `get_collection()` refuses unregistered collections, which
+    the classes look up on construction.
+
+    Args:
+        app: App whose FOCA config has the database config.
+    """
+    for db in app.config.foca.db.dbs.values():
+        for collection in db.collections.values():
+            if collection.client is None:
+                collection.client = mongomock.MongoClient().db.collection
+
+
 def _raise(exception) -> None:
     """General purpose exception raiser."""
     raise exception
@@ -58,6 +73,7 @@ class TestRegisterTool:
             db=MongoConfig(**MONGO_CONFIG),
             custom=CustomConfig(**CUSTOM_CONFIG),
         )
+        _mock_collections(app)
 
         data = deepcopy(MOCK_TOOL)
         with app.app_context():
@@ -72,6 +88,7 @@ class TestRegisterTool:
             db=MongoConfig(**MONGO_CONFIG),
             custom=CustomConfig(**CUSTOM_CONFIG_CHARSET_LITERAL),
         )
+        _mock_collections(app)
 
         data = deepcopy(MOCK_TOOL)
         with app.app_context():
@@ -86,6 +103,7 @@ class TestRegisterTool:
             db=MongoConfig(**MONGO_CONFIG),
             custom=CustomConfig(**CUSTOM_CONFIG),
         )
+        _mock_collections(app)
         app.config.foca.db.dbs['trsStore'].collections['tools'] \
             .client = MagicMock()
         app.config.foca.db.dbs['trsStore'].collections['toolclasses'] \
@@ -104,6 +122,7 @@ class TestRegisterTool:
             db=MongoConfig(**MONGO_CONFIG),
             custom=CustomConfig(**CUSTOM_CONFIG),
         )
+        _mock_collections(app)
         app.config.foca.db.dbs['trsStore'].collections['tools'] \
             .client = MagicMock()
         app.config.foca.db.dbs['trsStore'].collections['toolclasses'] \
@@ -122,6 +141,7 @@ class TestRegisterTool:
             db=MongoConfig(**MONGO_CONFIG),
             custom=CustomConfig(**CUSTOM_CONFIG),
         )
+        _mock_collections(app)
         mock_resp = deepcopy(MOCK_TOOL_VERSION_ID)
         mock_resp["id"] = MOCK_ID
         app.config.foca.db.dbs['trsStore'].collections['tools'] \
@@ -144,6 +164,7 @@ class TestRegisterTool:
             db=MongoConfig(**MONGO_CONFIG),
             custom=CustomConfig(**CUSTOM_CONFIG),
         )
+        _mock_collections(app)
         app.config.foca.db.dbs['trsStore'].collections['tools'] \
             .client = MagicMock()
         app.config.foca.db.dbs['trsStore'] \
@@ -164,6 +185,7 @@ class TestRegisterTool:
             db=MongoConfig(**MONGO_CONFIG),
             custom=CustomConfig(**CUSTOM_CONFIG),
         )
+        _mock_collections(app)
         app.config.foca.db.dbs['trsStore'].collections['tools'] \
             .client = MagicMock()
         app.config.foca.db.dbs['trsStore'].collections['toolclasses'] \
@@ -186,6 +208,7 @@ class TestRegisterTool:
             db=MongoConfig(**MONGO_CONFIG),
             custom=CustomConfig(**CUSTOM_CONFIG),
         )
+        _mock_collections(app)
         app.config.foca.db.dbs['trsStore'].collections['tools'] \
             .client = MagicMock()
         app.config.foca.db.dbs['trsStore'].collections['toolclasses'] \
@@ -205,6 +228,7 @@ class TestRegisterTool:
             db=MongoConfig(**MONGO_CONFIG),
             custom=CustomConfig(**CUSTOM_CONFIG_TOOL_CLASS_VALIDATION),
         )
+        _mock_collections(app)
         app.config.foca.db.dbs['trsStore'].collections['tools'] \
             .client = MagicMock()
         app.config.foca.db.dbs['trsStore'].collections['toolclasses'] \
@@ -223,6 +247,7 @@ class TestRegisterTool:
             db=MongoConfig(**MONGO_CONFIG),
             custom=CustomConfig(**CUSTOM_CONFIG_TOOL_CLASS_VALIDATION),
         )
+        _mock_collections(app)
         app.config.foca.db.dbs['trsStore'].collections['tools'] \
             .client = mongomock.MongoClient().db.collection
         app.config.foca.db.dbs['trsStore'].collections['toolclasses'] \
@@ -242,6 +267,7 @@ class TestRegisterTool:
             db=MongoConfig(**MONGO_CONFIG),
             custom=CustomConfig(**CUSTOM_CONFIG_TOOL_CLASS_VALIDATION),
         )
+        _mock_collections(app)
         app.config.foca.db.dbs['trsStore'].collections['tools'] \
             .client = MagicMock()
         app.config.foca.db.dbs['trsStore'].collections['toolclasses'] \
@@ -261,6 +287,7 @@ class TestRegisterTool:
             db=MongoConfig(**MONGO_CONFIG),
             custom=CustomConfig(**CUSTOM_CONFIG),
         )
+        _mock_collections(app)
         mock_resp = MagicMock(side_effect=[DuplicateKeyError(''), None])
         app.config.foca.db.dbs['trsStore'].collections['tools'] \
             .client = MagicMock()
@@ -283,6 +310,7 @@ class TestRegisterTool:
             db=MongoConfig(**MONGO_CONFIG),
             custom=CustomConfig(**CUSTOM_CONFIG_ONE_ID),
         )
+        _mock_collections(app)
         mock_resp = deepcopy(MOCK_TOOL_VERSION_ID)
         mock_resp["id"] = MOCK_ID_ONE_CHAR
         app.config.foca.db.dbs['trsStore'].collections['tools'] \
@@ -312,6 +340,7 @@ class TestRegisterToolVersion:
             db=MongoConfig(**MONGO_CONFIG),
             custom=CustomConfig(**CUSTOM_CONFIG),
         )
+        _mock_collections(app)
 
         data = deepcopy(MOCK_VERSION_NO_ID)
         with app.app_context():
@@ -326,6 +355,7 @@ class TestRegisterToolVersion:
             db=MongoConfig(**MONGO_CONFIG),
             custom=CustomConfig(**CUSTOM_CONFIG_CHARSET_LITERAL),
         )
+        _mock_collections(app)
 
         data = deepcopy(MOCK_VERSION_NO_ID)
         with app.app_context():
@@ -340,6 +370,7 @@ class TestRegisterToolVersion:
             db=MongoConfig(**MONGO_CONFIG),
             custom=CustomConfig(**CUSTOM_CONFIG_CHARSET_LITERAL),
         )
+        _mock_collections(app)
 
         data = deepcopy(MOCK_VERSION_NO_ID)
         mock_file = deepcopy(MOCK_DESCRIPTOR_FILE)
@@ -359,6 +390,7 @@ class TestRegisterToolVersion:
             db=MongoConfig(**MONGO_CONFIG),
             custom=CustomConfig(**CUSTOM_CONFIG_CHARSET_LITERAL),
         )
+        _mock_collections(app)
 
         data = deepcopy(MOCK_VERSION_NO_ID)
         mock_descriptor = deepcopy(MOCK_DESCRIPTOR_FILE)
@@ -379,6 +411,7 @@ class TestRegisterToolVersion:
             db=MongoConfig(**MONGO_CONFIG),
             custom=CustomConfig(**CUSTOM_CONFIG_CHARSET_LITERAL),
         )
+        _mock_collections(app)
 
         data = deepcopy(MOCK_VERSION_NO_ID)
         data['files'] = [MOCK_DESCRIPTOR_SEC_FILE]
@@ -395,6 +428,7 @@ class TestRegisterToolVersion:
             db=MongoConfig(**MONGO_CONFIG),
             custom=CustomConfig(**CUSTOM_CONFIG_CHARSET_LITERAL),
         )
+        _mock_collections(app)
 
         data = deepcopy(MOCK_VERSION_NO_ID)
         mock_file = deepcopy(MOCK_CONTAINER_FILE)
@@ -414,6 +448,7 @@ class TestRegisterToolVersion:
             db=MongoConfig(**MONGO_CONFIG),
             custom=CustomConfig(**CUSTOM_CONFIG_CHARSET_LITERAL),
         )
+        _mock_collections(app)
 
         data = deepcopy(MOCK_VERSION_NO_ID)
         tmp_file_obj1 = deepcopy(MOCK_DESCRIPTOR_FILE)
@@ -434,6 +469,7 @@ class TestRegisterToolVersion:
             db=MongoConfig(**MONGO_CONFIG),
             custom=CustomConfig(**CUSTOM_CONFIG_CHARSET_LITERAL),
         )
+        _mock_collections(app)
 
         calls = []
 
@@ -471,6 +507,7 @@ class TestRegisterToolVersion:
             db=MongoConfig(**MONGO_CONFIG),
             custom=CustomConfig(**CUSTOM_CONFIG_CHARSET_LITERAL),
         )
+        _mock_collections(app)
 
         monkeypatch.setattr(
             'trs_filer.ga4gh.trs.endpoints.register_objects'
@@ -494,6 +531,7 @@ class TestRegisterToolVersion:
             db=MongoConfig(**MONGO_CONFIG),
             custom=CustomConfig(**CUSTOM_CONFIG_CHARSET_LITERAL),
         )
+        _mock_collections(app)
         mock_resp = deepcopy(MOCK_TOOL_VERSION_ID)
         mock_resp["id"] = MOCK_ID
         app.config.foca.db.dbs['trsStore'].collections['tools'] \
@@ -514,6 +552,7 @@ class TestRegisterToolVersion:
             db=MongoConfig(**MONGO_CONFIG),
             custom=CustomConfig(**CUSTOM_CONFIG_CHARSET_LITERAL),
         )
+        _mock_collections(app)
         app.config.foca.db.dbs['trsStore'].collections['tools'] \
             .client = MagicMock()
 
@@ -534,6 +573,7 @@ class TestRegisterToolVersion:
             db=MongoConfig(**MONGO_CONFIG),
             custom=CustomConfig(**CUSTOM_CONFIG_CHARSET_LITERAL),
         )
+        _mock_collections(app)
         mock_resp = deepcopy(MOCK_TOOL_VERSION_ID)
         mock_resp["id"] = MOCK_ID
         app.config.foca.db.dbs['trsStore'].collections['tools'] \
@@ -554,6 +594,7 @@ class TestRegisterToolVersion:
             db=MongoConfig(**MONGO_CONFIG),
             custom=CustomConfig(**CUSTOM_CONFIG_ONE_ID),
         )
+        _mock_collections(app)
         mock_resp = deepcopy(MOCK_TOOL_VERSION_ID)
         mock_resp["id"] = MOCK_ID
         mock_resp["versions"][0]["id"] = MOCK_ID_ONE_CHAR
@@ -579,6 +620,7 @@ class TestRegisterToolVersion:
             db=MongoConfig(**MONGO_CONFIG),
             custom=CustomConfig(**CUSTOM_CONFIG_ONE_ID),
         )
+        _mock_collections(app)
         mock_resp = deepcopy(MOCK_TOOL_VERSION_ID)
         mock_resp["id"] = MOCK_ID_ONE_CHAR
         app.config.foca.db.dbs['trsStore'].collections['tools'] \

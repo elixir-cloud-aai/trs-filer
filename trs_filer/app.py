@@ -1,30 +1,85 @@
 """API server entry point."""
 
+import logging
 from pathlib import Path
 
 from connexion import App
-from foca import Foca
+from foca import Foca, get_config
 
-from trs_filer.ga4gh.trs.endpoints.service_info import RegisterServiceInfo
+logger = logging.getLogger(__name__)
+
+# Placeholders of the service info in `config.yaml`, with reserved example
+# domains (RFC 2606), which deployments replace
+PLACEHOLDER_ID = "org.example.trs-filer"
+PLACEHOLDER_ORGANIZATION = {
+    "name": "Example Organization",
+    "url": "https://example.org",
+}
+
+
+def warn_placeholder_service_info() -> None:
+    """Warn if the service info still has the placeholders of `config.yaml`.
+
+    That is, if `id` is the placeholder, or the name or URL of `organization`
+    is; the warning names the fields to set. Must be called in an app
+    context.
+    """
+    service_info = get_config().service_info
+    service = service_info.service if service_info is not None else {}
+    fields = []
+    if service.get("id") == PLACEHOLDER_ID:
+        fields.append("`id`")
+    organization = service.get("organization")
+    if isinstance(organization, dict) and any(
+        organization.get(key) == value
+        for key, value in PLACEHOLDER_ORGANIZATION.items()
+    ):
+        fields.append("`organization`")
+    if fields:
+        logger.warning(
+            "The service info (`service_info.service`) has placeholder "
+            "values; set %s to describe the deployment (and `name`, "
+            "`description`, `contactUrl` and `environment`)",
+            ", ".join(fields),
+        )
 
 
 def init_app() -> App:
     """Initialize FOCA application.
 
+    FOCA validates the config, including the custom config
+    (`trs_filer.custom_config.CustomConfig`) and the service info
+    (`service_info`), and limits the size of request bodies
+    (`server.max_content_length`). The app additionally requires such a
+    limit and warns of placeholders in the service info.
+
     Returns:
-        App: FOCA application.
+        FOCA application.
+
+    Raises:
+        RuntimeError: Request bodies are not limited in size
+            (`server.max_content_length` is null).
+        ValueError: The custom config is invalid, e.g., it still sets
+            `custom.service_info`, or an ID character set is an expression
+            (FOCA raises it from the `pydantic.ValidationError`, which names
+            the invalid field).
+        pydantic.ValidationError: FOCA's config is invalid, e.g., the
+            service info.
     """
-    # create app object
     foca = Foca(
         config_file=Path(__file__).resolve().parent / "config.yaml",
         custom_config_model="trs_filer.custom_config.CustomConfig",
     )
     app = foca.create_app()
-
-    # register service info
     with app.app.app_context():
-        service_info = RegisterServiceInfo()
-        service_info.set_service_info_from_config()
+        # `null` would remove FOCA's size limit of request bodies, so that
+        # bodies of any size are read
+        if get_config().server.max_content_length is None:
+            raise RuntimeError(
+                "Request bodies must be limited in size: set "
+                "`server.max_content_length` (bytes), not null"
+            )
+        warn_placeholder_service_info()
     return app
 
 

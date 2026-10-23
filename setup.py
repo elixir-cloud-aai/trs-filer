@@ -1,6 +1,7 @@
 """Package setup."""
 
 from pathlib import Path
+import re
 from setuptools import setup, find_packages
 
 root_dir = Path(__file__).parent.resolve()
@@ -14,7 +15,12 @@ with open(file_name, "r") as _file:
 install_requires = []
 req = root_dir / 'requirements.txt'
 with open(req, "r") as _file:
-    install_requires = _file.read().splitlines()
+    # without comments (as for pip) and blank lines
+    install_requires = [
+        requirement for requirement in (
+            re.sub(r"(^|\s)#.*$", "", line).strip() for line in _file
+        ) if requirement
+    ]
 
 setup(
     name="trs-filer",
@@ -40,10 +46,11 @@ setup(
         "Intended Audience :: Science/Research",
         "Topic :: Scientific/Engineering :: Bio-Informatics",
         "Natural Language :: English",
-        "Programming Language :: Python :: 3.8",
-        "Programming Language :: Python :: 3.9",
-        "Programming Language :: Python :: 3.10",
+        "Programming Language :: Python :: 3.13",
     ],
+    # The Python version of the base image in the `Dockerfile`, the only one
+    # the app is tested with
+    python_requires=">=3.13",
     project_urls={
         "Repository": "https://github.com/elixir-cloud-aai/trs-filer",
         "ELIXIR Cloud & AAI": "https://elixir-europe.github.io/cloud/",

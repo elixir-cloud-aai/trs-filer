@@ -1,18 +1,15 @@
 """Controller for registering new objects."""
 
 import logging
-import string  # noqa: F401
 from typing import (Dict, Optional)
 
-from flask import current_app
+from foca.utils.misc import generate_id
 from pymongo.errors import DuplicateKeyError
 
 from trs_filer.errors.exceptions import (
     InternalServerError,
 )
-from trs_filer.ga4gh.trs.endpoints.utils import (
-    generate_id,
-)
+from trs_filer.utils import get_collection, get_custom_config
 
 logger = logging.getLogger(__name__)
 
@@ -35,8 +32,8 @@ class RegisterToolClass:
             data: Tool metadata.
             replace: Whether it is allowed to replace an existing tool. Set
                 to `True` if an `id` is provided, else set to `False`.
-            id_charset: Allowed character set or expression evaluating to
-                allowed character set for generating object identifiers.
+            id_charset: Allowed characters for generating object
+                identifiers.
             id_length: Length of generated object identifiers.
             meta_version_init: Initial value for tool meta version.
             url_prefix: URL scheme of application. For constructing tool and
@@ -56,29 +53,18 @@ class RegisterToolClass:
             db_coll_classes: Database collection for storing tool class
                 objects.
         """
-        conf = current_app.config.foca.custom
+        conf = get_custom_config()
         self.data = data
         self.data['id'] = None if id is None else id
         self.replace = True
-        self.id_charset = conf.tool.id.charset
-        self.id_length = int(conf.tool.id.length)
-        self.meta_version_init = int(conf.tool.meta_version.init)
+        self.id_charset = conf.toolclass.id.charset
+        self.id_length = int(conf.toolclass.id.length)
+        self.meta_version_init = int(conf.toolclass.meta_version.init)
         self.url_prefix = conf.service.url_prefix
         self.host_name = conf.service.external_host
         self.external_port = conf.service.external_port
         self.api_path = conf.service.api_path
-        self.db_coll_classes = (
-            current_app.config.foca.db.dbs['trsStore']
-            .collections['toolclasses'].client
-        )
-
-    def process_metadata(self) -> None:
-        """Process tool class metadata."""
-        # evaluate character set expression or interpret literal string as set
-        try:
-            self.id_charset = eval(self.id_charset)
-        except Exception:
-            self.id_charset = ''.join(sorted(set(self.id_charset)))
+        self.db_coll_classes = get_collection('toolclasses')
 
     def register_metadata(self) -> None:
         """Register toolClass with TRS.
@@ -86,8 +72,6 @@ class RegisterToolClass:
         Returns:
             ToolClass object.
         """
-        self.process_metadata()
-
         # set unique ID, dependent values and register object
         i = 0
         while i < 10:

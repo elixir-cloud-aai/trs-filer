@@ -1,30 +1,28 @@
 """Tests for the problem details of exceptions."""
 
-from flask import Flask
+from connexion import App
+from foca import get_config
 from foca.errors.exceptions import _problem_handler_json
-from foca.models.config import Config
 
 from trs_filer.errors.exceptions import RemoteFileError
 
 
-def test_remote_file_error() -> None:
+def test_remote_file_error(app: App) -> None:
     """Files that can't be retrieved from their URLs are answered with
-    `400 Bad Request` and a fixed message, without the reason.
+    `400 Bad Request` and a fixed detail, without the reason.
+
+    Args:
+        app: FOCA app.
     """
-    app = Flask(__name__)
-    app.config.foca = Config(
-        exceptions={
-            "exceptions": "trs_filer.errors.exceptions.exceptions",
-            "required_members": [["message"], ["code"]],
-            "status_member": ["code"],
-        },
-    )
-    with app.app_context():
+    with app.app.app_context():
         response = _problem_handler_json(
-            RemoteFileError("reason-not-for-clients")
+            RemoteFileError("reason-not-for-clients"),
+            get_config().exceptions,
         )
     assert response.status_code == 400
+    assert response.mimetype == "application/json"
     body = response.get_json()
-    assert body["code"] == 400
-    assert "retrieved from its URL" in body["message"]
+    assert body["status"] == 400
+    assert body["title"] == "Bad request"
+    assert "retrieved from its URL" in body["detail"]
     assert "reason-not-for-clients" not in response.get_data(as_text=True)
