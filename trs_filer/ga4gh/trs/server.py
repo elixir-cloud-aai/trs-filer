@@ -1,7 +1,7 @@
 """Controllers for TRS endpoints."""
 
 import logging
-from typing import (Optional, Dict, List, Tuple)
+from typing import Optional, Dict, List, Tuple
 from urllib.parse import unquote
 from io import BytesIO
 from zipfile import ZipFile, ZIP_DEFLATED
@@ -20,9 +20,7 @@ from trs_filer.ga4gh.trs.endpoints.register_objects import (
     RegisterTool,
     RegisterToolVersion,
 )
-from trs_filer.ga4gh.trs.endpoints.register_tool_classes import (
-    RegisterToolClass
-)
+from trs_filer.ga4gh.trs.endpoints.register_tool_classes import RegisterToolClass
 from trs_filer.remote_files import fetch_remote_file
 from trs_filer.utils import get_collection, get_custom_config
 
@@ -30,9 +28,7 @@ logger = logging.getLogger(__name__)
 
 
 @log_traffic
-def toolsIdGet(
-    id: str
-) -> Dict:
+def toolsIdGet(id: str) -> Dict:
     """List one specific tool, acts as an anchor for self references.
 
     Args:
@@ -44,7 +40,7 @@ def toolsIdGet(
     Raise:
         NotFound if no object mapping with given id present.
     """
-    db_coll_tools = get_collection('tools')
+    db_coll_tools = get_collection("tools")
     obj = db_coll_tools.find_one({"id": id})
     if obj is None:
         raise NotFound
@@ -58,9 +54,7 @@ def toolsIdGet(
 
 
 @log_traffic
-def toolsIdVersionsGet(
-    id: str
-) -> List[Dict]:
+def toolsIdVersionsGet(id: str) -> List[Dict]:
     """List versions of a tool.
 
     Args:
@@ -92,23 +86,23 @@ def toolsIdVersionsVersionIdGet(
         NotFound if no tool object present for give id mapping. Also, if
         version with given id not found.
     """
-    db_coll_tools = get_collection('tools')
+    db_coll_tools = get_collection("tools")
     proj = {
-        '_id': False,
-        'versions': {
-            '$elemMatch': {
-                'id': version_id,
+        "_id": False,
+        "versions": {
+            "$elemMatch": {
+                "id": version_id,
             },
         },
     }
     data = db_coll_tools.find_one(
-        filter={'id': id},
+        filter={"id": id},
         projection=proj,
     )
     try:
-        version = data['versions'][0]
-        if version and 'files' in version:
-            del version['files']
+        version = data["versions"][0]
+        if version and "files" in version:
+            del version["files"]
         return version
     except (KeyError, TypeError):
         raise NotFound
@@ -156,110 +150,113 @@ def toolsGet(
     # set filters
     filt = {}
     if id is not None:
-        filt['id'] = id
+        filt["id"] = id
     if alias is not None:
-        filt['aliases'] = {
-            '$in': [alias],
+        filt["aliases"] = {
+            "$in": [alias],
         }
     if toolClass is not None:
-        filt['toolclass.name'] = toolClass
+        filt["toolclass.name"] = toolClass
     if descriptorType:
-        filt['versions'] = {
-            '$elemMatch': {
-                'descriptor_type': {
-                    '$in': [descriptorType],
+        filt["versions"] = {
+            "$elemMatch": {
+                "descriptor_type": {
+                    "$in": [descriptorType],
                 },
             },
         }
     if registry is not None:
-        filt['versions'] = {
-            '$elemMatch': {
-                'images': {
-                    '$elemMatch': {
-                        'registry_host': registry,
+        filt["versions"] = {
+            "$elemMatch": {
+                "images": {
+                    "$elemMatch": {
+                        "registry_host": registry,
                     },
                 },
             },
         }
     if organization is not None:
-        filt['organization'] = organization
+        filt["organization"] = organization
     if name is not None:
-        filt['versions'] = {
-            '$elemMatch': {
-                'images': {
-                    '$elemMatch': {
-                        'image_name': name,
+        filt["versions"] = {
+            "$elemMatch": {
+                "images": {
+                    "$elemMatch": {
+                        "image_name": name,
                     },
                 },
             },
         }
     if toolname is not None:
-        filt['name'] = toolname
+        filt["name"] = toolname
     if description is not None:
-        filt['description'] = description
+        filt["description"] = description
     if author:
-        filt['versions'] = {
-            '$elemMatch': {
-                'author': {
-                    '$in': [author],
+        filt["versions"] = {
+            "$elemMatch": {
+                "author": {
+                    "$in": [author],
                 },
             },
         }
     if checker is not None:
-        filt['has_checker'] = checker
+        filt["has_checker"] = checker
 
     logger.info(f"offset {offset} limit {limit} ")
     # offset validation
     if offset is None:
         offset_int = 0
-    elif (offset is not None and int(offset) < 0):
-        return [], '422', {}
+    elif offset is not None and int(offset) < 0:
+        return [], "422", {}
     else:
         offset_int = int(offset)
 
     # limit validation
     if limit is not None and int(limit) < 0:
-        return [], '422', {}
+        return [], "422", {}
 
     # fetch data
-    db_coll_tools = get_collection('tools')
-    records = db_coll_tools.find(
-        filter=filt,
-        projection={"_id": False},
-    ).sort(
-        # Sort results by descending object ID (+/- oldest to newest)
-        '_id', 1
-    ).skip(
-        # Skip number of records by given offset
-        offset_int
-    ).limit(
-        # Implement page size limit
-        limit
+    db_coll_tools = get_collection("tools")
+    records = (
+        db_coll_tools.find(
+            filter=filt,
+            projection={"_id": False},
+        )
+        .sort(
+            # Sort results by descending object ID (+/- oldest to newest)
+            "_id",
+            1,
+        )
+        .skip(
+            # Skip number of records by given offset
+            offset_int
+        )
+        .limit(
+            # Implement page size limit
+            limit
+        )
     )
 
     records = list(records)
     for record in records:
-        if 'versions' in record:
-            for _version in record['versions']:
-                if 'files' in _version:
-                    del _version['files']
+        if "versions" in record:
+            for _version in record["versions"]:
+                if "files" in _version:
+                    del _version["files"]
 
     previous_page_url = (
-        f"{request.base_url}?offset={max(offset_int - limit, 0)}"
-        f"&limit={limit}"
+        f"{request.base_url}?offset={max(offset_int - limit, 0)}&limit={limit}"
     )
-    next_page_url = (
-        f"{request.base_url}?offset={offset_int + limit}&limit={limit}"
-    )
+    next_page_url = f"{request.base_url}?offset={offset_int + limit}&limit={limit}"
 
     headers = {}
-    headers['next_page'] = next_page_url
-    headers['last_page'] = previous_page_url
-    headers['self_link'] = f"{request.url}"
-    headers['current_offset'] = str(offset_int)
-    headers['current_limit'] = limit
+    headers["next_page"] = next_page_url
+    headers["last_page"] = previous_page_url
+    headers["self_link"] = f"{request.url}"
+    headers["current_offset"] = str(offset_int)
+    headers["current_limit"] = limit
 
-    return records, '200', headers
+    return records, "200", headers
 
 
 @log_traffic
@@ -282,27 +279,27 @@ def toolsIdVersionsVersionIdTypeDescriptorGet(
     """
     validate_descriptor_type(type=type)
     ret = {}
-    db_coll_tools = get_collection('tools')
+    db_coll_tools = get_collection("tools")
     proj = {
-        '_id': False,
-        'versions': {
-            '$elemMatch': {
-                'id': version_id,
+        "_id": False,
+        "versions": {
+            "$elemMatch": {
+                "id": version_id,
             },
         },
     }
     data = db_coll_tools.find(
-        filter={'id': id},
+        filter={"id": id},
         projection=proj,
     )
     try:
-        version_files_data = data[0]['versions'][0]['files']
+        version_files_data = data[0]["versions"][0]["files"]
         for _d in version_files_data:
             if (
-                _d['tool_file']['file_type'] == 'PRIMARY_DESCRIPTOR' and
-                _d['type'] == type
+                _d["tool_file"]["file_type"] == "PRIMARY_DESCRIPTOR"
+                and _d["type"] == type
             ):
-                ret = _d['file_wrapper']
+                ret = _d["file_wrapper"]
     except (IndexError, KeyError, TypeError):
         raise NotFound
     if not ret:
@@ -338,35 +335,35 @@ def toolsIdVersionsVersionIdTypeDescriptorRelativePathGet(
     logger.debug(f"Decoded relative path: '{relative_path}'")
     ret = {}
     validate_descriptor_type(type=type)
-    db_coll_tools = get_collection('tools')
+    db_coll_tools = get_collection("tools")
     proj = {
-        '_id': False,
-        'versions': {
-            '$elemMatch': {
-                'id': version_id,
+        "_id": False,
+        "versions": {
+            "$elemMatch": {
+                "id": version_id,
             },
         },
     }
     data = db_coll_tools.find(
-        filter={'id': id},
+        filter={"id": id},
         projection=proj,
     )
 
     file_types = [
-        'OTHER',
-        'TEST_FILE',
-        'PRIMARY_DESCRIPTOR',
-        'SECONDARY_DESCRIPTOR',
+        "OTHER",
+        "TEST_FILE",
+        "PRIMARY_DESCRIPTOR",
+        "SECONDARY_DESCRIPTOR",
     ]
     try:
-        version_data = data[0]['versions'][0]['files']
+        version_data = data[0]["versions"][0]["files"]
         for _d in version_data:
             if (
-                _d['tool_file']['path'] == relative_path and
-                _d['tool_file']['file_type'] in file_types and
-                _d['type'] == type
+                _d["tool_file"]["path"] == relative_path
+                and _d["tool_file"]["file_type"] in file_types
+                and _d["type"] == type
             ):
-                ret = _d['file_wrapper']
+                ret = _d["file_wrapper"]
     except (IndexError, KeyError, TypeError):
         raise NotFound
     if not ret:
@@ -394,17 +391,17 @@ def toolsIdVersionsVersionIdTypeTestsGet(
     """
     validate_descriptor_type(type=type)
 
-    db_coll_tools = get_collection('tools')
+    db_coll_tools = get_collection("tools")
 
     proj = {
-        '_id': False,
-        'versions': {
-            '$elemMatch': {
-                'id': version_id,
-                'files': {
-                    '$elemMatch': {
-                        'type': type,
-                        'tool_file.file_type': 'TEST_FILE',
+        "_id": False,
+        "versions": {
+            "$elemMatch": {
+                "id": version_id,
+                "files": {
+                    "$elemMatch": {
+                        "type": type,
+                        "tool_file.file_type": "TEST_FILE",
                     },
                 },
             },
@@ -412,19 +409,16 @@ def toolsIdVersionsVersionIdTypeTestsGet(
     }
 
     data = db_coll_tools.find(
-        filter={'id': id},
+        filter={"id": id},
         projection=proj,
     )
 
     try:
         ret_array = []
-        version_data = data[0]['versions'][0]['files']
+        version_data = data[0]["versions"][0]["files"]
         for _d in version_data:
-            if (
-                _d['tool_file']['file_type'] == 'TEST_FILE' and
-                _d['type'] == type
-            ):
-                ret_array.append(_d['file_wrapper'])
+            if _d["tool_file"]["file_type"] == "TEST_FILE" and _d["type"] == type:
+                ret_array.append(_d["file_wrapper"])
     except (IndexError, KeyError, TypeError):
         raise NotFound
     return ret_array
@@ -449,53 +443,54 @@ def toolsIdVersionsVersionIdTypeFilesGet(
         List of file JSON responses.
     """
     validate_descriptor_type(type=type)
-    db_coll_tools = get_collection('tools')
+    db_coll_tools = get_collection("tools")
     proj = {
-        '_id': False,
-        'versions': {'$elemMatch': {'id': version_id}},
+        "_id": False,
+        "versions": {"$elemMatch": {"id": version_id}},
     }
     data = db_coll_tools.find_one(
-        filter={'id': id},
+        filter={"id": id},
         projection=proj,
     )
 
     file_types = [
-        'OTHER',
-        'TEST_FILE',
-        'PRIMARY_DESCRIPTOR',
-        'SECONDARY_DESCRIPTOR',
+        "OTHER",
+        "TEST_FILE",
+        "PRIMARY_DESCRIPTOR",
+        "SECONDARY_DESCRIPTOR",
     ]
     try:
-        data = data['versions'][0]
+        data = data["versions"][0]
         selected_files = [
-            d for d in data['files']
-            if d['type'] == type and d['tool_file']['file_type'] in file_types
+            d
+            for d in data["files"]
+            if d["type"] == type and d["tool_file"]["file_type"] in file_types
         ]
-        ret = [d['tool_file'] for d in selected_files]
+        ret = [d["tool_file"] for d in selected_files]
     except (IndexError, KeyError, TypeError):
         raise NotFound
 
-    if format == 'zip':
+    if format == "zip":
         try:
             mem_zip = BytesIO()
-            with ZipFile(mem_zip, mode='w', compression=ZIP_DEFLATED) as zf:
+            with ZipFile(mem_zip, mode="w", compression=ZIP_DEFLATED) as zf:
                 for file_entry in selected_files:
-                    path_in_zip = file_entry['tool_file']['path']
-                    wrapper = file_entry.get('file_wrapper', {})
+                    path_in_zip = file_entry["tool_file"]["path"]
+                    wrapper = file_entry.get("file_wrapper", {})
                     content_bytes = None
-                    if 'content' in wrapper and wrapper['content'] is not None:
-                        content = wrapper['content']
+                    if "content" in wrapper and wrapper["content"] is not None:
+                        content = wrapper["content"]
                         if isinstance(content, bytes):
                             content_bytes = content
                         elif isinstance(content, str):
-                            content_bytes = content.encode('utf-8')
+                            content_bytes = content.encode("utf-8")
                         else:
                             # Fallback: convert to string then encode
-                            content_bytes = str(content).encode('utf-8')
-                    elif 'url' in wrapper and wrapper['url']:
+                            content_bytes = str(content).encode("utf-8")
+                    elif "url" in wrapper and wrapper["url"]:
                         try:
                             content_bytes = fetch_remote_file(
-                                url=wrapper['url'],
+                                url=wrapper["url"],
                                 config=get_custom_config().remote_files,
                             ).content
                         except RemoteFileError:
@@ -512,7 +507,7 @@ def toolsIdVersionsVersionIdTypeFilesGet(
             download_name = f"{id}_{version_id}_{type}.zip"
             return send_file(
                 mem_zip,
-                mimetype='application/zip',
+                mimetype="application/zip",
                 as_attachment=True,
                 download_name=download_name,
             )
@@ -538,20 +533,21 @@ def toolsIdVersionsVersionIdContainerfileGet(
     Returns:
         List of wrapped containerfile objects.
     """
-    db_coll_tools = get_collection('tools')
+    db_coll_tools = get_collection("tools")
     proj = {
-        '_id': False,
-        'versions': {'$elemMatch': {'id': version_id}},
+        "_id": False,
+        "versions": {"$elemMatch": {"id": version_id}},
     }
     data = db_coll_tools.find_one(
-        filter={'id': id},
+        filter={"id": id},
         projection=proj,
     )
     try:
-        data = data['versions'][0]
+        data = data["versions"][0]
         ret = [
-            d['file_wrapper'] for d in data['files']
-            if d['tool_file']['file_type'] == 'CONTAINERFILE'
+            d["file_wrapper"]
+            for d in data["files"]
+            if d["tool_file"]["file_type"] == "CONTAINERFILE"
         ]
     except (IndexError, KeyError, TypeError):
         raise NotFound
@@ -561,14 +557,13 @@ def toolsIdVersionsVersionIdContainerfileGet(
 
 
 @log_traffic
-def toolClassesGet(
-) -> List:
+def toolClassesGet() -> List:
     """List all tool classes.
 
     Returns:
         List of tool class objects.
     """
-    db_collection_class = get_collection('toolclasses')
+    db_collection_class = get_collection("toolclasses")
     records = db_collection_class.find(
         filter={},
         projection={"_id": False},
@@ -585,7 +580,7 @@ def postTool() -> str:
     """
     tool = RegisterTool(data=request.json)
     tool.register_metadata()
-    return tool.data['id']
+    return tool.data["id"]
 
 
 @log_traffic
@@ -605,7 +600,7 @@ def putTool(
         id=id,
     )
     tool.register_metadata()
-    return tool.data['id']
+    return tool.data["id"]
 
 
 @log_traffic
@@ -620,8 +615,8 @@ def deleteTool(
     Returns:
         Previous identifier of deleted tool.
     """
-    db_coll_tools = get_collection('tools')
-    del_obj_tools = db_coll_tools.delete_one({'id': id})
+    db_coll_tools = get_collection("tools")
+    del_obj_tools = db_coll_tools.delete_one({"id": id})
 
     if del_obj_tools.deleted_count:
         return id
@@ -646,7 +641,7 @@ def postToolVersion(
         data=request.json,
     )
     version.register_metadata()
-    return version.data['id']
+    return version.data["id"]
 
 
 @log_traffic
@@ -669,7 +664,7 @@ def putToolVersion(
         data=request.json,
     )
     version.register_metadata()
-    return version.data['id']
+    return version.data["id"]
 
 
 @log_traffic
@@ -688,15 +683,15 @@ def deleteToolVersion(
         `BadRequest/400` error response is returned if attempting to delete
         the only remaining tool version.
     """
-    db_coll_tools = get_collection('tools')
+    db_coll_tools = get_collection("tools")
 
     filt = {
-        'id': id,
-        'versions.id': version_id,
+        "id": id,
+        "versions.id": version_id,
     }
     update = {
-        '$pull': {
-            'versions': {'id': version_id},
+        "$pull": {
+            "versions": {"id": version_id},
         },
     }
     del_ver_tools = db_coll_tools.update_one(
@@ -721,7 +716,7 @@ def postToolClass() -> str:
     """
     tool_class = RegisterToolClass(data=request.json)
     tool_class.register_metadata()
-    return tool_class.data['id']
+    return tool_class.data["id"]
 
 
 @log_traffic
@@ -741,8 +736,8 @@ def putToolClass(
         id=id,
     )
     tool_class.register_metadata()
-    print(tool_class.data['id'])
-    return tool_class.data['id']
+    print(tool_class.data["id"])
+    return tool_class.data["id"]
 
 
 @log_traffic
@@ -759,13 +754,13 @@ def deleteToolClass(
         error response is returned if attempting to delete a tool class that
         is associated with any tool.
     """
-    db_coll_classes = get_collection('toolclasses')
+    db_coll_classes = get_collection("toolclasses")
 
     # do not allow deleting tool class associated with tool
-    if id in [t['toolclass']['id'] for t in toolsGet.__wrapped__()[0]]:
+    if id in [t["toolclass"]["id"] for t in toolsGet.__wrapped__()[0]]:
         raise BadRequest
 
-    if db_coll_classes.delete_one({'id': id}).deleted_count:
+    if db_coll_classes.delete_one({"id": id}).deleted_count:
         return id
     else:
         raise NotFound
@@ -784,7 +779,5 @@ def validate_descriptor_type(type: str) -> None:
     valid_types += RegisterToolVersion.descriptor_types
 
     if type not in valid_types:
-        logger.error(
-            f"Specified type '{type}' not among valid types: {valid_types}'"
-        )
+        logger.error(f"Specified type '{type}' not among valid types: {valid_types}'")
         raise BadRequest

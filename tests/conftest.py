@@ -26,16 +26,12 @@ def mongo_client(monkeypatch: pytest.MonkeyPatch) -> mongomock.MongoClient:
         MongoDB client.
     """
     client: mongomock.MongoClient = mongomock.MongoClient()
-    monkeypatch.setattr(
-        register_mongodb, "MongoClient", lambda *args, **kwargs: client
-    )
+    monkeypatch.setattr(register_mongodb, "MongoClient", lambda *args, **kwargs: client)
     return client
 
 
 @pytest.fixture
-def overlay(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> Path:
+def overlay(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """Config overlay merged into `config.yaml` by apps created in a test.
 
     Empty, unless the test writes to it.

@@ -2,7 +2,7 @@
 
 from collections import defaultdict
 import logging
-from typing import (Dict, Optional)
+from typing import Dict, Optional
 
 from foca.utils.misc import generate_id
 from pymongo.errors import DuplicateKeyError
@@ -13,9 +13,7 @@ from trs_filer.errors.exceptions import (
     NotFound,
 )
 from trs_filer.remote_files import fetch_remote_file
-from trs_filer.ga4gh.trs.endpoints.register_tool_classes import (
-    RegisterToolClass
-)
+from trs_filer.ga4gh.trs.endpoints.register_tool_classes import RegisterToolClass
 from trs_filer.utils import get_collection, get_custom_config
 
 logger = logging.getLogger(__name__)
@@ -61,7 +59,7 @@ class RegisterTool:
         """
         conf = get_custom_config()
         self.data = data
-        self.data['id'] = None if id is None else id
+        self.data["id"] = None if id is None else id
         self.replace = True
         self.id_charset: str = conf.tool.id.charset
         self.id_length = int(conf.tool.id.length)
@@ -71,13 +69,13 @@ class RegisterTool:
         self.external_port = conf.service.external_port
         self.api_path = conf.service.api_path
         self.tool_class_validation = conf.toolclass.validation
-        self.db_coll_tools = get_collection('tools')
-        self.db_coll_classes = get_collection('toolclasses')
+        self.db_coll_tools = get_collection("tools")
+        self.db_coll_classes = get_collection("toolclasses")
 
     def process_metadata(self) -> None:
         """Process tool metadata."""
         # init meta version
-        self.data['meta_version'] = str(self.meta_version_init)
+        self.data["meta_version"] = str(self.meta_version_init)
 
     def register_metadata(self) -> None:
         """Register tool."""
@@ -87,41 +85,40 @@ class RegisterTool:
         while i < 10:
             i += 1
             # set random ID unless ID is provided
-            if self.data['id'] is None:
+            if self.data["id"] is None:
                 self.replace = False
-                self.data['id'] = generate_id(
-                    charset=self.id_charset,
-                    length=self.id_length
+                self.data["id"] = generate_id(
+                    charset=self.id_charset, length=self.id_length
                 )
 
             # set self reference URL
-            self.data['url'] = (
+            self.data["url"] = (
                 f"{self.url_prefix}://{self.host_name}:{self.external_port}/"
                 f"{self.api_path}/tools/{self.data['id']}"
             )
 
             # set tool class identifier if not present
-            tool_class_id = self.data['toolclass'].get('id', None)
+            tool_class_id = self.data["toolclass"].get("id", None)
             if tool_class_id is None:
                 tool_class_id = generate_id(
-                    charset=self.id_charset,
-                    length=self.id_length
+                    charset=self.id_charset, length=self.id_length
                 )
-                self.data['toolclass']['id'] = tool_class_id
+                self.data["toolclass"]["id"] = tool_class_id
 
             # process version information
             version_list = [
-                v.get('id', None) for v in self.data['versions']
-                if v.get('id', None) is not None
+                v.get("id", None)
+                for v in self.data["versions"]
+                if v.get("id", None) is not None
             ]
             if len(version_list) != len(set(version_list)):
                 logger.error("Duplicate tool version IDs specified.")
                 raise BadRequest
 
-            for version in self.data['versions']:
+            for version in self.data["versions"]:
                 version_proc = RegisterToolVersion(
-                    id=self.data['id'],
-                    version_id=version.get('id', None),
+                    id=self.data["id"],
+                    version_id=version.get("id", None),
                     data=version,
                 )
                 version_proc.process_metadata()
@@ -130,15 +127,13 @@ class RegisterTool:
             if self.replace:
                 # replace tool in database
                 result_tools = self.db_coll_tools.replace_one(
-                    filter={'id': self.data['id']},
+                    filter={"id": self.data["id"]},
                     replacement=self.data,
                 )
 
                 # verify replacement
                 if result_tools.modified_count:
-                    logger.info(
-                        f"Replaced tool with id '{self.data['id']}'."
-                    )
+                    logger.info(f"Replaced tool with id '{self.data['id']}'.")
                     break
 
             # insert tool into database
@@ -153,14 +148,14 @@ class RegisterTool:
             # insert tool class into database
             if self.tool_class_validation:
                 data = self.db_coll_classes.find_one(
-                    filter={'id': self.data['toolclass']['id']},
-                    projection={'_id': False},
+                    filter={"id": self.data["toolclass"]["id"]},
+                    projection={"_id": False},
                 )
                 if data is None:
                     raise BadRequest
             tool_class = RegisterToolClass(
-                data=self.data['toolclass'],
-                id=self.data['toolclass']['id'],
+                data=self.data["toolclass"],
+                id=self.data["toolclass"]["id"],
             )
             tool_class.register_metadata()
 
@@ -178,15 +173,15 @@ class RegisterToolVersion:
     """Class to register a version with a tool object."""
 
     descriptor_types = [
-        'CWL',
-        'WDL',
-        'NFL',
-        'GALAXY',
+        "CWL",
+        "WDL",
+        "NFL",
+        "GALAXY",
     ]
     image_types = [
-        'Docker',
-        'Singularity',
-        'Conda',
+        "Docker",
+        "Singularity",
+        "Conda",
     ]
 
     def __init__(
@@ -224,35 +219,32 @@ class RegisterToolVersion:
         """
         conf = get_custom_config()
         self.data: Dict = data
-        self.data['id'] = None if version_id is None else version_id
+        self.data["id"] = None if version_id is None else version_id
         self.id: str = id
         self.replace: bool = True
         self.id_charset: str = conf.version.id.charset
         self.id_length: int = int(conf.version.id.length)
-        self.meta_version_init: int = int(
-            conf.version.meta_version.init
-        )
+        self.meta_version_init: int = int(conf.version.meta_version.init)
         self.url_prefix: str = conf.service.url_prefix
         self.host_name: str = conf.service.external_host
         self.external_port: int = conf.service.external_port
         self.api_path: str = conf.service.api_path
-        self.db_coll_tools = get_collection('tools')
+        self.db_coll_tools = get_collection("tools")
 
     def process_metadata(self) -> None:
         """Process version metadata."""
         # init meta version
-        self.data['meta_version'] = str(self.meta_version_init)
+        self.data["meta_version"] = str(self.meta_version_init)
 
         # set random ID unless ID is provided
-        if self.data['id'] is None:
+        if self.data["id"] is None:
             self.replace = False
-            self.data['id'] = generate_id(
-                charset=self.id_charset,
-                length=self.id_length
+            self.data["id"] = generate_id(
+                charset=self.id_charset, length=self.id_length
             )
 
         # set self reference url
-        self.data['url'] = (
+        self.data["url"] = (
             f"{self.url_prefix}://{self.host_name}:{self.external_port}/"
             f"{self.api_path}/tools/{self.id}/versions/"
             f"{self.data['id']}"
@@ -267,12 +259,12 @@ class RegisterToolVersion:
         # validate file types and unique paths
         file_types = defaultdict(list)
         file_path_dict = defaultdict(list)
-        for f in self.data.get('files', []):
-            file_types[f['type']].append(f['tool_file']['file_type'])
-            if f['tool_file']['path'] in file_path_dict.get(f['type'], []):
+        for f in self.data.get("files", []):
+            file_types[f["type"]].append(f["tool_file"]["file_type"])
+            if f["tool_file"]["path"] in file_path_dict.get(f["type"], []):
                 logger.error("Duplicate file paths are not allowed")
                 raise BadRequest
-            file_path_dict[f['type']].append(f['tool_file']['path'])
+            file_path_dict[f["type"]].append(f["tool_file"]["path"])
 
         invalid = False
         for d_type, f_types in file_types.items():
@@ -283,8 +275,8 @@ class RegisterToolVersion:
                 )
                 invalid = True
             if (
-                "SECONDARY_DESCRIPTOR" in f_types and
-                "PRIMARY_DESCRIPTOR" not in f_types
+                "SECONDARY_DESCRIPTOR" in f_types
+                and "PRIMARY_DESCRIPTOR" not in f_types
             ):
                 logger.error(
                     "At least one file is annotated as a "
@@ -303,64 +295,60 @@ class RegisterToolVersion:
             raise BadRequest
 
         # validate required fields
-        for _file in self.data.get('files', []):
-
+        for _file in self.data.get("files", []):
             # validate conditionally required properties
             if (
-                'url' not in _file['file_wrapper'] and
-                'content' not in _file['file_wrapper']
+                "url" not in _file["file_wrapper"]
+                and "content" not in _file["file_wrapper"]
             ):
                 logger.error(
-                    "FileWrapper must contain at least one of `url` or "
-                    "`content`."
+                    "FileWrapper must contain at least one of `url` or `content`."
                 )
                 raise BadRequest
-            if (
-                self.data['is_production'] and
-                ('checksum' not in _file['file_wrapper'] or
-                 not _file['file_wrapper']['checksum'])
+            if self.data["is_production"] and (
+                "checksum" not in _file["file_wrapper"]
+                or not _file["file_wrapper"]["checksum"]
             ):
                 logger.error(
-                    "Production tools must contain checksum information for "
-                    "all files."
+                    "Production tools must contain checksum information for all files."
                 )
                 raise BadRequest
 
             # store contents accessible at url in database
             # TODO: this needs more checks on the content
             if (
-                'url' in _file['file_wrapper'] and
-                'content' not in _file['file_wrapper']
+                "url" in _file["file_wrapper"]
+                and "content" not in _file["file_wrapper"]
             ):
                 # Failures raise `RemoteFileError` and are logged
-                _w = _file['file_wrapper']
-                _w['content'] = fetch_remote_file(
-                    url=_w['url'],
+                _w = _file["file_wrapper"]
+                _w["content"] = fetch_remote_file(
+                    url=_w["url"],
                     config=get_custom_config().remote_files,
                 ).text
 
             # validate descriptor file types
             descriptor_set = (
-                'PRIMARY_DESCRIPTOR',
-                'SECONDARY_DESCRIPTOR',
-                'TEST_FILE',
-                'OTHER',
+                "PRIMARY_DESCRIPTOR",
+                "SECONDARY_DESCRIPTOR",
+                "TEST_FILE",
+                "OTHER",
             )
-            if _file['tool_file']['file_type'] in descriptor_set:
-                if _file['type'] not in self.descriptor_types:
+            if _file["tool_file"]["file_type"] in descriptor_set:
+                if _file["type"] not in self.descriptor_types:
                     logger.error("Invalid descriptor type.")
                     raise BadRequest
 
             # validate image file types
-            elif _file['tool_file']['file_type'] == "CONTAINERFILE":
-                if _file['type'] not in self.image_types:
+            elif _file["tool_file"]["file_type"] == "CONTAINERFILE":
+                if _file["type"] not in self.image_types:
                     logger.error("Missing or invalid image file type.")
                     raise BadRequest
 
     def register_metadata(self) -> None:
         """Register version with tool."""
         # check if tool is available
-        obj = self.db_coll_tools.find_one(filter={'id': self.id})
+        obj = self.db_coll_tools.find_one(filter={"id": self.id})
         if obj is None:
             raise NotFound
 
@@ -370,22 +358,21 @@ class RegisterToolVersion:
             i += 1
             self.process_metadata()
             if self.replace:
-
                 # replace tool version in database
                 result_tools = self.db_coll_tools.update_one(
                     filter={
-                        'id': self.id,
-                        'versions.id': self.data['id'],
+                        "id": self.id,
+                        "versions.id": self.data["id"],
                     },
                     update={
-                        '$set': {
-                            'versions.$': self.data,
+                        "$set": {
+                            "versions.$": self.data,
                         },
                     },
                 )
 
                 # verify replacement
-                if result_tools.raw_result['updatedExisting']:
+                if result_tools.raw_result["updatedExisting"]:
                     logger.info(
                         f"Replaced version with id '{self.data['id']}' in "
                         f"tool '{self.id}'."
@@ -395,12 +382,12 @@ class RegisterToolVersion:
             # insert tool version into database
             result_tools = self.db_coll_tools.update_one(
                 filter={
-                    'id': self.id,
-                    'versions.id': {'$ne': self.data['id']},
+                    "id": self.id,
+                    "versions.id": {"$ne": self.data["id"]},
                 },
                 update={
-                    '$push': {
-                        'versions': self.data,
+                    "$push": {
+                        "versions": self.data,
                     },
                 },
             )
@@ -408,8 +395,7 @@ class RegisterToolVersion:
             # verify insertion
             if result_tools.modified_count:
                 logger.info(
-                    f"Added version with id '{self.data['id']}' to tool "
-                    f"'{self.id}'."
+                    f"Added version with id '{self.data['id']}' to tool '{self.id}'."
                 )
                 break
         else:

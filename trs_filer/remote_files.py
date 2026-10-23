@@ -466,12 +466,8 @@ class _CheckedAdapter(HTTPAdapter):
             "check": staticmethod(self._check),
             "deadline": self._deadline,
         }
-        http = type(
-            "CheckedHTTPConnection", (_CheckedHTTPConnection,), attributes
-        )
-        https = type(
-            "CheckedHTTPSConnection", (_CheckedHTTPSConnection,), attributes
-        )
+        http = type("CheckedHTTPConnection", (_CheckedHTTPConnection,), attributes)
+        https = type("CheckedHTTPSConnection", (_CheckedHTTPSConnection,), attributes)
         self.poolmanager.pool_classes_by_scheme = {
             "http": type(
                 "CheckedHTTPConnectionPool",
@@ -486,9 +482,7 @@ class _CheckedAdapter(HTTPAdapter):
         }
 
 
-def _make_session(
-    config: RemoteFilesConfig, deadline: _Deadline
-) -> requests.Session:
+def _make_session(config: RemoteFilesConfig, deadline: _Deadline) -> requests.Session:
     """Make an HTTP session for retrieving a file.
 
     Proxies of the environment are not used, so that destinations can be
@@ -527,7 +521,7 @@ def _redact(url: str) -> str:
         ends = [index for index in map(rest.find, "/?#") if index >= 0]
         at = rest.rfind("@", 0, min(ends, default=len(rest)))
         if at >= 0:
-            url = f"{scheme}{separator}***@{rest[at + 1:]}"
+            url = f"{scheme}{separator}***@{rest[at + 1 :]}"
     return repr(url)
 
 
@@ -546,14 +540,11 @@ def _read_limited(response: requests.Response, max_size: int) -> bytes:
     """
     encoding = response.headers.get("Content-Encoding", "identity")
     if encoding.strip().lower() not in ("", "identity"):
-        raise RemoteFileError(
-            f"Content encoding '{encoding}' is not supported"
-        )
+        raise RemoteFileError(f"Content encoding '{encoding}' is not supported")
     declared = response.headers.get("Content-Length", "")
     if declared.isascii() and declared.isdigit() and int(declared) > max_size:
         raise RemoteFileError(
-            f"Content of {declared} bytes exceeds the maximum size of "
-            f"{max_size} bytes"
+            f"Content of {declared} bytes exceeds the maximum size of {max_size} bytes"
         )
     body = bytearray()
     for chunk in response.iter_content(chunk_size=65536):
@@ -602,15 +593,11 @@ def fetch_remote_file(url: str, config: RemoteFilesConfig) -> RemoteFile:
         reason = f"{type(exc).__name__}: {exc}"
         if deadline.expired:
             reason = f"Retrieval exceeded the total timeout ({reason})"
-    logger.error(
-        f"Could not retrieve file from URL {_redact(url)}: {reason!r}"
-    )
+    logger.error(f"Could not retrieve file from URL {_redact(url)}: {reason!r}")
     raise RemoteFileError(str(reason))
 
 
-def _fetch(
-    url: str, config: RemoteFilesConfig, deadline: _Deadline
-) -> RemoteFile:
+def _fetch(url: str, config: RemoteFilesConfig, deadline: _Deadline) -> RemoteFile:
     """Retrieve the content of a file from its URL (cf.
     :py:func:`fetch_remote_file`).
 
@@ -663,9 +650,7 @@ def _fetch(
                     )
                     continue
                 if not 200 <= response.status_code < 300:
-                    raise RemoteFileError(
-                        f"Response status {response.status_code}"
-                    )
+                    raise RemoteFileError(f"Response status {response.status_code}")
                 return RemoteFile(
                     content=_read_limited(response, config.max_size),
                     encoding=response.encoding,
