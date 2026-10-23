@@ -96,12 +96,15 @@ jobs:
         run: docker compose down
 
   # TEMPORARY: replaced by the release and supply-chain workflows (#133,
-  # #134)
+  # #134). Pushes of the default branch only: pull requests get no Docker
+  # Hub secrets (e.g., of Dependabot and forks), and the Compose build of
+  # `Test` builds the image for them
   Publish:
     name: Build and publish app image
     runs-on: ubuntu-latest
     timeout-minutes: 30
     needs: [Test]
+    if: github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -121,42 +124,21 @@ jobs:
         run: |
           pip install "setuptools-scm>=8"
           echo "version=$(python -m setuptools_scm)" >> "$GITHUB_OUTPUT"
+      # Tags `latest` (pushed) and the date (local only), as before
       - name: Build & Publish image to DockerHub
         env:
           DOCKERHUB_ORG: ${{ secrets.DOCKERHUB_ORG }}
           DOCKERHUB_LOGIN: ${{ secrets.DOCKERHUB_LOGIN }}
           DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
           REPO_NAME: ${{ github.event.repository.name }}
-          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
           VERSION: ${{ steps.version.outputs.version }}
         run: |
-          set -x
-          if [[ "${GITHUB_EVENT_NAME}" == "push" ]]; then
-            export BRANCH_NAME=${GITHUB_REF##*/}
-          elif [[ "${GITHUB_EVENT_NAME}" == "pull_request" ]]; then
-            export BRANCH_NAME=${GITHUB_HEAD_REF##*/}
-          else
-            export BRANCH_NAME=INVALID_EVENT_BRANCH_UNKNOWN
-          fi
-          echo "DEFAULT_BRANCH: ${DEFAULT_BRANCH}"
-          echo "BRANCH_NAME: ${BRANCH_NAME}"
-          if [ "$BRANCH_NAME" == "$DEFAULT_BRANCH" ]; then
-              DOCKER_TAG="$(date '+%Y%m%d')"
-              export DOCKER_TAG
-          else
-              export DOCKER_TAG=${BRANCH_NAME//_/-}
-              export DOCKER_TAG=${DOCKER_TAG//\//-}
-          fi
-          echo "TAG: ${DOCKER_TAG}"
+          image="${DOCKERHUB_ORG}/${REPO_NAME}"
           docker build . \
             --build-arg "SETUPTOOLS_SCM_PRETEND_VERSION=${VERSION}" \
-            -t "${DOCKERHUB_ORG}/${REPO_NAME}:latest" \
-            -t "${DOCKERHUB_ORG}/${REPO_NAME}:${DOCKER_TAG}"
-          # Pull requests (e.g., of Dependabot and forks) get no secrets, and
-          # only the default branch is pushed
-          if [ "$BRANCH_NAME" == "$DEFAULT_BRANCH" ]; then
-            echo "${DOCKERHUB_TOKEN}" | \
-                docker login -u "${DOCKERHUB_LOGIN}" --password-stdin
-            docker push "${DOCKERHUB_ORG}/${REPO_NAME}:latest"
-            rm "${HOME}/.docker/config.json"  # delete token
-          fi
+            -t "${image}:latest" \
+            -t "${image}:$(date '+%Y%m%d')"
+          echo "${DOCKERHUB_TOKEN}" | \
+            docker login -u "${DOCKERHUB_LOGIN}" --password-stdin
+          docker push "${image}:latest"
+          rm "${HOME}/.docker/config.json"  # delete token
