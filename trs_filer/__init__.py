@@ -1,1 +1,1 @@
-__version__ = '0.1.0'
+"""GA4GH Tool Registry Service (TRS) implementation."""

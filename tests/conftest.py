@@ -12,7 +12,7 @@ from foca.database import register_mongodb
 import mongomock
 import pytest
 
-from trs_filer.app import init_app
+from trs_filer.app import create_app
 
 
 @pytest.fixture
@@ -67,7 +67,7 @@ def app(
     Returns:
         FOCA app.
     """
-    return init_app()
+    return create_app()
 
 
 @pytest.fixture

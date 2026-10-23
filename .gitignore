@@ -182,7 +182,7 @@ venv.bak/
 [Ll]ib64
 [Ll]ocal
 [Ss]cripts
-# but not the repository's scripts
+# Scripts of the workflows (not of a virtual environment)
 !/scripts/
 pyvenv.cfg
 pip-selfcheck.json
@@ -224,3 +224,10 @@ tags
 .vscode/
 *.modified.yaml
 .idea/*
+
+# Local config overrides
+config.local.yaml
+docker-compose.override.yaml
+
+# Dependencies of the Helm chart (`helm dependency build deployment`)
+deployment/charts/

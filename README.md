@@ -45,15 +45,15 @@ the repository and start TRS-Filer with its MongoDB database:
 ```bash
 git clone https://github.com/elixir-cloud-aai/trs-filer.git
 cd trs-filer
-docker compose up --build -d
+docker compose up --build --wait
 ```
 
-The TRS API is then served at `http://localhost/ga4gh/trs/v2/`, with a
+The TRS API is then served at `http://localhost:8080/ga4gh/trs/v2/`, with a
 Swagger UI at
-[http://localhost/ga4gh/trs/v2/ui](http://localhost/ga4gh/trs/v2/ui):
+[http://localhost:8080/ga4gh/trs/v2/ui](http://localhost:8080/ga4gh/trs/v2/ui):
 
 ```bash
-curl -X GET "http://localhost/ga4gh/trs/v2/tools" -H "accept: application/json"
+curl -X GET "http://localhost:8080/ga4gh/trs/v2/tools" -H "accept: application/json"
 ```
 <!-- --8<-- [end:quick-start] -->
 
@@ -62,11 +62,11 @@ curl -X GET "http://localhost/ga4gh/trs/v2/tools" -H "accept: application/json"
 Contributions are welcome! See [`CONTRIBUTING.md`](CONTRIBUTING.md) and mind
 our [code of conduct](CODE_OF_CONDUCT.md).
 
-[badge-build-status]: <https://github.com/elixir-cloud-aai/trs-filer/actions/workflows/checks.yml/badge.svg>
+[badge-build-status]: <https://github.com/elixir-cloud-aai/trs-filer/actions/workflows/checks.yaml/badge.svg>
 [badge-coverage]: <https://codecov.io/gh/elixir-cloud-aai/trs-filer/branch/dev/graph/badge.svg?branch=dev>
 [badge-github-tag]: <https://img.shields.io/github/v/tag/elixir-cloud-aai/trs-filer?color=C39BD3>
 [badge-license]: <https://img.shields.io/badge/license-Apache%202.0-blue.svg>
-[badge-url-build-status]: <https://github.com/elixir-cloud-aai/trs-filer/actions/workflows/checks.yml>
+[badge-url-build-status]: <https://github.com/elixir-cloud-aai/trs-filer/actions/workflows/checks.yaml>
 [badge-url-coverage]: <https://codecov.io/gh/elixir-cloud-aai/trs-filer?branch=dev>
 [badge-url-github-tag]: <https://github.com/elixir-cloud-aai/trs-filer/releases>
 [badge-url-license]: <https://www.apache.org/licenses/LICENSE-2.0>

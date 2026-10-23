@@ -1,12 +1,10 @@
 """Tests of the app created from `config.yaml`, with FOCA 0.17."""
 
 from copy import deepcopy
-import importlib
 from importlib.metadata import version
 import logging
 from pathlib import Path
 import re
-import sys
 
 from connexion import App
 from flask import Flask
@@ -18,7 +16,7 @@ import pydantic
 import pytest
 
 from tests.mock_data import MOCK_TOOL
-from trs_filer.app import init_app
+from trs_filer.app import create_app, main
 from trs_filer.custom_config import CustomConfig, IdConfig
 from trs_filer.utils import DB, get_collection, get_custom_config
 
@@ -121,7 +119,7 @@ def test_placeholder_warning(
     logger = logging.getLogger("trs_filer.app")
     logger.addHandler(records)
     try:
-        init_app()
+        create_app()
         assert len(records.messages) == 1
         assert "set `id`, `organization`" in records.messages[0]
         records.messages.clear()
@@ -133,7 +131,7 @@ def test_placeholder_warning(
             "      name: Other\n"
             "      url: https://trs.example.com\n"
         )
-        init_app()
+        create_app()
         assert records.messages == []
     finally:
         logger.removeHandler(records)
@@ -181,7 +179,7 @@ def test_no_request_body_size_limit(
     """
     overlay.write_text("server:\n  max_content_length: null\n")
     with pytest.raises(RuntimeError, match="max_content_length"):
-        init_app()
+        create_app()
 
 
 @pytest.mark.parametrize(
@@ -224,32 +222,37 @@ def test_invalid_custom_config(
     """
     overlay.write_text(custom)
     with pytest.raises(ValueError, match="does not match model") as exc:
-        init_app()
+        create_app()
     cause = exc.value.__cause__ or exc.value.__context__
     assert isinstance(cause, pydantic.ValidationError)
     assert re.search(reason, str(cause))
 
 
-def test_gunicorn_database(
+@pytest.mark.parametrize("name", [None, "other"])
+def test_database_name(
     mongo_client: mongomock.MongoClient,
     overlay: Path,
     monkeypatch: pytest.MonkeyPatch,
+    name: str | None,
 ) -> None:
-    """Gunicorn's workers use the configured database name by default.
+    """The app uses the configured database, unless `MONGO_DBNAME` is set.
+
+    FOCA reads the environment variable itself (e.g., in Gunicorn's workers,
+    which inherit the environment), as the Helm chart sets it.
 
     Args:
         mongo_client: In-memory MongoDB client.
         overlay: Config overlay.
         monkeypatch: Patches of environment variable `MONGO_DBNAME`.
+        name: Value of `MONGO_DBNAME`; unset if `None`.
     """
-    monkeypatch.delenv("MONGO_DBNAME", raising=False)
-    sys.modules.pop("trs_filer.gunicorn", None)
-    gunicorn = importlib.import_module("trs_filer.gunicorn")
-    assert f"MONGO_DBNAME={DB}" in gunicorn.raw_env
-    monkeypatch.setenv("MONGO_DBNAME", "other")
-    gunicorn = importlib.reload(gunicorn)
-    assert "MONGO_DBNAME=other" in gunicorn.raw_env
-    sys.modules.pop("trs_filer.gunicorn", None)
+    if name is None:
+        monkeypatch.delenv("MONGO_DBNAME", raising=False)
+    else:
+        monkeypatch.setenv("MONGO_DBNAME", name)
+    app = create_app()
+    with app.app.app_context():
+        assert get_collection("tools").database.name == (name or DB)
 
 
 @pytest.mark.parametrize("charset", ["string.ascii_uppercase", "", 1])
@@ -328,3 +331,23 @@ def test_no_custom_config() -> None:
     with app.app_context():
         with pytest.raises(RuntimeError, match="No custom configuration"):
             get_custom_config()
+
+
+def test_main(
+    mongo_client: mongomock.MongoClient,
+    overlay: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`main()` runs the app on the configured port.
+
+    Args:
+        mongo_client: In-memory MongoDB client.
+        overlay: Config overlay.
+        monkeypatch: Patches of the development server.
+    """
+    ports: list[int] = []
+    monkeypatch.setattr(
+        App, "run", lambda self, port: ports.append(port), raising=True
+    )
+    main()
+    assert ports == [8080]

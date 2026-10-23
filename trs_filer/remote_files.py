@@ -8,7 +8,7 @@ allowed destinations, timeouts, a maximum size and a maximum number of
 redirects.
 
 Destinations are checked when connecting, by connection classes of
-`urllib3` 2.x (cf. `requirements.txt`) that resolve host names themselves
+`urllib3` 2.x (cf. `pyproject.toml`) that resolve host names themselves
 and connect only to the checked addresses. The total timeout is enforced by
 a timer that shuts down the connections of a retrieval when it expires.
 """

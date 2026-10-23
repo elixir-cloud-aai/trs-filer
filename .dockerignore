@@ -1,15 +1,15 @@
-# Ignore Git- and GitHub-specific files and dirs
-.git
-.github
-.gitignore
+# Only send the files needed at runtime to the build context
+*
+!trs_filer/
+!LICENSE
+!pyproject.toml
+!README.md
+# Run by the image build to list the requirements to install
+!scripts/image_requirements.py
+# TEMPORARY: run by the Helm chart's config Job (#135)
+!update-config-map.sh
 
-# Remove all docs but README.md from root directory
-*.md
-!README*.md
-
-# Ignore build-specific files and dirs
+# Exclude caches and local files within the included paths
+**/__pycache__
+**/*.py[cod]
 **/*.egg-info
-src
-
-# Ignore CI-related files and dirs
-.travis.yml

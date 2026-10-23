@@ -8,7 +8,7 @@
 # Cf. https://foca.readthedocs.io/en/latest/configuration/server/
 # `host` and `port` apply to the development server
 # (`python -m trs_filer.app`) only: the image serves the app with Gunicorn
-# (`trs_filer/gunicorn.py`)
+# (`trs_filer/gunicorn_config.py`)
 server:
     host: '0.0.0.0'
     port: 8080
