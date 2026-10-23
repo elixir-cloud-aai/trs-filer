@@ -35,10 +35,14 @@ SEMVER = r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)"
 NAME = r"^\s*[A-Za-z0-9][A-Za-z0-9._-]*\s*(\[[^\]]*\])?"
 # A requirement that is a direct reference, e.g., `foca @ git+https://...`
 DIRECT_REFERENCE = re.compile(NAME + r"\s*@")
-# A requirement given as a URL or path, without name (e.g., `git+https://...`,
-# `./foca`), or an option of a requirements file (e.g., `-e`, `-r`), which
-# the check can't read
-UNNAMED = re.compile(r"^\s*([-./]|[A-Za-z][A-Za-z0-9+.-]*://|git\+)")
+# A requirement given as a URL, path or archive, without name (e.g.,
+# `git+https://...`, `./foca`, `foca-0.17.0rc1-py3-none-any.whl`), or an
+# option of a requirements file (e.g., `-e`, `-r`), which the check can't
+# read
+UNNAMED = re.compile(
+    r"^\s*([-./]|[A-Za-z][A-Za-z0-9+.-]*://|git\+)"
+    r"|\.(whl|zip|tar\.gz|tar\.bz2|tgz)\s*(;.*)?$"
+)
 # A pre-release or development version (PEP 440) in a version specifier,
 # e.g., `0.17.0rc1`, `1.0.dev0`
 PRE_RELEASE = re.compile(
@@ -102,7 +106,8 @@ def _chart_dependency_versions(path: Path) -> list[str | None]:
         if line and line[0] not in " \t-#":
             key, _, value = line.split("#", 1)[0].partition(":")
             in_dependencies = key.strip() == "dependencies"
-            if in_dependencies and value.strip():
+            # an empty list (or map) has no dependencies to check
+            if in_dependencies and value.strip() not in ("", "[]", "{}"):
                 versions.append(None)
         elif in_dependencies and re.match(r"\s*(-\s*)?[{\[]", line):
             versions.append(None)
@@ -130,7 +135,7 @@ def find_dev_pins(root: Path) -> list[str]:
                     f"{name}: requirement '{requirement}' is a direct "
                     "reference"
                 )
-            elif UNNAMED.match(requirement):
+            elif UNNAMED.search(requirement):
                 pins.append(
                     f"{name}: requirement '{requirement}' can't be checked"
                 )

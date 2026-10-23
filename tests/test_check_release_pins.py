@@ -113,6 +113,11 @@ def test_release_pins(tmp_path: Path) -> None:
             "'git+https://github.com/example/foca@dev' can't be checked",
         ),
         (
+            {"requirements": "foca-0.17.0rc1-py3-none-any.whl\n"},
+            "requirements.txt: requirement 'foca-0.17.0rc1-py3-none-any.whl' "
+            "can't be checked",
+        ),
+        (
             {"requirements": "-e ./foca\n"},
             "requirements.txt: requirement '-e ./foca' can't be checked",
         ),
@@ -162,6 +167,7 @@ def test_release_pins(tmp_path: Path) -> None:
         "url",
         "extras-spaces",
         "unnamed-url",
+        "wheel",
         "editable",
         "pre-release",
         "dev-marker",
@@ -225,9 +231,12 @@ def test_chart_without_dependencies(tmp_path: Path) -> None:
         tmp_path: Temporary directory.
     """
     root = _write(tmp_path)
-    (root / "deployment" / "Chart.yaml").write_text(
+    chart = root / "deployment" / "Chart.yaml"
+    chart.write_text(
         "apiVersion: v2\nname: app\nversion: 2.0.0\nappVersion: 2.0.0\n"
     )
+    assert check_release_pins.find_dev_pins(root) == []
+    chart.write_text("name: app\ndependencies: []  # none\n")
     assert check_release_pins.find_dev_pins(root) == []
 
 
