@@ -1033,6 +1033,53 @@ def test_toolsIdVersionsVersionIdTypeFilesGet_zip_fetch_error_NotFound(
         )
 
 
+def test_toolsIdVersionsVersionIdTypeFilesGet_zip_bytes_content() -> None:
+    """Zip response stores content that is already bytes as is."""
+    app = Flask(__name__)
+    app.config.foca = Config(db=MongoConfig(**MONGO_CONFIG))
+    mock_resp = deepcopy(MOCK_TOOL_VERSION_ID)
+    mock_resp["id"] = MOCK_ID
+    for f in mock_resp["versions"][0]["files"]:
+        if f["type"] == "CWL" and f["tool_file"]["file_type"] == "TEST_FILE":
+            f["file_wrapper"]["content"] = b"raw"
+    app.config.foca.db.dbs["trsStore"].collections[
+        "tools"
+    ].client = mongomock.MongoClient().db.collection
+    app.config.foca.db.dbs["trsStore"].collections["tools"].client.insert_one(mock_resp)
+
+    with app.test_request_context():
+        resp = inspect.unwrap(toolsIdVersionsVersionIdTypeFilesGet)(
+            id=MOCK_ID,
+            version_id=MOCK_ID,
+            type="CWL",
+            format="zip",
+        )
+        resp.direct_passthrough = False
+        with ZipFile(BytesIO(resp.get_data())) as zf:
+            content = zf.read("path_test_cwl")
+    assert content == b"raw"
+
+
+def test_toolsIdVersionsVersionIdTypeFilesGet_zip_InternalServerError(
+    monkeypatch,
+) -> None:
+    """Zip building fails with an internal error on unexpected errors."""
+
+    def _raise(url, config):
+        raise ValueError("unexpected")
+
+    monkeypatch.setattr("trs_filer.ga4gh.trs.server.fetch_remote_file", _raise)
+    app = _app_with_url_file()
+
+    with app.app_context(), pytest.raises(InternalServerError):
+        inspect.unwrap(toolsIdVersionsVersionIdTypeFilesGet)(
+            id=MOCK_ID,
+            version_id=MOCK_ID,
+            type="CWL",
+            format="zip",
+        )
+
+
 # GET /tools/{id}/versions/{version_id}/{type}/tests
 def test_toolsIdVersionsVersionIdTypeTestsGet() -> None:
     """Test for getting list of test JSONs associated with a specific tool
