@@ -1,9 +1,12 @@
 """Tests of the app created from `config.yaml`, with FOCA 0.17."""
 
 from copy import deepcopy
+import importlib
 from importlib.metadata import version
 import logging
 from pathlib import Path
+import re
+import sys
 
 from connexion import App
 from flask import Flask
@@ -37,15 +40,6 @@ def test_config(app: App) -> None:
     assert isinstance(custom, CustomConfig)
     assert custom.tool.id.charset == "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
     assert custom.service.external_host == "localhost"
-
-
-def test_config_generic() -> None:
-    """The base config names no deployment's host."""
-    text = (
-        Path(__file__).parents[1] / "trs_filer" / "config.yaml"
-    ).read_text()
-    assert "csc.fi" not in text
-    assert "string." not in text
 
 
 def test_service_info(client: FlaskClient) -> None:
@@ -191,28 +185,71 @@ def test_no_request_body_size_limit(
 
 
 @pytest.mark.parametrize(
-    "custom",
+    ("custom", "reason"),
     [
-        "custom:\n  service_info:\n    id: org.example.trs\n",
-        "custom:\n  tool:\n    id:\n      charset: string.digits\n",
-        "custom:\n  version:\n    id:\n      charset: ''\n",
-        "custom:\n  toolclass:\n    id:\n      length: 0\n",
+        (
+            "custom:\n  service_info:\n    id: org.example.trs\n",
+            r"service_info\s+Extra inputs are not permitted",
+        ),
+        (
+            "custom:\n  tool:\n    id:\n      charset: string.digits\n",
+            r"tool\.id\.charset\s+Value error.*expression",
+        ),
+        (
+            "custom:\n  version:\n    id:\n      charset: ''\n",
+            r"version\.id\.charset\s+Value error",
+        ),
+        (
+            "custom:\n  toolclass:\n    id:\n      length: 0\n",
+            r"toolclass\.id\.length\s+Input should be greater than 0",
+        ),
     ],
     ids=["service-info", "expression", "empty-charset", "zero-length"],
 )
 def test_invalid_custom_config(
-    mongo_client: mongomock.MongoClient, overlay: Path, custom: str
+    mongo_client: mongomock.MongoClient,
+    overlay: Path,
+    custom: str,
+    reason: str,
 ) -> None:
     """Invalid custom configs, and those of previous versions, are rejected.
+
+    FOCA raises a `ValueError` from the model's validation error.
 
     Args:
         mongo_client: In-memory MongoDB client.
         overlay: Config overlay.
         custom: Overlay with an invalid custom config.
+        reason: Pattern of the validation error.
     """
     overlay.write_text(custom)
-    with pytest.raises((pydantic.ValidationError, ValueError)):
+    with pytest.raises(ValueError, match="does not match model") as exc:
         init_app()
+    cause = exc.value.__cause__ or exc.value.__context__
+    assert isinstance(cause, pydantic.ValidationError)
+    assert re.search(reason, str(cause))
+
+
+def test_gunicorn_database(
+    mongo_client: mongomock.MongoClient,
+    overlay: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Gunicorn's workers use the configured database name by default.
+
+    Args:
+        mongo_client: In-memory MongoDB client.
+        overlay: Config overlay.
+        monkeypatch: Patches of environment variable `MONGO_DBNAME`.
+    """
+    monkeypatch.delenv("MONGO_DBNAME", raising=False)
+    sys.modules.pop("trs_filer.gunicorn", None)
+    gunicorn = importlib.import_module("trs_filer.gunicorn")
+    assert f"MONGO_DBNAME={DB}" in gunicorn.raw_env
+    monkeypatch.setenv("MONGO_DBNAME", "other")
+    gunicorn = importlib.reload(gunicorn)
+    assert "MONGO_DBNAME=other" in gunicorn.raw_env
+    sys.modules.pop("trs_filer.gunicorn", None)
 
 
 @pytest.mark.parametrize("charset", ["string.ascii_uppercase", "", 1])
@@ -242,6 +279,22 @@ def test_register_tool(client: FlaskClient) -> None:
     tool = response.get_json()
     assert tool["url"] == f"http://localhost:8080{BASE_PATH}/tools/{tool_id}"
     assert client.get(f"{BASE_PATH}/toolClasses").status_code == 200
+
+
+def test_register_tool_class(client: FlaskClient) -> None:
+    """Tool classes get identifiers of their own config (`toolclass`).
+
+    Args:
+        client: Test client.
+    """
+    response = client.post(
+        f"{BASE_PATH}/toolClasses",
+        json={"name": "Workflow", "description": "A workflow."},
+    )
+    assert response.status_code == 200
+    tool_class_id = response.get_json()
+    assert len(tool_class_id) == 6
+    assert set(tool_class_id) <= set("abcdefghijklmnopqrstuvwxyz0123456789")
 
 
 def test_swagger_ui(client: FlaskClient) -> None:

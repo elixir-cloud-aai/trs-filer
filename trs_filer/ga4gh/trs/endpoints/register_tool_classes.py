@@ -57,9 +57,9 @@ class RegisterToolClass:
         self.data = data
         self.data['id'] = None if id is None else id
         self.replace = True
-        self.id_charset = conf.tool.id.charset
-        self.id_length = int(conf.tool.id.length)
-        self.meta_version_init = int(conf.tool.meta_version.init)
+        self.id_charset = conf.toolclass.id.charset
+        self.id_length = int(conf.toolclass.id.length)
+        self.meta_version_init = int(conf.toolclass.meta_version.init)
         self.url_prefix = conf.service.url_prefix
         self.host_name = conf.service.external_host
         self.external_port = conf.service.external_port

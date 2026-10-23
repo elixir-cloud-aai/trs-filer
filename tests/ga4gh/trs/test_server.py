@@ -806,9 +806,8 @@ def test_toolsIdVersionsVersionIdTypeFilesGet():
 
 def test_toolsIdVersionsVersionIdTypeFilesGet_tool_na_NotFound():
     """Test for getting descriptor files associated with a specific tool
-    version identified by the given tool and version identifiers with
-    specified tool
-    identifier not present.
+    version identified by the given tool and version identifiers, with
+    the specified tool identifier not present.
     """
     app = Flask(__name__)
     app.config.foca = Config(
@@ -833,9 +832,8 @@ def test_toolsIdVersionsVersionIdTypeFilesGet_tool_na_NotFound():
 
 def test_toolsIdVersionsVersionIdTypeFilesGet_version_na_NotFound():
     """Test for getting descriptor files associated with a specific tool
-    version identified by the given tool and version identifiers with
-    specified tool
-    version identifier not present.
+    version identified by the given tool and version identifiers, with
+    the specified tool version identifier not present.
     """
     app = Flask(__name__)
     app.config.foca = Config(

@@ -59,9 +59,12 @@ def init_app() -> App:
     Raises:
         RuntimeError: Request bodies are not limited in size
             (`server.max_content_length` is null).
-        pydantic.ValidationError: The config is invalid, e.g., it still
-            sets `custom.service_info`, or the service info is invalid
-            (naming the invalid field).
+        ValueError: The custom config is invalid, e.g., it still sets
+            `custom.service_info`, or an ID character set is an expression
+            (FOCA raises it from the `pydantic.ValidationError`, which names
+            the invalid field).
+        pydantic.ValidationError: FOCA's config is invalid, e.g., the
+            service info.
     """
     foca = Foca(
         config_file=Path(__file__).resolve().parent / "config.yaml",
