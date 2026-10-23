@@ -301,6 +301,7 @@ def find_dev_pins(root: Path) -> list[str]:
                 f"deployment/Chart.yaml: dependency '{name}' has repository "
                 f"'{repository}', not a chart repository (oci:// or https://)"
             )
+    # No findings for charts without the library chart (e.g., until #135)
     pins.extend(_library_pins(root, dependencies))
     return pins
 

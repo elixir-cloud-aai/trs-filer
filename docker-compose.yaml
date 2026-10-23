@@ -42,6 +42,8 @@ services:
     # (https://jira.mongodb.org/browse/SERVER-121912)
     image: mongo:7.0
     restart: unless-stopped
+    # Data in a named volume; setups before #123 kept it in `../data/trs/db`
+    # (migrate it with `mongodump`/`mongorestore` if needed)
     volumes:
       - mongodb-data:/data/db
     healthcheck:

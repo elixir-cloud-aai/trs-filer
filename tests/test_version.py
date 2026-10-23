@@ -36,14 +36,24 @@ def test_fallback_version() -> None:
 
 
 def test_pretend_version(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    """The version passed to Docker builds is used without Git metadata."""
+    """The version passed to Docker builds is used without Git metadata.
+
+    Args:
+        monkeypatch: Fixture to set `SETUPTOOLS_SCM_PRETEND_VERSION` with.
+        tmp_path: Directory without Git metadata.
+    """
     monkeypatch.setenv("SETUPTOOLS_SCM_PRETEND_VERSION", "1.2.3rc1")
     assert setuptools_scm.get_version(root=str(tmp_path)) == "1.2.3rc1"
 
 
 @pytest.mark.skipif(GIT is None, reason="git not installed")
 def test_version_from_tag(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    """The version of a tagged commit is the tag without the `v`."""
+    """The version of a tagged commit is the tag without the `v`.
+
+    Args:
+        monkeypatch: Fixture to unset variables that affect Git and the version.
+        tmp_path: Directory of the temporary repository.
+    """
     assert GIT is not None
     for name in ("SETUPTOOLS_SCM_PRETEND_VERSION", "GIT_DIR", "GIT_WORK_TREE"):
         monkeypatch.delenv(name, raising=False)

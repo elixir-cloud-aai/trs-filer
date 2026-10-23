@@ -18,6 +18,10 @@ from pathlib import Path
 # expect port 8080 (the app config's `server` settings apply to the
 # development server only)
 bind = ["0.0.0.0:8080"]
+# Forwarded headers (`X-Forwarded-*`) are trusted from Gunicorn's default
+# (`127.0.0.1`, or `FORWARDED_ALLOW_IPS`) only, not from any client; behind
+# a proxy that sets them, set `FORWARDED_ALLOW_IPS` (or `--forwarded-allow-ips`)
+# to its addresses
 
 # One process with a few threads, as each worker loads the whole app
 worker_class = "gthread"

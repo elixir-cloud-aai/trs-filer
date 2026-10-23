@@ -152,9 +152,11 @@ jobs:
             --build-arg "SETUPTOOLS_SCM_PRETEND_VERSION=${VERSION}" \
             -t "${DOCKERHUB_ORG}/${REPO_NAME}:latest" \
             -t "${DOCKERHUB_ORG}/${REPO_NAME}:${DOCKER_TAG}"
-          echo "${DOCKERHUB_TOKEN}" | \
-              docker login -u "${DOCKERHUB_LOGIN}" --password-stdin
+          # Pull requests (e.g., of Dependabot and forks) get no secrets, and
+          # only the default branch is pushed
           if [ "$BRANCH_NAME" == "$DEFAULT_BRANCH" ]; then
+            echo "${DOCKERHUB_TOKEN}" | \
+                docker login -u "${DOCKERHUB_LOGIN}" --password-stdin
             docker push "${DOCKERHUB_ORG}/${REPO_NAME}:latest"
+            rm "${HOME}/.docker/config.json"  # delete token
           fi
-          rm "${HOME}/.docker/config.json"  # delete token
