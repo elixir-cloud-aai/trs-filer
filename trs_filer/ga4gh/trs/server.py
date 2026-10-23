@@ -5,7 +5,6 @@ from typing import (Optional, Dict, List, Tuple)
 from urllib.parse import unquote
 from io import BytesIO
 from zipfile import ZipFile, ZIP_DEFLATED
-from urllib.request import urlopen
 
 from flask import request
 from foca.utils.logging import log_traffic
@@ -15,6 +14,7 @@ from trs_filer.errors.exceptions import (
     BadRequest,
     InternalServerError,
     NotFound,
+    RemoteFileError,
 )
 from trs_filer.ga4gh.trs.endpoints.register_objects import (
     RegisterTool,
@@ -23,7 +23,8 @@ from trs_filer.ga4gh.trs.endpoints.register_objects import (
 from trs_filer.ga4gh.trs.endpoints.register_tool_classes import (
     RegisterToolClass
 )
-from trs_filer.utils import get_collection
+from trs_filer.remote_files import fetch_remote_file
+from trs_filer.utils import get_collection, get_custom_config
 
 logger = logging.getLogger(__name__)
 
@@ -493,9 +494,11 @@ def toolsIdVersionsVersionIdTypeFilesGet(
                             content_bytes = str(content).encode('utf-8')
                     elif 'url' in wrapper and wrapper['url']:
                         try:
-                            with urlopen(wrapper['url']) as resp:
-                                content_bytes = resp.read()
-                        except Exception:
+                            content_bytes = fetch_remote_file(
+                                url=wrapper['url'],
+                                config=get_custom_config().remote_files,
+                            ).content
+                        except RemoteFileError:
                             raise NotFound
                     else:
                         # No content available

@@ -9,7 +9,6 @@ from foca.models.config import (Config, MongoConfig)
 import mongomock
 from pymongo.errors import DuplicateKeyError
 import pytest
-import requests
 
 from tests.mock_data import (
     CUSTOM_CONFIG,
@@ -34,11 +33,13 @@ from trs_filer.errors.exceptions import (
     BadRequest,
     InternalServerError,
     NotFound,
+    RemoteFileError,
 )
 from trs_filer.ga4gh.trs.endpoints.register_objects import (
     RegisterTool,
     RegisterToolVersion,
 )
+from trs_filer.remote_files import RemoteFile
 from trs_filer.custom_config import CustomConfig
 
 
@@ -470,21 +471,32 @@ class TestRegisterToolVersion:
         )
         _mock_collections(app)
 
-        class MockResponse:
-            text = MOCK_ID
+        calls = []
 
-            def __init__(*args, **kwargs):
-                pass
+        def _fetch(url, config):
+            calls.append((url, config))
+            return RemoteFile(content=MOCK_ID.encode())
 
-        monkeypatch.setattr('requests.get', MockResponse)
+        monkeypatch.setattr(
+            'trs_filer.ga4gh.trs.endpoints.register_objects'
+            '.fetch_remote_file',
+            _fetch,
+        )
         data = deepcopy(MOCK_VERSION_NO_ID)
         mock_file = deepcopy(MOCK_CONTAINER_FILE)
         del mock_file['file_wrapper']['content']
-        mock_file['file_wrapper']['url'] = MOCK_ID
+        mock_file['file_wrapper']['url'] = 'https://example.com/Dockerfile'
         with app.app_context():
             tool = RegisterToolVersion(data=data, id=MOCK_ID)
             tool.data['files'] = [mock_file]
             tool.process_files()
+            assert tool.data['files'][0]['file_wrapper']['content'] == (
+                MOCK_ID
+            )
+            assert calls == [(
+                'https://example.com/Dockerfile',
+                app.config.foca.custom.remote_files,
+            )]
 
     def test_process_files_no_content_invalid_url(self, monkeypatch):
         """Test for processing files with no content provided and an invalid
@@ -498,15 +510,16 @@ class TestRegisterToolVersion:
         _mock_collections(app)
 
         monkeypatch.setattr(
-            'requests.get',
-            lambda *args, **kwargs: _raise(requests.exceptions.ConnectionError)
+            'trs_filer.ga4gh.trs.endpoints.register_objects'
+            '.fetch_remote_file',
+            lambda *args, **kwargs: _raise(RemoteFileError('refused')),
         )
         data = deepcopy(MOCK_VERSION_NO_ID)
         mock_file = deepcopy(MOCK_CONTAINER_FILE)
         del mock_file['file_wrapper']['content']
-        mock_file['file_wrapper']['url'] = MOCK_ID
+        mock_file['file_wrapper']['url'] = 'https://example.com/Dockerfile'
         with app.app_context():
-            with pytest.raises(BadRequest):
+            with pytest.raises(RemoteFileError):
                 tool = RegisterToolVersion(data=data, id=MOCK_ID)
                 tool.data['files'] = [mock_file]
                 tool.process_files()

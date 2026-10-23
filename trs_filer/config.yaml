@@ -158,3 +158,20 @@ custom:
         # Whether tools may only be registered with existing tool classes;
         # if false, unknown tool classes are created
         validation: False
+    # Retrieval of file content from URLs: on registration, for files with a
+    # `url` but no `content`, and for zip archives of files without stored
+    # content. Only `https` is allowed (add `http` if needed); hosts must
+    # resolve to public addresses only (also after redirects), unless listed
+    # in `allowed_hosts` (host names, IP addresses or CIDR networks, e.g.,
+    # for local setups). Timeouts are in seconds (`connect_timeout` per
+    # address, `read_timeout` per read, `total_timeout` per file, including
+    # redirects; name resolution isn't limited), `max_size` in bytes.
+    # Proxy settings of the environment are not used
+    remote_files:
+        schemes: [https]
+        allowed_hosts: []
+        connect_timeout: 5
+        read_timeout: 10
+        total_timeout: 30
+        max_size: 1048576
+        max_redirects: 5

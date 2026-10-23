@@ -53,12 +53,14 @@ from trs_filer.ga4gh.trs.server import (
     toolsIdVersionsVersionIdTypeDescriptorRelativePathGet,
     toolsIdVersionsVersionIdTypeTestsGet,
 )
+from trs_filer.custom_config import CustomConfig
 from trs_filer.errors.exceptions import (
     BadRequest,
     InternalServerError,
     NotFound,
+    RemoteFileError,
 )
-from trs_filer.custom_config import CustomConfig
+from trs_filer.remote_files import RemoteFile
 
 
 # GET /toolClasses
@@ -988,114 +990,66 @@ def test_toolsIdVersionsVersionIdTypeFilesGet_zip_success_content():
                 assert zf.read(name).decode('utf-8') == 'content'
 
 
-def test_toolsIdVersionsVersionIdTypeFilesGet_zip_success_url(monkeypatch):
-    """Zip response pulls bytes via URL for files without inline content."""
-    class _Resp:
+def _app_with_url_file() -> Flask:
+    """App whose stored tool version has one CWL file with a URL only.
 
-        def __enter__(self):
-            return self
-
-        def __exit__(self, exc_type, exc, tb):
-            return False
-
-        def read(self):
-            return b'from-url'
-
-    monkeypatch.setattr(
-        'trs_filer.ga4gh.trs.server.urlopen', lambda url: _Resp())
-
+    Returns:
+        App.
+    """
     app = Flask(__name__)
     app.config.foca = Config(
-        db=MongoConfig(**MONGO_CONFIG)
+        db=MongoConfig(**MONGO_CONFIG),
+        custom=CustomConfig(**CUSTOM_CONFIG),
     )
     mock_resp = deepcopy(MOCK_TOOL_VERSION_ID)
     mock_resp['id'] = MOCK_ID
-    # Remove inline content for one selected CWL file to force URL path
     for f in mock_resp['versions'][0]['files']:
         if (f['type'] == 'CWL' and
                 f['tool_file']['file_type'] != 'CONTAINERFILE'):
             f['file_wrapper'].pop('content', None)
-            f['file_wrapper']['url'] = 'http://example.com/file.txt'
+            f['file_wrapper']['url'] = 'https://example.com/file.txt'
             break
     app.config.foca.db.dbs['trsStore'].collections['tools'] \
         .client = mongomock.MongoClient().db.collection
     app.config.foca.db.dbs['trsStore'].collections['tools'] \
         .client.insert_one(mock_resp)
+    return app
 
-    # Test zip functionality by directly accessing the file data
-    with app.app_context():
-        # Get the selected files data directly (mimicking zip creation logic)
-        db_coll_tools = (
-            app.config.foca.db.dbs['trsStore']
-            .collections['tools'].client
+
+def test_toolsIdVersionsVersionIdTypeFilesGet_zip_success_url(monkeypatch):
+    """Zip response retrieves files without stored content from their URLs,
+    as configured.
+    """
+    calls = []
+
+    def _fetch(url, config):
+        calls.append((url, config))
+        return RemoteFile(content=b'from-url')
+
+    monkeypatch.setattr(
+        'trs_filer.ga4gh.trs.server.fetch_remote_file', _fetch)
+    app = _app_with_url_file()
+
+    with app.test_request_context():
+        resp = toolsIdVersionsVersionIdTypeFilesGet.__wrapped__(
+            id=MOCK_ID,
+            version_id=MOCK_ID,
+            type="CWL",
+            format="zip",
         )
-        proj = {
-            '_id': False,
-            'versions': {'$elemMatch': {'id': MOCK_ID}},
-        }
-        data = db_coll_tools.find_one(
-            filter={'id': MOCK_ID},
-            projection=proj,
-        )
-
-        file_types = [
-            'OTHER',
-            'TEST_FILE',
-            'PRIMARY_DESCRIPTOR',
-            'SECONDARY_DESCRIPTOR',
-        ]
-        data = data['versions'][0]
-        selected_files = [
-            d for d in data['files']
-            if d['type'] == 'CWL' and d['tool_file']['file_type'] in file_types
-        ]
-
-        # Test zip creation logic with URL fetching
-        mem_zip = BytesIO()
-        with ZipFile(mem_zip, mode='w', compression=ZIP_DEFLATED) as zf:
-            for file_entry in selected_files:
-                path_in_zip = file_entry['tool_file']['path']
-                wrapper = file_entry.get('file_wrapper', {})
-                content_bytes = None
-                if 'content' in wrapper and wrapper['content'] is not None:
-                    content = wrapper['content']
-                    if isinstance(content, bytes):
-                        content_bytes = content
-                    elif isinstance(content, str):
-                        content_bytes = content.encode('utf-8')
-                    else:
-                        # Fallback: convert to string then encode
-                        content_bytes = str(content).encode('utf-8')
-                elif 'url' in wrapper and wrapper['url']:
-                    # Use mocked urlopen
-                    from trs_filer.ga4gh.trs.server import urlopen
-                    with urlopen(wrapper['url']) as resp:
-                        content_bytes = resp.read()
-                # Ensure we have bytes to write
-                if content_bytes is None:
-                    continue
-                zf.writestr(path_in_zip, content_bytes)
-
-        mem_zip.seek(0)
-        # Test the created zip
-        with ZipFile(mem_zip) as zf:
-            names = set(zf.namelist())
-            expected = {
-                'path_test_cwl',
-                'path_other_cwl',
-                'path_prim_desc_cwl',
-                'path_sec_desc_cwl',
-            }
-            assert names == expected
-            # One file should have content from URL
-            url_file_found = False
-            for name in expected:
-                content = zf.read(name)
-                if content == b'from-url':
-                    url_file_found = True
-                else:
-                    assert content.decode('utf-8') == 'content'
-            assert url_file_found, "Should have one file with URL content"
+        resp.direct_passthrough = False
+        with ZipFile(BytesIO(resp.get_data())) as zf:
+            contents = {name: zf.read(name) for name in zf.namelist()}
+    assert contents == {
+        'path_test_cwl': b'from-url',
+        'path_other_cwl': b'content',
+        'path_prim_desc_cwl': b'content',
+        'path_sec_desc_cwl': b'content',
+    }
+    assert calls == [(
+        'https://example.com/file.txt',
+        app.config.foca.custom.remote_files,
+    )]
 
 
 def test_toolsIdVersionsVersionIdTypeFilesGet_zip_missing_content_url_NotFound():  # noqa: E501
@@ -1128,30 +1082,14 @@ def test_toolsIdVersionsVersionIdTypeFilesGet_zip_missing_content_url_NotFound()
             )
 
 
-def test_toolsIdVersionsVersionIdTypeFilesGet_zip_urlopen_exception_NotFound(monkeypatch):  # noqa: E501
-    """Zip building fails when URL fetching raises an exception."""
-    def _raise(url):
-        raise Exception('network error')
+def test_toolsIdVersionsVersionIdTypeFilesGet_zip_fetch_error_NotFound(monkeypatch):  # noqa: E501
+    """Zip building fails when a file can't be retrieved from its URL."""
+    def _raise(url, config):
+        raise RemoteFileError('refused')
 
-    monkeypatch.setattr('trs_filer.ga4gh.trs.server.urlopen', _raise)
-
-    app = Flask(__name__)
-    app.config.foca = Config(
-        db=MongoConfig(**MONGO_CONFIG)
-    )
-    mock_resp = deepcopy(MOCK_TOOL_VERSION_ID)
-    mock_resp['id'] = MOCK_ID
-    # Force URL branch by removing inline content for one file
-    for f in mock_resp['versions'][0]['files']:
-        if (f['type'] == 'CWL' and
-                f['tool_file']['file_type'] != 'CONTAINERFILE'):
-            f['file_wrapper'].pop('content', None)
-            f['file_wrapper']['url'] = 'http://example.com/file.txt'
-            break
-    app.config.foca.db.dbs['trsStore'].collections['tools'] \
-        .client = mongomock.MongoClient().db.collection
-    app.config.foca.db.dbs['trsStore'].collections['tools'] \
-        .client.insert_one(mock_resp)
+    monkeypatch.setattr(
+        'trs_filer.ga4gh.trs.server.fetch_remote_file', _raise)
+    app = _app_with_url_file()
 
     with app.app_context():
         with pytest.raises(NotFound):

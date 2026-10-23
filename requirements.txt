@@ -6,4 +6,8 @@ connexion>=2.15.1,<3
 # which `scripts/check_release_pins.py` enforces
 foca @ git+https://github.com/elixir-cloud-aai/foca@29af8a64a2b0aae21845fa37a4a54076811f62bf
 gunicorn==22.0.0
+# Remote files are retrieved with connection classes of urllib3 2.x
+# (`trs_filer/remote_files.py`)
+requests>=2.31,<3
+urllib3>=2.2,<3
 yq==3.4.3

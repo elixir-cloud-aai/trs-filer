@@ -18,8 +18,19 @@ __all__ = [
     "BadRequest",
     "InternalServerError",
     "NotFound",
+    "RemoteFileError",
     "exceptions",
 ]
+
+
+class RemoteFileError(BadRequest):
+    """The content of a file could not be retrieved from its URL.
+
+    Raised if retrieval fails, or isn't allowed by the configuration
+    (`custom.remote_files`). The description says why; it is logged, not
+    returned to clients.
+    """
+
 
 # Problem details (RFC 9457) of exceptions raised in app context, served by
 # FOCA (`exceptions.mapping` in `config.yaml`); exceptions not listed get
@@ -38,6 +49,16 @@ exceptions = {
     BadRequest: {
         "title": "Bad request",
         "detail": "The request is malformed.",
+        "status": 400,
+    },
+    RemoteFileError: {
+        "title": "Bad request",
+        "detail": (
+            "The content of a file could not be retrieved from its URL. "
+            "Check that the URL is reachable and uses an allowed scheme and "
+            "destination, and that the content doesn't exceed the size "
+            "limit; or provide the content instead."
+        ),
         "status": 400,
     },
     ExtraParameterProblem: {
