@@ -115,7 +115,8 @@ def _chart_dependencies(path: Path) -> list[dict[str, str] | None]:
             key, _, value = line.split("#", 1)[0].partition(":")
             in_dependencies = key.strip().strip("\"'") == "dependencies"
             item_indent = None
-            if in_dependencies and value.strip():
+            # An empty list (or map) has no dependencies to check
+            if in_dependencies and value.strip() not in ("", "[]", "{}"):
                 dependencies.append(None)
             continue
         if not in_dependencies or not line.strip() or line.lstrip()[0] == "#":

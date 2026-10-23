@@ -220,6 +220,21 @@ def test_optional_dependencies(tmp_path: Path) -> None:
     ]
 
 
+@pytest.mark.parametrize("dependencies", ["[]", "{}", "[]  # none"])
+def test_chart_dependencies_empty(tmp_path: Path, dependencies: str) -> None:
+    """Charts with an empty list (or map) of dependencies have no findings.
+
+    Args:
+        tmp_path: Directory of the repository.
+        dependencies: The empty dependencies, in flow style.
+    """
+    root = _write(tmp_path)
+    (root / "deployment" / "Chart.yaml").write_text(
+        f"name: app\ndependencies: {dependencies}\n"
+    )
+    assert check_release_pins.find_dev_pins(root) == []
+
+
 @pytest.mark.parametrize(
     "dependencies",
     [
