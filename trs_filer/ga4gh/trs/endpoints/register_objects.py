@@ -3,19 +3,17 @@
 from collections import defaultdict
 import logging
 import string  # noqa: F401
-import socket
 from typing import (Dict, Optional)
-import urllib3
 
 from flask import (current_app)
 from pymongo.errors import DuplicateKeyError
-import requests
 
 from trs_filer.errors.exceptions import (
     BadRequest,
     InternalServerError,
     NotFound,
 )
+from trs_filer.remote_files import fetch_remote_file
 from trs_filer.ga4gh.trs.endpoints.register_tool_classes import (
     RegisterToolClass
 )
@@ -357,21 +355,12 @@ class RegisterToolVersion:
                 'url' in _file['file_wrapper'] and
                 'content' not in _file['file_wrapper']
             ):
+                # Failures raise `RemoteFileError` and are logged
                 _w = _file['file_wrapper']
-                try:
-                    _w['content'] = requests.get(_w['url']).text
-                except (
-                    requests.exceptions.ConnectionError,
-                    requests.exceptions.MissingSchema,
-                    socket.gaierror,
-                    urllib3.exceptions.NewConnectionError,
-                ):
-                    logger.error(
-                        "Could not retrieve content via the URL "
-                        f"'{_w['url']}' provided for file "
-                        f"'{_file['tool_file']['path']}'."
-                    )
-                    raise BadRequest
+                _w['content'] = fetch_remote_file(
+                    url=_w['url'],
+                    config=current_app.config.foca.custom.remote_files,
+                ).text
 
             # validate descriptor file types
             descriptor_set = (

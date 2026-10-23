@@ -1,9 +1,11 @@
 """Custom app config models."""
 
+import ipaddress
 import string
-from typing import Optional
+from typing import List, Literal, Optional, Union
 
 from foca.models.config import FOCABaseConfig
+from pydantic import Field, validator
 
 
 class ServiceConfig(FOCABaseConfig):
@@ -301,6 +303,136 @@ class ToolClassConfig(FOCABaseConfig):
     validation: bool = False
 
 
+IPNetwork = Union[ipaddress.IPv4Network, ipaddress.IPv6Network]
+
+
+def _parse_network(host: str) -> Optional[IPNetwork]:
+    """Parse an IP address or network (CIDR notation).
+
+    Args:
+        host: Host name, IP address (IPv6 addresses also in brackets) or IP
+            network.
+
+    Returns:
+        IP network (addresses as networks of one address), or `None` for
+        host names.
+    """
+    if host.startswith("[") and host.endswith("]"):
+        host = host[1:-1]
+    try:
+        return ipaddress.ip_network(host, strict=False)
+    except ValueError:
+        return None
+
+
+class RemoteFilesConfig(FOCABaseConfig):
+    """Model for retrieving the content of files from their URLs.
+
+    When a tool version is registered with files that have a URL but no
+    content, the content is retrieved from the URL and stored; files without
+    stored content are retrieved when served as a zip archive.
+
+    Args:
+        schemes: Allowed URL schemes: `https` and, if needed, `http`.
+        allowed_hosts: Host names (compared case-insensitively, without a
+            trailing dot), IP addresses (IPv6 addresses also in brackets)
+            and IP networks (CIDR notation) that may be retrieved from even
+            though they are not public (e.g., for local setups). Other
+            destinations must resolve to public addresses only: loopback,
+            private, link-local, reserved and multicast addresses are
+            refused.
+        connect_timeout: Timeout for connecting to each address of a host,
+            in seconds.
+        read_timeout: Timeout for each read from a connection, in seconds.
+        total_timeout: Timeout for retrieving a file, including redirects,
+            in seconds; name resolution isn't limited by the timeouts.
+        max_size: Maximum size of retrieved content, in bytes.
+        max_redirects: Maximum number of redirects followed per file.
+
+    Attributes:
+        schemes: Allowed URL schemes.
+        allowed_hosts: Host names, IP addresses and IP networks exempt from
+            the destination checks, normalized.
+        connect_timeout: Timeout for connecting, in seconds.
+        read_timeout: Timeout for each read from a connection, in seconds.
+        total_timeout: Timeout for retrieving a file, in seconds.
+        max_size: Maximum size of retrieved content, in bytes.
+        max_redirects: Maximum number of redirects followed per file.
+
+    Raises:
+        pydantic.ValidationError: No scheme is allowed, an allowed host is
+            empty, or a timeout or limit is out of range.
+
+    Example:
+        >>> RemoteFilesConfig(allowed_hosts=['files.local', '10.0.0.0/8'])
+        RemoteFilesConfig(schemes=['https'], allowed_hosts=['files.local', '1
+        0.0.0.0/8'], connect_timeout=5.0, read_timeout=10.0, total_timeout=30
+        .0, max_size=1048576, max_redirects=5)
+    """
+
+    schemes: List[Literal["http", "https"]] = ["https"]
+    allowed_hosts: List[str] = []
+    connect_timeout: float = Field(5.0, gt=0)
+    read_timeout: float = Field(10.0, gt=0)
+    total_timeout: float = Field(30.0, gt=0)
+    max_size: int = Field(1048576, gt=0)
+    max_redirects: int = Field(5, ge=0)
+
+    @validator("schemes")
+    def check_schemes(cls, value: List[str]) -> List[str]:
+        """Check that at least one scheme is allowed.
+
+        Args:
+            value: Allowed schemes.
+
+        Returns:
+            Allowed schemes.
+
+        Raises:
+            ValueError: No scheme is allowed.
+        """
+        if not value:
+            raise ValueError("At least one scheme must be allowed")
+        return value
+
+    @validator("allowed_hosts")
+    def normalize_allowed_hosts(cls, value: List[str]) -> List[str]:
+        """Normalize allowed hosts: IP networks in canonical form (without
+        brackets), host names lowercase and without a trailing dot.
+
+        Args:
+            value: Allowed hosts.
+
+        Returns:
+            Normalized allowed hosts.
+
+        Raises:
+            ValueError: An allowed host is empty.
+        """
+        hosts = []
+        for host in value:
+            host = host.strip()
+            network = _parse_network(host)
+            if network is not None:
+                hosts.append(str(network))
+                continue
+            host = host.rstrip(".").lower()
+            if not host:
+                raise ValueError("Allowed hosts must not be empty")
+            hosts.append(host)
+        return hosts
+
+    @property
+    def allowed_networks(self) -> List[IPNetwork]:
+        """IP networks of the allowed hosts.
+
+        Returns:
+            Allowed IP networks (IP addresses as networks of one address).
+        """
+        networks = (_parse_network(host) for host in self.allowed_hosts)
+        return [network for network in networks if network is not None]
+
+
 class CustomConfig(FOCABaseConfig):
     """Model for custom configuration parameters.
 
@@ -310,6 +442,7 @@ class CustomConfig(FOCABaseConfig):
         tool: Tool config parameters.
         version: Version config parameters.
         toolclass: Tool Class config parameters.
+        remote_files: Parameters for retrieving files from their URLs.
 
     Attributes:
         service: Service config parameters.
@@ -317,9 +450,11 @@ class CustomConfig(FOCABaseConfig):
         tool: Tool config parameters.
         version: Version config parameters.
         toolclass: Tool Class config parameters.
+        remote_files: Parameters for retrieving files from their URLs.
     """
     service: ServiceConfig
     service_info: ServiceInfoConfig
     tool: ToolConfig = ToolConfig()
     version: VersionConfig = VersionConfig()
     toolclass: ToolClassConfig = ToolClassConfig()
+    remote_files: RemoteFilesConfig = RemoteFilesConfig()
