@@ -1,0 +1,38 @@
+# Editor settings (https://editorconfig.org), consistent with the pre-commit
+# hooks (end-of-file-fixer, trailing-whitespace) and ruff
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+# Line length as in ruff (`line-length` in `pyproject.toml`)
+[*.{py,pyi}]
+indent_style = space
+indent_size = 4
+max_line_length = 88
+
+[*.toml]
+indent_style = space
+indent_size = 4
+
+# Also Helm charts (templates and helpers)
+[*.{yaml,yml,json,tpl}]
+indent_style = space
+indent_size = 2
+
+# Two trailing spaces are a hard line break in Markdown; prefer a backslash
+[*.md]
+trim_trailing_whitespace = false
+
+# Vendored GA4GH specifications are kept as published (as in the pre-commit
+# hooks)
+[trs_filer/api/{20200131.11d2c12,20200404.0aa5443,20200728.1059c7c,20230406.1dd4bf8}.*]
+charset = unset
+end_of_line = unset
+insert_final_newline = unset
+trim_trailing_whitespace = unset
+indent_style = unset
+indent_size = unset
