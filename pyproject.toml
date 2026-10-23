@@ -4,6 +4,10 @@
 requires = ["setuptools>=77", "setuptools-scm>=8"]
 build-backend = "setuptools.build_meta"
 
+[tool.ruff]
+line-length = 88
+target-version = "py313"
+
 [tool.coverage.run]
 source = ["trs_filer", "scripts"]
 
@@ -58,6 +62,9 @@ dev = [
     "mongomock>=4.3",
     "packaging>=26.3",
     "pytest>=9.1",
+    # TEMPORARY: the formatter, until pre-commit runs it (#106); ruff's
+    # minor versions change the format style, so the minor is pinned
+    "ruff>=0.17.1,<0.18",
     # Used by the tests; builds use `build-system.requires`
     "setuptools-scm>=10.3",
 ]

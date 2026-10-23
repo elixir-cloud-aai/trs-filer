@@ -3,3 +3,5 @@
 [flake8]
 exclude = .git,.eggs,build,venv,env
 max-line-length = 88
+# Slice spacing of ruff format
+extend-ignore = E203
