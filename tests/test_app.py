@@ -80,9 +80,7 @@ def test_service_info_not_writable(
         "org.example.trs-filer"
     )
     for db_name in mongo_client.list_database_names():
-        assert "service_info" not in (
-            mongo_client[db_name].list_collection_names()
-        )
+        assert "service_info" not in (mongo_client[db_name].list_collection_names())
 
 
 class _Records(logging.Handler):
@@ -346,8 +344,6 @@ def test_main(
         monkeypatch: Patches of the development server.
     """
     ports: list[int] = []
-    monkeypatch.setattr(
-        App, "run", lambda self, port: ports.append(port), raising=True
-    )
+    monkeypatch.setattr(App, "run", lambda self, port: ports.append(port), raising=True)
     main()
     assert ports == [8080]

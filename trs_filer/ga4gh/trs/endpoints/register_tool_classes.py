@@ -1,7 +1,7 @@
 """Controller for registering new objects."""
 
 import logging
-from typing import (Dict, Optional)
+from typing import Dict, Optional
 
 from foca.utils.misc import generate_id
 from pymongo.errors import DuplicateKeyError
@@ -55,7 +55,7 @@ class RegisterToolClass:
         """
         conf = get_custom_config()
         self.data = data
-        self.data['id'] = None if id is None else id
+        self.data["id"] = None if id is None else id
         self.replace = True
         self.id_charset = conf.toolclass.id.charset
         self.id_length = int(conf.toolclass.id.length)
@@ -64,7 +64,7 @@ class RegisterToolClass:
         self.host_name = conf.service.external_host
         self.external_port = conf.service.external_port
         self.api_path = conf.service.api_path
-        self.db_coll_classes = get_collection('toolclasses')
+        self.db_coll_classes = get_collection("toolclasses")
 
     def register_metadata(self) -> None:
         """Register toolClass with TRS.
@@ -77,24 +77,21 @@ class RegisterToolClass:
         while i < 10:
             i += 1
             # set random ID unless ID is provided
-            if self.data['id'] is None:
+            if self.data["id"] is None:
                 self.replace = False
-                self.data['id'] = generate_id(
-                    charset=self.id_charset,
-                    length=self.id_length
+                self.data["id"] = generate_id(
+                    charset=self.id_charset, length=self.id_length
                 )
 
             if self.replace:
                 # replace tool class in database
                 result = self.db_coll_classes.replace_one(
-                    filter={'id': self.data['id']},
+                    filter={"id": self.data["id"]},
                     replacement=self.data,
                 )
                 # verify replacement
                 if result.modified_count:
-                    logger.info(
-                        f"Replaced tool class with id '{self.data['id']}'."
-                    )
+                    logger.info(f"Replaced tool class with id '{self.data['id']}'.")
                     break
 
             # insert tool class into database

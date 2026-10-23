@@ -244,15 +244,18 @@ class TestConfig:
     def test_allowed_hosts_normalized(self) -> None:
         """Host names are lowercased, networks written canonically."""
         config = RemoteFilesConfig(
-            allowed_hosts=[
-                " Files.Example. ", "::1", "[fd00::1]", "10.1.2.3/8"
-            ]
+            allowed_hosts=[" Files.Example. ", "::1", "[fd00::1]", "10.1.2.3/8"]
         )
         assert config.allowed_hosts == [
-            "files.example", "::1/128", "fd00::1/128", "10.0.0.0/8"
+            "files.example",
+            "::1/128",
+            "fd00::1/128",
+            "10.0.0.0/8",
         ]
         assert [str(net) for net in config.allowed_networks] == [
-            "::1/128", "fd00::1/128", "10.0.0.0/8"
+            "::1/128",
+            "fd00::1/128",
+            "10.0.0.0/8",
         ]
 
     @pytest.mark.parametrize(
@@ -441,9 +444,7 @@ class TestRemoteFile:
 class TestFetchRemoteFile:
     """Tests for `fetch_remote_file()`."""
 
-    def test_success(
-        self, network: FakeNetwork, config: RemoteFilesConfig
-    ) -> None:
+    def test_success(self, network: FakeNetwork, config: RemoteFilesConfig) -> None:
         """Content is retrieved from public destinations, with timeouts.
 
         Args:
@@ -462,9 +463,7 @@ class TestFetchRemoteFile:
         assert b"Host: files.example.org\r\n" in request
         assert b"Accept-Encoding: identity\r\n" in request
 
-    def test_requoted(
-        self, network: FakeNetwork, config: RemoteFilesConfig
-    ) -> None:
+    def test_requoted(self, network: FakeNetwork, config: RemoteFilesConfig) -> None:
         """Characters that URLs only allow percent-encoded are encoded.
 
         Args:
@@ -509,9 +508,7 @@ class TestFetchRemoteFile:
             "not a url",
         ],
     )
-    def test_scheme_or_url_refused(
-        self, network: FakeNetwork, url: str
-    ) -> None:
+    def test_scheme_or_url_refused(self, network: FakeNetwork, url: str) -> None:
         """URLs of other schemes than `https` (default), and invalid URLs,
         are refused without connecting.
 
@@ -640,16 +637,12 @@ class TestFetchRemoteFile:
         """
         network.hosts["files.local"] = [PRIVATE]
         network.responses[PRIVATE] = _response()
-        config = RemoteFilesConfig(
-            schemes=["http"], allowed_hosts=["files.local"]
+        config = RemoteFilesConfig(schemes=["http"], allowed_hosts=["files.local"])
+        assert (
+            fetch_remote_file("http://files.local/a.cwl", config).content == b"content"
         )
-        assert fetch_remote_file(
-            "http://files.local/a.cwl", config
-        ).content == b"content"
 
-    def test_redirect(
-        self, network: FakeNetwork, config: RemoteFilesConfig
-    ) -> None:
+    def test_redirect(self, network: FakeNetwork, config: RemoteFilesConfig) -> None:
         """Redirects are followed, also relative ones.
 
         Args:
@@ -674,7 +667,9 @@ class TestFetchRemoteFile:
         file = fetch_remote_file("http://a.example.org/a.cwl", config)
         assert file.content == b"redirected"
         assert [address for address, _, _ in network.connected] == [
-            PUBLIC, PUBLIC_6, PUBLIC_6
+            PUBLIC,
+            PUBLIC_6,
+            PUBLIC_6,
         ]
         assert network.sockets[-1].sent.startswith(b"GET /b.cwl ")
 
@@ -699,9 +694,7 @@ class TestFetchRemoteFile:
             fetch_remote_file("http://files.example.org/a.cwl", config)
         assert [address for address, _, _ in network.connected] == [PUBLIC]
 
-    @pytest.mark.parametrize(
-        "location", ["file:///etc/hostname", f"https://{PUBLIC}/"]
-    )
+    @pytest.mark.parametrize("location", ["file:///etc/hostname", f"https://{PUBLIC}/"])
     def test_redirect_to_refused_scheme(
         self, network: FakeNetwork, location: str
     ) -> None:
@@ -721,9 +714,7 @@ class TestFetchRemoteFile:
             fetch_remote_file(f"http://{PUBLIC}/", config)
         assert len(network.connected) == 1
 
-    @pytest.mark.parametrize(
-        "location", ["http://[x/", "//[", "http://a]b/"]
-    )
+    @pytest.mark.parametrize("location", ["http://[x/", "//[", "http://a]b/"])
     def test_redirect_malformed(
         self, network: FakeNetwork, config: RemoteFilesConfig, location: str
     ) -> None:
@@ -751,8 +742,8 @@ class TestFetchRemoteFile:
             config: Settings for retrieving files.
         """
         response = _response(length=False).replace(
-            b"Connection: close", "Content-Length: \u00b2".encode("latin-1")
-            + b"\r\nConnection: close"
+            b"Connection: close",
+            "Content-Length: \u00b2".encode("latin-1") + b"\r\nConnection: close",
         )
         network.responses[PUBLIC] = response
         file = fetch_remote_file(f"http://{PUBLIC}/", config)
@@ -771,16 +762,13 @@ class TestFetchRemoteFile:
         """
         times = [0.0, 1.0, 1.5]
         monkeypatch.setattr(
-            remote_files, "monotonic",
+            remote_files,
+            "monotonic",
             lambda: times.pop(0) if len(times) > 1 else times[0],
         )
         network.responses[PUBLIC] = _response()
-        config = RemoteFilesConfig(
-            schemes=["http"], total_timeout=3, connect_timeout=5
-        )
-        assert fetch_remote_file(
-            f"http://{PUBLIC}/", config
-        ).content == b"content"
+        config = RemoteFilesConfig(schemes=["http"], total_timeout=3, connect_timeout=5)
+        assert fetch_remote_file(f"http://{PUBLIC}/", config).content == b"content"
         assert network.connected == [(PUBLIC, 80, 1.5)]
 
     def test_total_timeout_redirects(
@@ -796,7 +784,8 @@ class TestFetchRemoteFile:
         """
         times = [0.0, 1.0, 1.0, 100.0]
         monkeypatch.setattr(
-            remote_files, "monotonic",
+            remote_files,
+            "monotonic",
             lambda: times.pop(0) if len(times) > 1 else times[0],
         )
         network.responses[PUBLIC] = _response(
@@ -837,13 +826,9 @@ class TestFetchRemoteFile:
         with pytest.raises(RemoteFileError):
             fetch_remote_file(f"http://{PUBLIC}/", config)
         network.responses[PUBLIC] = _response(body=b"x" * 10, length=length)
-        assert fetch_remote_file(
-            f"http://{PUBLIC}/", config
-        ).content == b"x" * 10
+        assert fetch_remote_file(f"http://{PUBLIC}/", config).content == b"x" * 10
 
-    @pytest.mark.parametrize(
-        "encoding", ["gzip", "deflate", "br", "x-custom"]
-    )
+    @pytest.mark.parametrize("encoding", ["gzip", "deflate", "br", "x-custom"])
     def test_content_encoding_refused(
         self, network: FakeNetwork, config: RemoteFilesConfig, encoding: str
     ) -> None:
@@ -854,9 +839,7 @@ class TestFetchRemoteFile:
             config: Settings for retrieving files.
             encoding: Content encoding.
         """
-        network.responses[PUBLIC] = _response(
-            headers={"Content-Encoding": encoding}
-        )
+        network.responses[PUBLIC] = _response(headers={"Content-Encoding": encoding})
         with pytest.raises(RemoteFileError):
             fetch_remote_file(f"http://{PUBLIC}/", config)
 
@@ -869,12 +852,8 @@ class TestFetchRemoteFile:
             network: Fake network.
             config: Settings for retrieving files.
         """
-        network.responses[PUBLIC] = _response(
-            headers={"Content-Encoding": "Identity"}
-        )
-        assert fetch_remote_file(
-            f"http://{PUBLIC}/", config
-        ).content == b"content"
+        network.responses[PUBLIC] = _response(headers={"Content-Encoding": "Identity"})
+        assert fetch_remote_file(f"http://{PUBLIC}/", config).content == b"content"
 
     @pytest.mark.parametrize(
         "status",
@@ -947,9 +926,9 @@ class TestFetchRemoteFile:
         network.hosts["files.example.org"] = [PUBLIC, PUBLIC_6]
         network.responses[PUBLIC] = ConnectionRefusedError()
         network.responses[PUBLIC_6] = _response()
-        assert fetch_remote_file(
-            "http://files.example.org/", config
-        ).content == b"content"
+        assert (
+            fetch_remote_file("http://files.example.org/", config).content == b"content"
+        )
 
     def test_no_addresses(
         self, network: FakeNetwork, config: RemoteFilesConfig
@@ -1021,8 +1000,7 @@ class TestFetchRemoteFile:
         reason = exc_info.value.description
         assert reason.startswith("InvalidURL: Not an HTTP(S) URL")
         assert [record.getMessage() for record in caplog.records] == [
-            "Could not retrieve file from URL 'ftp://files.example.org/': "
-            f"{reason!r}"
+            f"Could not retrieve file from URL 'ftp://files.example.org/': {reason!r}"
         ]
 
 
@@ -1152,9 +1130,7 @@ class TestRedact:
 class TestTotalTimeout:
     """Tests for the total timeout, with slowly sending servers."""
 
-    @pytest.mark.parametrize(
-        "length", [True, False], ids=["length", "no-length"]
-    )
+    @pytest.mark.parametrize("length", [True, False], ids=["length", "no-length"])
     def test_slow_body(self, slow_server: list[bytes], length: bool) -> None:
         """Bodies sent slowly fail at the total timeout, also within reads
         and without declared length.
@@ -1165,9 +1141,7 @@ class TestTotalTimeout:
         """
         headers = _response(body=b"x" * 100, length=length)[:-100]
         slow_server.extend([headers] + [b"x"] * 100)
-        config = RemoteFilesConfig(
-            schemes=["http"], read_timeout=1, total_timeout=0.3
-        )
+        config = RemoteFilesConfig(schemes=["http"], read_timeout=1, total_timeout=0.3)
         start = time.monotonic()
         with pytest.raises(RemoteFileError) as exc_info:
             fetch_remote_file("http://slow.example.org/", config)
@@ -1181,9 +1155,7 @@ class TestTotalTimeout:
             slow_server: Parts of the response to send.
         """
         slow_server.extend(bytes([byte]) for byte in _response())
-        config = RemoteFilesConfig(
-            schemes=["http"], read_timeout=1, total_timeout=0.3
-        )
+        config = RemoteFilesConfig(schemes=["http"], read_timeout=1, total_timeout=0.3)
         start = time.monotonic()
         with pytest.raises(RemoteFileError):
             fetch_remote_file("http://slow.example.org/", config)
@@ -1197,9 +1169,7 @@ class TestTotalTimeout:
         """
         slow_server.extend([_response(body=b"abc")[:-3], b"a", b"bc"])
         config = RemoteFilesConfig(schemes=["http"], total_timeout=5)
-        assert fetch_remote_file(
-            "http://slow.example.org/", config
-        ).content == b"abc"
+        assert fetch_remote_file("http://slow.example.org/", config).content == b"abc"
 
 
 class TestDeadline:

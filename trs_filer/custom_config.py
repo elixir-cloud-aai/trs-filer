@@ -35,6 +35,7 @@ class ServiceConfig(FOCABaseConfig):
         ServiceConfig(url_prefix='https', external_host='trs.example.org', ext
         ernal_port=443, api_path='ga4gh/trs/v2')
     """
+
     url_prefix: str = "https"
     external_host: Optional[str] = None
     external_port: Optional[int] = None
@@ -104,6 +105,7 @@ class MetaVersionConfig(FOCABaseConfig):
         init: Start index for the versioning. Defaults to `1`.
         increment: Incremental delta for the next version. Defaults to `1`.
     """
+
     init: int = 1
     increment: int = 1
 
@@ -133,6 +135,7 @@ class ToolConfig(FOCABaseConfig):
         ToolConfig(id=IdConfig(charset='abcdefghijklmnopqrstuvwxyz0123456789',
          length=6), meta_version=MetaVersionConfig(init=1, increment=1))
     """
+
     id: IdConfig = Field(default_factory=IdConfig)
     meta_version: MetaVersionConfig = Field(default_factory=MetaVersionConfig)
 
@@ -162,6 +165,7 @@ class VersionConfig(FOCABaseConfig):
         VersionConfig(id=IdConfig(charset='abcdefghijklmnopqrstuvwxyz012345678
         9', length=6), meta_version=MetaVersionConfig(init=1, increment=1))
     """
+
     id: IdConfig = Field(default_factory=IdConfig)
     meta_version: MetaVersionConfig = Field(default_factory=MetaVersionConfig)
 
@@ -197,6 +201,7 @@ class ToolClassConfig(FOCABaseConfig):
         789', length=6), meta_version=MetaVersionConfig(init=1, increment=1),
         validation=False)
     """
+
     id: IdConfig = Field(default_factory=IdConfig)
     meta_version: MetaVersionConfig = Field(default_factory=MetaVersionConfig)
     validation: bool = False
@@ -373,10 +378,9 @@ class CustomConfig(FOCABaseConfig):
         toolclass: Tool Class config parameters.
         remote_files: Parameters for retrieving files from their URLs.
     """
+
     service: ServiceConfig
     tool: ToolConfig = Field(default_factory=ToolConfig)
     version: VersionConfig = Field(default_factory=VersionConfig)
     toolclass: ToolClassConfig = Field(default_factory=ToolClassConfig)
-    remote_files: RemoteFilesConfig = Field(
-        default_factory=RemoteFilesConfig
-    )
+    remote_files: RemoteFilesConfig = Field(default_factory=RemoteFilesConfig)

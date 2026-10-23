@@ -63,11 +63,7 @@ def _package_data() -> list[str]:
     config = yaml.safe_load(CONFIG_FILE.read_text())
     return [
         "config.yaml",
-        *(
-            path
-            for spec in config["api"]["specs"].values()
-            for path in spec["path"]
-        ),
+        *(path for spec in config["api"]["specs"].values() for path in spec["path"]),
     ]
 
 
@@ -80,9 +76,7 @@ def test_package_data() -> None:
     for path in files:
         assert (PACKAGE / path).is_file(), path
         # setuptools matches the patterns from the package directory
-        assert any(
-            fnmatch.fnmatchcase(path, pattern) for pattern in patterns
-        ), path
+        assert any(fnmatch.fnmatchcase(path, pattern) for pattern in patterns), path
 
 
 def test_wheel_contents(tmp_path: Path) -> None:
@@ -138,9 +132,7 @@ def _foca_requirement() -> Requirement:
     pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text())
     (foca,) = [
         requirement
-        for requirement in map(
-            Requirement, pyproject["project"]["dependencies"]
-        )
+        for requirement in map(Requirement, pyproject["project"]["dependencies"])
         if requirement.name == "foca"
     ]
     return foca
@@ -182,9 +174,7 @@ def test_base_image_foca() -> None:
             r"@(?P<sha>[0-9a-f]{40})",
             foca.url,
         )
-        assert commit, (
-            f"FOCA must be pinned to a full commit SHA, not {foca.url}"
-        )
+        assert commit, f"FOCA must be pinned to a full commit SHA, not {foca.url}"
         assert re.fullmatch(r"[0-9]{8}", tag), (
             "A FOCA commit needs FOCA's development image (tagged by date)"
         )
@@ -218,9 +208,7 @@ def test_python_version() -> None:
     ]
     assert classifiers == [image]
     workflows = sorted((ROOT / ".github" / "workflows").glob("*"))
-    assert [workflow.suffix for workflow in workflows] == [".yaml"] * len(
-        workflows
-    )
+    assert [workflow.suffix for workflow in workflows] == [".yaml"] * len(workflows)
     for workflow in workflows:
         jobs = yaml.safe_load(workflow.read_text())["jobs"]
         for name, job in jobs.items():
