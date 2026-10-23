@@ -1134,6 +1134,9 @@ class TestRedact:
             ("https://h.example/a", "'https://h.example/a'"),
             ("https://u:p@h.example/a@b", "'https://***@h.example/a@b'"),
             ("https://h.example/a\nb", "'https://h.example/a\\nb'"),
+            ("https://u@h.example", "'https://***@h.example'"),
+            ("https://h.example?q=a@b", "'https://h.example?q=a@b'"),
+            ("no-scheme@h.example", "'no-scheme@h.example'"),
         ],
     )
     def test_redact(self, url: str, redacted: str) -> None:

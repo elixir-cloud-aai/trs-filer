@@ -522,7 +522,13 @@ def _redact(url: str) -> str:
     Returns:
         URL without user info, quoted with control characters escaped.
     """
-    return repr(re.sub(r"(?<=://)[^/?#]*@", "***@", url, count=1))
+    scheme, separator, rest = url.partition("://")
+    if separator:
+        ends = [index for index in map(rest.find, "/?#") if index >= 0]
+        at = rest.rfind("@", 0, min(ends, default=len(rest)))
+        if at >= 0:
+            url = f"{scheme}{separator}***@{rest[at + 1:]}"
+    return repr(url)
 
 
 def _read_limited(response: requests.Response, max_size: int) -> bytes:
