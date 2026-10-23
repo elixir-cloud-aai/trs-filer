@@ -35,14 +35,14 @@ SEMVER = r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)"
 NAME = r"^\s*[A-Za-z0-9][A-Za-z0-9._-]*\s*(\[[^\]]*\])?"
 # A requirement that is a direct reference, e.g., `foca @ git+https://...`
 DIRECT_REFERENCE = re.compile(NAME + r"\s*@")
-# A requirement given as a URL, path or archive, without name (e.g.,
-# `git+https://...`, `./foca`, `foca-0.17.0rc1-py3-none-any.whl`), or an
-# option of a requirements file (e.g., `-e`, `-r`), which the check can't
-# read
-UNNAMED = re.compile(
-    r"^\s*([-./]|[A-Za-z][A-Za-z0-9+.-]*://|git\+)"
-    r"|\.(whl|zip|tar\.gz|tar\.bz2|tgz)\s*(;.*)?$"
-)
+# A requirement given as a URL or path, without name (e.g.,
+# `git+https://...`, `./foca`), or an option of a requirements file (e.g.,
+# `-e`, `-r`), which the check can't read
+UNNAMED = re.compile(r"^\s*([-./]|[A-Za-z][A-Za-z0-9+.-]*://|git\+)")
+# An archive file name (e.g., `foca-0.17.0rc1-py3-none-any.whl`), as the
+# first token of a requirement (before options, markers or a URL fragment),
+# which the check can't read either
+ARCHIVE = re.compile(r"\.(whl|zip|tar(\.(gz|bz2|xz))?|tgz)$", re.IGNORECASE)
 # A pre-release or development version (PEP 440) in a version specifier,
 # e.g., `0.17.0rc1`, `1.0.dev0`
 PRE_RELEASE = re.compile(
@@ -135,7 +135,9 @@ def find_dev_pins(root: Path) -> list[str]:
                     f"{name}: requirement '{requirement}' is a direct "
                     "reference"
                 )
-            elif UNNAMED.search(requirement):
+            elif UNNAMED.match(requirement) or ARCHIVE.search(
+                re.split(r"[\s;#]", requirement, maxsplit=1)[0]
+            ):
                 pins.append(
                     f"{name}: requirement '{requirement}' can't be checked"
                 )

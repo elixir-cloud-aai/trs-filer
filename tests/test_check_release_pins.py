@@ -118,6 +118,20 @@ def test_release_pins(tmp_path: Path) -> None:
             "can't be checked",
         ),
         (
+            {
+                "requirements": (
+                    "FOCA-0.17.0RC1.TAR.GZ --hash=sha256:" + "0" * 64 + "\n"
+                )
+            },
+            "requirements.txt: requirement 'FOCA-0.17.0RC1.TAR.GZ "
+            f"--hash=sha256:{'0' * 64}' can't be checked",
+        ),
+        (
+            {"requirements": "foca-0.17.0rc1-py3-none-any.whl#egg=foca\n"},
+            "requirements.txt: requirement "
+            "'foca-0.17.0rc1-py3-none-any.whl#egg=foca' can't be checked",
+        ),
+        (
             {"requirements": "-e ./foca\n"},
             "requirements.txt: requirement '-e ./foca' can't be checked",
         ),
@@ -168,6 +182,8 @@ def test_release_pins(tmp_path: Path) -> None:
         "extras-spaces",
         "unnamed-url",
         "wheel",
+        "archive-hash",
+        "wheel-fragment",
         "editable",
         "pre-release",
         "dev-marker",
