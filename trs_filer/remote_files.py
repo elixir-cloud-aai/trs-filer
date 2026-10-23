@@ -28,6 +28,7 @@ from urllib.parse import urljoin, urlsplit
 
 import requests
 from requests.adapters import HTTPAdapter
+from requests.compat import chardet
 from requests.utils import requote_uri
 from urllib3.connection import HTTPConnection, HTTPSConnection
 from urllib3.connectionpool import HTTPConnectionPool, HTTPSConnectionPool
@@ -59,11 +60,12 @@ _URL_REGEX = (
 # addresses (deprecated, RFC 4291); 6to4 and Teredo addresses are checked
 # via `ipaddress`
 # IPv6 networks that aren't public, but not refused by `ipaddress` on all
-# supported Python versions: site-local (deprecated, RFC 3879) and
-# documentation (RFC 9637) addresses
+# supported Python versions: site-local (deprecated, RFC 3879),
+# documentation (RFC 9637) and local-use NAT64 (RFC 8215) addresses
 _NOT_PUBLIC_IPV6 = (
     ipaddress.IPv6Network("fec0::/10"),
     ipaddress.IPv6Network("3fff::/20"),
+    ipaddress.IPv6Network("64:ff9b:1::/48"),
 )
 _IPV4_EMBEDDING = (
     ipaddress.IPv6Network("64:ff9b::/96"),
@@ -135,14 +137,26 @@ class RemoteFile:
         """Content decoded as text.
 
         Returns:
-            Content, decoded with the declared encoding (UTF-8 if none or
-            unknown); undecodable bytes are replaced.
+            Content, decoded with the declared encoding. Without a declared
+            encoding (or with an unknown one), content is decoded as UTF-8
+            if valid, else with the encoding detected by `requests` (as
+            `requests.Response.text` does); undecodable bytes are replaced.
         """
         try:
-            return self.content.decode(self.encoding or "utf-8", "replace")
+            if self.encoding:
+                return self.content.decode(self.encoding, "replace")
         # Unknown (`LookupError`) or malformed (`ValueError`, e.g., with
         # null characters) encodings
         except (LookupError, ValueError):
+            pass
+        try:
+            return self.content.decode("utf-8")
+        except UnicodeDecodeError:
+            pass
+        detected = chardet.detect(self.content)["encoding"] or "utf-8"
+        try:
+            return self.content.decode(detected, "replace")
+        except LookupError:  # pragma: no cover (detected encodings exist)
             return self.content.decode("utf-8", "replace")
 
 
@@ -397,6 +411,17 @@ class _CheckedConnectionMixin:
                 error.__cause__ = exc
         raise error
 
+    def connect(self) -> None:
+        """Connect, and register the socket in use with the deadline.
+
+        For HTTPS, `urllib3` replaces the socket of :py:meth:`_new_conn` with
+        a TLS socket (detaching the former), which is registered here.
+        """
+        super().connect()  # type: ignore[misc]
+        sock = getattr(self, "sock", None)
+        if sock is not None:
+            self.deadline.register(sock)
+
 
 class _CheckedHTTPConnection(_CheckedConnectionMixin, HTTPConnection):
     """HTTP connection that checks its destination."""
@@ -488,6 +513,18 @@ def _make_session(
     return session
 
 
+def _redact(url: str) -> str:
+    """Redact user info of a URL, for logging.
+
+    Args:
+        url: URL.
+
+    Returns:
+        URL without user info, quoted with control characters escaped.
+    """
+    return repr(re.sub(r"(?<=://)[^/?#]*@", "***@", url, count=1))
+
+
 def _read_limited(response: requests.Response, max_size: int) -> bytes:
     """Read the body of a response, up to a maximum size.
 
@@ -501,6 +538,11 @@ def _read_limited(response: requests.Response, max_size: int) -> bytes:
     Raises:
         RemoteFileError: The body is larger than the maximum size.
     """
+    encoding = response.headers.get("Content-Encoding", "identity")
+    if encoding.strip().lower() not in ("", "identity"):
+        raise RemoteFileError(
+            f"Content encoding '{encoding}' is not supported"
+        )
     declared = response.headers.get("Content-Length", "")
     if declared.isascii() and declared.isdigit() and int(declared) > max_size:
         raise RemoteFileError(
@@ -554,7 +596,9 @@ def fetch_remote_file(url: str, config: RemoteFilesConfig) -> RemoteFile:
         reason = f"{type(exc).__name__}: {exc}"
         if deadline.expired:
             reason = f"Retrieval exceeded the total timeout ({reason})"
-    logger.error(f"Could not retrieve file from URL '{url}': {reason}")
+    logger.error(
+        f"Could not retrieve file from URL {_redact(url)}: {reason!r}"
+    )
     raise RemoteFileError(str(reason))
 
 
@@ -612,7 +656,7 @@ def _fetch(
                         urljoin(current, response.headers["Location"])
                     )
                     continue
-                if not response.ok:
+                if not 200 <= response.status_code < 300:
                     raise RemoteFileError(
                         f"Response status {response.status_code}"
                     )

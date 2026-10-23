@@ -28,6 +28,7 @@ from trs_filer.remote_files import (
     _CheckedConnectionMixin,
     _Deadline,
     _make_session,
+    _redact,
     RemoteFile,
     fetch_remote_file,
     is_public_address,
@@ -371,6 +372,7 @@ class TestDestinationCheck:
             ("::a00:5", False),
             ("fec0::1", False),
             ("3fff::1", False),
+            ("64:ff9b:1::a00:5", False),
             ("2002:7f00:1::", False),
             ("2002:5db8:d822::", True),
             ("2001:0:4136:e378:8000:63bf:80ff:fffe", False),
@@ -420,6 +422,20 @@ class TestRemoteFile:
         """
         file = RemoteFile(content="grüß".encode(), encoding=encoding)
         assert file.text == text
+
+    def test_text_detected(self) -> None:
+        """Content that isn't UTF-8, without declared encoding, is decoded
+        with the detected encoding.
+        """
+        text = "Grüße aus Zürich, schöne Grüße und viele Äpfel. " * 4
+        file = RemoteFile(content=text.encode("latin-1"))
+        assert file.text == text
+
+    def test_text_undetected(self) -> None:
+        """Content of undetected encoding is decoded as UTF-8, replacing
+        undecodable bytes.
+        """
+        assert RemoteFile(content=b"\xff\xfe\x00").text
 
 
 class TestFetchRemoteFile:
@@ -826,7 +842,49 @@ class TestFetchRemoteFile:
         ).content == b"x" * 10
 
     @pytest.mark.parametrize(
-        "status", ["404 Not Found", "500 Internal Server Error"]
+        "encoding", ["gzip", "deflate", "br", "x-custom"]
+    )
+    def test_content_encoding_refused(
+        self, network: FakeNetwork, config: RemoteFilesConfig, encoding: str
+    ) -> None:
+        """Encoded content (e.g., compressed) is refused.
+
+        Args:
+            network: Fake network.
+            config: Settings for retrieving files.
+            encoding: Content encoding.
+        """
+        network.responses[PUBLIC] = _response(
+            headers={"Content-Encoding": encoding}
+        )
+        with pytest.raises(RemoteFileError):
+            fetch_remote_file(f"http://{PUBLIC}/", config)
+
+    def test_content_encoding_identity(
+        self, network: FakeNetwork, config: RemoteFilesConfig
+    ) -> None:
+        """Content with identity encoding is accepted.
+
+        Args:
+            network: Fake network.
+            config: Settings for retrieving files.
+        """
+        network.responses[PUBLIC] = _response(
+            headers={"Content-Encoding": "Identity"}
+        )
+        assert fetch_remote_file(
+            f"http://{PUBLIC}/", config
+        ).content == b"content"
+
+    @pytest.mark.parametrize(
+        "status",
+        [
+            "404 Not Found",
+            "500 Internal Server Error",
+            "300 Multiple Choices",
+            "302 Found",
+            "304 Not Modified",
+        ],
     )
     def test_error_status(
         self, network: FakeNetwork, config: RemoteFilesConfig, status: str
@@ -964,7 +1022,7 @@ class TestFetchRemoteFile:
         assert reason.startswith("InvalidURL: Not an HTTP(S) URL")
         assert [record.getMessage() for record in caplog.records] == [
             "Could not retrieve file from URL 'ftp://files.example.org/': "
-            f"{reason}"
+            f"{reason!r}"
         ]
 
 
@@ -1027,6 +1085,65 @@ def slow_server(monkeypatch: pytest.MonkeyPatch) -> Iterator[list[bytes]]:
         end.close()
     for thread in threads:
         thread.join(timeout=5)
+
+
+class TestConnect:
+    """Tests for registering connections with the deadline."""
+
+    def test_connect_registers_socket(self) -> None:
+        """Sockets in use after connecting (e.g., TLS sockets replacing the
+        sockets connected to) are registered with the deadline.
+        """
+        registered = []
+
+        class Deadline:
+            """Deadline recording registered sockets."""
+
+            def register(self, sock: Any) -> None:
+                """Record a socket.
+
+                Args:
+                    sock: Socket.
+                """
+                registered.append(sock)
+
+        class Connection:
+            """Connection that replaces its socket on connecting."""
+
+            sock: Any = None
+
+            def connect(self) -> None:
+                """Set a replacement socket."""
+                self.sock = "tls-socket"
+
+        class Checked(_CheckedConnectionMixin, Connection):
+            """Checked connection."""
+
+            deadline = Deadline()  # type: ignore[assignment]
+
+        Checked().connect()
+        assert registered == ["tls-socket"]
+
+
+class TestRedact:
+    """Tests for `_redact()`."""
+
+    @pytest.mark.parametrize(
+        ("url", "redacted"),
+        [
+            ("https://h.example/a", "'https://h.example/a'"),
+            ("https://u:p@h.example/a@b", "'https://***@h.example/a@b'"),
+            ("https://h.example/a\nb", "'https://h.example/a\\nb'"),
+        ],
+    )
+    def test_redact(self, url: str, redacted: str) -> None:
+        """User info is redacted, control characters are escaped.
+
+        Args:
+            url: URL.
+            redacted: Expected redacted URL.
+        """
+        assert _redact(url) == redacted
 
 
 class TestTotalTimeout:

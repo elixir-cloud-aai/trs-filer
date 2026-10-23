@@ -1040,8 +1040,13 @@ def test_toolsIdVersionsVersionIdTypeFilesGet_zip_success_url(monkeypatch):
         )
         resp.direct_passthrough = False
         with ZipFile(BytesIO(resp.get_data())) as zf:
-            contents = sorted(zf.read(name) for name in zf.namelist())
-    assert contents == [b'content', b'content', b'content', b'from-url']
+            contents = {name: zf.read(name) for name in zf.namelist()}
+    assert contents == {
+        'path_test_cwl': b'from-url',
+        'path_other_cwl': b'content',
+        'path_prim_desc_cwl': b'content',
+        'path_sec_desc_cwl': b'content',
+    }
     assert calls == [(
         'https://example.com/file.txt',
         app.config.foca.custom.remote_files,
