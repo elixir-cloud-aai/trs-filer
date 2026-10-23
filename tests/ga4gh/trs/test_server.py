@@ -1002,6 +1002,38 @@ def test_toolsIdVersionsVersionIdTypeFilesGet_zip_missing_content_url_NotFound()
             )
 
 
+def test_toolsIdVersionsVersionIdTypeFilesGet_zip_non_string_content():
+    """Zip response stores content that is neither text nor bytes as text."""
+    app = Flask(__name__)
+    app.config.foca = Config(db=MongoConfig(**MONGO_CONFIG))
+    mock_resp = deepcopy(MOCK_TOOL_VERSION_ID)
+    mock_resp["id"] = MOCK_ID
+    for f in mock_resp["versions"][0]["files"]:
+        if f["type"] == "CWL" and f["tool_file"]["file_type"] == "TEST_FILE":
+            f["file_wrapper"]["content"] = 42
+    app.config.foca.db.dbs["trsStore"].collections[
+        "tools"
+    ].client = mongomock.MongoClient().db.collection
+    app.config.foca.db.dbs["trsStore"].collections["tools"].client.insert_one(mock_resp)
+
+    with app.test_request_context():
+        resp = toolsIdVersionsVersionIdTypeFilesGet.__wrapped__(
+            id=MOCK_ID,
+            version_id=MOCK_ID,
+            type="CWL",
+            format="zip",
+        )
+        resp.direct_passthrough = False
+        with ZipFile(BytesIO(resp.get_data())) as zf:
+            contents = {name: zf.read(name) for name in zf.namelist()}
+    assert contents == {
+        "path_test_cwl": b"42",
+        "path_other_cwl": b"content",
+        "path_prim_desc_cwl": b"content",
+        "path_sec_desc_cwl": b"content",
+    }
+
+
 def test_toolsIdVersionsVersionIdTypeFilesGet_zip_fetch_error_NotFound(monkeypatch):  # noqa: E501
     """Zip building fails when a file can't be retrieved from its URL."""
 
