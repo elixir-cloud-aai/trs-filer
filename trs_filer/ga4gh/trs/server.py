@@ -1,4 +1,4 @@
-""""Controllers for TRS endpoints."""
+"""Controllers for TRS endpoints."""
 
 import logging
 from typing import (Optional, Dict, List, Tuple)
