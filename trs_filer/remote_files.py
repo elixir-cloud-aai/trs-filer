@@ -343,7 +343,9 @@ class _CheckedConnectionMixin:
         deadline: Total timeout of the retrieval.
     """
 
-    # A static method, so that it isn't called with the connection
+    # A static method, so that it isn't called with the connection; the
+    # signature of `DestinationCheck`, which can't parametrize
+    # `staticmethod`
     check: ClassVar[staticmethod[[str, str], None]]
     deadline: ClassVar[_Deadline]
     # Attributes of `urllib3` connections
