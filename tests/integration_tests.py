@@ -13,7 +13,6 @@ from tests.mock_data import (
     MOCK_TOOL_CLASS,
     MOCK_VERSION_NO_ID,
     MOCK_CONTAINER_FILE,
-    SERVICE_INFO_CONFIG,
     MOCK_DESCRIPTOR_FILE,
 )
 
@@ -25,31 +24,27 @@ headers = {
 }
 
 
-def test_post_service_info_success():
-    """Test `POST /service-info` for successfully creating or updating a new
-    service-info.
-    """
-    endpoint = "/service-info"
-    response = requests.post(
-        base_url + endpoint, json=SERVICE_INFO_CONFIG, headers=headers
-    )
-    assert response.status_code == 201
-
-
-def test_post_service_info_bad_request():
-    """Test `POST /service-info` for invalid service-info payload.
+def test_post_service_info_not_allowed():
+    """Test that `POST /service-info` is not served (service info is
+    configured).
     """
     endpoint = "/service-info"
     response = requests.post(base_url + endpoint, json={}, headers=headers)
-    assert response.status_code == 400
+    assert response.status_code == 405
 
 
 def test_get_service_info_success():
-    """Test `GET /service-info` for fetching service info."""
+    """Test `GET /service-info` for fetching the configured service info."""
     endpoint = "/service-info"
     response = requests.get(base_url + endpoint, headers=headers)
     assert response.status_code == 200
-    assert json.loads(response.content) == SERVICE_INFO_CONFIG
+    service_info = json.loads(response.content)
+    assert service_info["id"] == "org.example.trs-filer"
+    assert service_info["type"] == {
+        "group": "org.ga4gh",
+        "artifact": "trs",
+        "version": "2.0.1",
+    }
 
 
 def test_post_tool_success():

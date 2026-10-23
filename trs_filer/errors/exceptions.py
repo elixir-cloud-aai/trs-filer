@@ -4,51 +4,75 @@ from connexion.exceptions import (
     BadRequestProblem,
     ExtraParameterProblem,
     Forbidden,
+    OAuthProblem,
     Unauthorized,
 )
 from werkzeug.exceptions import (
     BadRequest,
     InternalServerError,
     NotFound,
+    RequestEntityTooLarge,
 )
 
-# exceptions raised in app context
+__all__ = [
+    "BadRequest",
+    "InternalServerError",
+    "NotFound",
+    "exceptions",
+]
+
+# Problem details (RFC 9457) of exceptions raised in app context, served by
+# FOCA (`exceptions.mapping` in `config.yaml`); exceptions not listed get
+# those of their closest listed base class
 exceptions = {
     Exception: {
-        "message": "An unexpected error occurred.",
-        "code": 500,
+        "title": "Internal server error",
+        "detail": "An unexpected error occurred.",
+        "status": 500,
     },
     BadRequestProblem: {
-        "message": "The request is malformed",
-        "code": 400,
+        "title": "Bad request",
+        "detail": "The request is malformed.",
+        "status": 400,
     },
     BadRequest: {
-        "message": "The request is malformed.",
-        "code": 400,
+        "title": "Bad request",
+        "detail": "The request is malformed.",
+        "status": 400,
     },
     ExtraParameterProblem: {
-        "message": "The request is malformed.",
-        "code": 400,
+        "title": "Bad request",
+        "detail": "The request is malformed.",
+        "status": 400,
     },
     Unauthorized: {
-        "message": "The request is unauthorized.",
-        "code": 401,
+        "title": "Unauthorized",
+        "detail": "The request is unauthorized.",
+        "status": 401,
+    },
+    OAuthProblem: {
+        "title": "Unauthorized",
+        "detail": "The request is unauthorized.",
+        "status": 401,
     },
     Forbidden: {
-        "message": "The requester is not authorized to perform this action.",
-        "code": 403,
+        "title": "Forbidden",
+        "detail": "The requester is not authorized to perform this action.",
+        "status": 403,
     },
     NotFound: {
-        "message": "The requested resource wasn't found.",
-        "code": 404,
+        "title": "Not found",
+        "detail": "The requested resource wasn't found.",
+        "status": 404,
+    },
+    RequestEntityTooLarge: {
+        "title": "Content Too Large",
+        "detail": "The request body exceeds the size limit.",
+        "status": 413,
     },
     InternalServerError: {
-        "message": "An unexpected error occurred.",
-        "code": 500,
-    }
+        "title": "Internal server error",
+        "detail": "An unexpected error occurred.",
+        "status": 500,
+    },
 }
-
-
-# exceptions raised outside of app context
-class ValidationError(Exception):
-    """Value or object is not compatible with required type or schema."""

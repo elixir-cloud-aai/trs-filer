@@ -1,3 +1,9 @@
-foca==0.12.1
+connexion>=2.15.1,<3
+# FOCA minors are bumped by hand, together with the base image in the
+# `Dockerfile`.
+# TEMPORARY: a commit on FOCA's `dev` branch, to use FOCA 0.17 before its
+# release (#88); replaced by `foca>=0.17.0,<0.18` before the next release,
+# which `scripts/check_release_pins.py` enforces
+foca @ git+https://github.com/elixir-cloud-aai/foca@29af8a64a2b0aae21845fa37a4a54076811f62bf
 gunicorn==22.0.0
 yq==3.4.3

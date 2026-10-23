@@ -1,36 +1,37 @@
 """Custom app config models."""
 
-import string
 from typing import Optional
 
 from foca.models.config import FOCABaseConfig
+from foca.utils.misc import generate_id
+from pydantic import Field, field_validator
 
 
 class ServiceConfig(FOCABaseConfig):
-    """Model for service configuration parameters for constructing tool
-    and version `url` properties.
+    """Model for the public URL of the app, for building the `url` properties
+    of tools and tool versions.
 
     Args:
         url_prefix: URL scheme of application.
-        host_name: Name of application host.
+        external_host: Name of application host.
         external_port: Port at which application is served.
         api_path: Base path at which API endpoints can be reached.
 
     Attributes:
         url_prefix: URL scheme of application.
-        host_name: Name of application host.
+        external_host: Name of application host.
         external_port: Port at which application is served.
         api_path: Base path at which API endpoints can be reached.
 
     Example:
         >>> ServiceConfig(
         ...     url_prefix='https',
-        ...     external_host='trs-filer-alex.c03.k8s-popup.csc.fi',
+        ...     external_host='trs.example.org',
         ...     external_port=443,
         ...     api_path='ga4gh/trs/v2'
         ... )
-        ServiceConfig(url_prefix='https', external_host='trs-filer-alex.c03.k8
-        s-popup.csc.fi', external_port=443, api_path='ga4gh/trs/v2')
+        ServiceConfig(url_prefix='https', external_host='trs.example.org', ext
+        ernal_port=443, api_path='ga4gh/trs/v2')
     """
     url_prefix: str = "https"
     external_host: Optional[str] = None
@@ -38,147 +39,22 @@ class ServiceConfig(FOCABaseConfig):
     api_path: Optional[str] = None
 
 
-class ServiceInfoTypeConfig(FOCABaseConfig):
-    """Model for service info type config parameters.
-
-    Args:
-        group: Service info configuration group.
-        artifact: Service info configuration artifact.
-        version: Service info configuration version.
-
-    Attributes:
-        group: Service info configuration group.
-        artifact: Service info configuration artifact.
-        version: Service info configuration version.
-
-    Example:
-        >>> ServiceInfoTypeConfig(
-        ...     group='TEMP_GROUP',
-        ...     artifact='TEMP_ARTIFACT',
-        ...     version='v1'
-        ... )
-        ServiceInfoTypeConfig(group='TEMP_GROUP', artifact='TEMP_ARTIFACT', ve
-        rsion='v1')
-    """
-    group: str = "TEMP_GROUP"
-    artifact: str = "TEMP_ARTIFACT"
-    version: str = "v1"
-
-
-class OrganisationConfig(FOCABaseConfig):
-    """Model for organisation config parameters.
-
-    Args:
-        name: Maintainer parent organisation for the service. Set to `null`
-            as default.
-        url: Webpage URL with contact information for the parent organisation.
-            Set to `null` as default.
-
-    Attributes:
-        name: Maintainer parent organisation for the service. Set to `null`
-            as default.
-        url: Webpage URL with contact information for the parent organisation.
-            Set to `null` as default.
-
-    Example:
-        >>> OrganisationConfig(
-        ...     name='Parent organization',
-        ...     url='parent/abc'
-        ... )
-        OrganisationConfig(name='Parent organization', url='parent/abc')
-    """
-    name: Optional[str] = None
-    url: Optional[str] = None
-
-
-class ServiceInfoConfig(FOCABaseConfig):
-    """Model for service info config parameters.
-
-    Args:
-        id: Unique identifier for the service. If `null`, new identifier will
-            be created.
-        name: Name for the service.
-        type: Version control parameters for the service artifacts.
-        description: Short hand description for the service usage.
-        organization: Information regarding the parent organisation responsible
-            for maintaining the service.
-        contactUrl: Webpage URL with contact information for the service.
-        documentationUrl: Webpage URL with documentation details for the
-            service.
-        createdAt: Service version creation timestamp.
-        updatedAt: Service version last update timestamp.
-        environment: Service deployment enviroment name.
-        version: Service release stable version.
-
-    Attributes:
-        id: Unique identifier for the service. If `null`, new identifier will
-            be created.
-        name: Name for the service.
-        type: Version control parameters for the service artifacts.
-        description: Short hand description for the service usage.
-        organization: Information regarding the parent organisation responsible
-            for maintaining the service.
-        contactUrl: Webpage URL with contact information for the service.
-        documentationUrl: Webpage URL with documentation details for the
-            service.
-        createdAt: Service version creation timestamp.
-        updatedAt: Service version last update timestamp.
-        environment: Service deployment enviroment name.
-        version: Service release stable version.
-
-    Example:
-        >>> ServiceInfoTypeConfig(
-        ...     id='TEMPID1',
-        ...     name='TEMP_STUB',
-        ...     type=ServiceInfoTypeConfig(
-        ...         group='TEMP_GROUP',
-        ...         artifact='TEMP_ARTIFACT',
-        ...         version='v1'
-        ...     ),
-        ...     description='Description of service.',
-        ...     organization=OrganisationConfig(
-        ...         name='Parent organization',
-        ...         url='parent/abc'
-        ...     ),
-        ...     contactUrl='contact/abc',
-        ...     documentationUrl='docs/abc',
-        ...     createdAt='2020-01-01',
-        ...     updatedAt='2020-01-01',
-        ...     environment='ENV',
-        ...     version='0.0.0'
-        ... )
-        ServiceInfoConfig(id='TEMPID1', name='TEMP_STUB', type=ServiceInfoType
-        Config(group='TEMP_GROUP', artifact='TEMP_ARTIFACT', version='v1'), de
-        scription='Description of service.', organization=OrganisationConfig(n
-        ame='Parent organization', url='parent/abc'), contactUrl='contact/abc'
-        , documentationUrl='docs/abc', createdAt='2020-01-01', updatedAt='2020
-        -01-01', environment='ENV', version='0.0.0')
-    """
-    id: str
-    name: Optional[str] = None
-    type: ServiceInfoTypeConfig = ServiceInfoTypeConfig()
-    description: Optional[str] = None
-    organization: OrganisationConfig = OrganisationConfig()
-    contactUrl: Optional[str] = None
-    documentationUrl: Optional[str] = None
-    createdAt: Optional[str] = None
-    updatedAt: Optional[str] = None
-    environment: Optional[str] = None
-    version: Optional[str] = None
-
-
 class IdConfig(FOCABaseConfig):
-    """Model for defining unique identifier for tools on TRS Filer.
+    """Model for generating object identifiers.
 
     Args:
-        charset: A string of allowed characters or an expression evaluating to
-            a string of allowed characters.
-        length: Length of returned string.
+        charset: The allowed characters (duplicates are ignored); not an
+            expression (e.g., `string.ascii_uppercase + string.digits`), as
+            in previous versions.
+        length: Length of generated identifiers.
 
     Attributes:
-        charset: A string of allowed characters or an expression evaluating to
-            a string of allowed characters.
-        length: Length of returned string.
+        charset: The allowed characters.
+        length: Length of generated identifiers.
+
+    Raises:
+        pydantic.ValidationError: The character set is empty or an
+            expression, or the length is not positive.
 
     Example:
         >>> IdConfig(
@@ -188,8 +64,31 @@ class IdConfig(FOCABaseConfig):
         IdConfig(charset='ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789', length=6)
     """
 
-    length: int = 6
-    charset: str = string.ascii_uppercase + string.digits
+    charset: str = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+    length: int = Field(default=6, gt=0)
+
+    @field_validator("charset")
+    @classmethod
+    def check_charset(cls, value: str) -> str:
+        """Check that identifiers can be generated from the character set.
+
+        Uses the checks of FOCA's `generate_id()`, so that invalid character
+        sets fail on startup instead of on requests.
+
+        Args:
+            value: Character set.
+
+        Returns:
+            The character set.
+
+        Raises:
+            ValueError: The character set is empty, or an expression.
+        """
+        try:
+            generate_id(charset=value, length=1)
+        except TypeError as exc:
+            raise ValueError(str(exc)) from exc
+        return value
 
 
 class MetaVersionConfig(FOCABaseConfig):
@@ -222,18 +121,18 @@ class ToolConfig(FOCABaseConfig):
         >>> ToolConfig(
         ...     id=IdConfig(
         ...         length=6,
-        ...         charset='string.ascii_lowercase + string.digits'
+        ...         charset='abcdefghijklmnopqrstuvwxyz0123456789'
         ...     ),
         ...     meta_version=MetaVersionConfig(
         ...         init=1,
         ...         increment=1
         ...     )
         ... )
-        ToolConfig(id=IdConfig(length=6, charset='string.ascii_lowercase + str
-        ing.digits'), meta_version=MetaVersionConfig(init=1, increment=1))
+        ToolConfig(id=IdConfig(charset='abcdefghijklmnopqrstuvwxyz0123456789',
+         length=6), meta_version=MetaVersionConfig(init=1, increment=1))
     """
-    id: IdConfig = IdConfig()
-    meta_version: MetaVersionConfig = MetaVersionConfig()
+    id: IdConfig = Field(default_factory=IdConfig)
+    meta_version: MetaVersionConfig = Field(default_factory=MetaVersionConfig)
 
 
 class VersionConfig(FOCABaseConfig):
@@ -251,22 +150,22 @@ class VersionConfig(FOCABaseConfig):
         >>> VersionConfig(
         ...     id=IdConfig(
         ...         length=6,
-        ...         charset='string.ascii_lowercase + string.digits'
+        ...         charset='abcdefghijklmnopqrstuvwxyz0123456789'
         ...     ),
         ...     meta_version=MetaVersionConfig(
         ...         init=1,
         ...         increment=1
         ...     )
         ... )
-        VersionConfig(id=IdConfig(length=6, charset='string.ascii_lowercase +
-        string.digits'), meta_version=MetaVersionConfig(init=1, increment=1))
+        VersionConfig(id=IdConfig(charset='abcdefghijklmnopqrstuvwxyz012345678
+        9', length=6), meta_version=MetaVersionConfig(init=1, increment=1))
     """
-    id: IdConfig = IdConfig()
-    meta_version: MetaVersionConfig = MetaVersionConfig()
+    id: IdConfig = Field(default_factory=IdConfig)
+    meta_version: MetaVersionConfig = Field(default_factory=MetaVersionConfig)
 
 
 class ToolClassConfig(FOCABaseConfig):
-    """Model for version config parameters.
+    """Model for tool class config parameters.
 
     Args:
         id: Unique identifier definition for tool classes.
@@ -284,7 +183,7 @@ class ToolClassConfig(FOCABaseConfig):
         >>> ToolClassConfig(
         ...     id=IdConfig(
         ...         length=6,
-        ...         charset='string.ascii_lowercase + string.digits'
+        ...         charset='abcdefghijklmnopqrstuvwxyz0123456789'
         ...     ),
         ...     meta_version=MetaVersionConfig(
         ...         init=1,
@@ -292,34 +191,34 @@ class ToolClassConfig(FOCABaseConfig):
         ...     ),
         ...     validation=False
         ... )
-        ToolClassConfig(id=IdConfig(length=6, charset='string.ascii_lowercase
-        + string.digits'), meta_version=MetaVersionConfig(init=1, increment=1)
-        , validation=False)
+        ToolClassConfig(id=IdConfig(charset='abcdefghijklmnopqrstuvwxyz0123456
+        789', length=6), meta_version=MetaVersionConfig(init=1, increment=1),
+        validation=False)
     """
-    id: IdConfig = IdConfig()
-    meta_version: MetaVersionConfig = MetaVersionConfig()
+    id: IdConfig = Field(default_factory=IdConfig)
+    meta_version: MetaVersionConfig = Field(default_factory=MetaVersionConfig)
     validation: bool = False
 
 
 class CustomConfig(FOCABaseConfig):
     """Model for custom configuration parameters.
 
+    The service info is configured in FOCA's `service_info` section, no longer
+    in `custom.service_info`, which is rejected.
+
     Args:
         service: Service config parameters.
-        service_info: Service Info config parameters.
         tool: Tool config parameters.
         version: Version config parameters.
         toolclass: Tool Class config parameters.
 
     Attributes:
         service: Service config parameters.
-        service_info: Service Info config parameters.
         tool: Tool config parameters.
         version: Version config parameters.
         toolclass: Tool Class config parameters.
     """
     service: ServiceConfig
-    service_info: ServiceInfoConfig
-    tool: ToolConfig = ToolConfig()
-    version: VersionConfig = VersionConfig()
-    toolclass: ToolClassConfig = ToolClassConfig()
+    tool: ToolConfig = Field(default_factory=ToolConfig)
+    version: VersionConfig = Field(default_factory=VersionConfig)
+    toolclass: ToolClassConfig = Field(default_factory=ToolClassConfig)

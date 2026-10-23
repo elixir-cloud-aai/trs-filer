@@ -5,7 +5,7 @@ from copy import deepcopy
 MOCK_ID = "mock_id"
 MOCK_ID_2 = "mock_id2"
 MOCK_ID_ONE_CHAR = "A"
-CHARSET_EXPRESSION = 'string.digits'
+MOCK_CHARSET = '0123456789'
 TEST_LIMIT = 1
 TEST_LIMIT_2 = -1
 DEFAULT_LIMIT = 1000
@@ -20,7 +20,6 @@ COLLECTION_CONFIG = {
 }
 DB_CONFIG = {
     'collections': {
-        'service_info': COLLECTION_CONFIG,
         'toolclasses': COLLECTION_CONFIG,
         'tools': COLLECTION_CONFIG,
     },
@@ -34,7 +33,7 @@ MONGO_CONFIG = {
 }
 TOOL_VERSION_CONFIG = {
     "id": {
-        "charset": CHARSET_EXPRESSION,
+        "charset": MOCK_CHARSET,
         "length": 6,
     },
     "meta_version": {
@@ -52,31 +51,10 @@ SERVICE_CONFIG = {
     "external_port": 80,
     "api_path": "ga4gh/trs/v2",
 }
-SERVICE_INFO_CONFIG = {
-    "contactUrl": "mailto:support@example.com",
-    "createdAt": "2019-06-04T12:58:19Z",
-    "description": "This service provides...",
-    "documentationUrl": "https://docs.myservice.example.com",
-    "environment": "test",
-    "id": "org.ga4gh.myservice",
-    "name": "My project",
-    "organization": {
-        "name": "My organization",
-        "url": "https://example.com",
-    },
-    "type": {
-        "artifact": "beacon",
-        "group": "org.ga4gh",
-        "version": "1.0.0",
-    },
-    "updatedAt": "2019-06-04T12:58:19Z",
-    "version": "1.0.0",
-}
 TOOL_CLASS_CONFIG = deepcopy(TOOL_VERSION_CONFIG)
 TOOL_CLASS_CONFIG['validation'] = False
 CUSTOM_CONFIG = {
     "service": SERVICE_CONFIG,
-    "service_info": SERVICE_INFO_CONFIG,
     "tool": TOOL_VERSION_CONFIG,
     "toolclass": TOOL_CLASS_CONFIG,
     "version": TOOL_VERSION_CONFIG,
@@ -97,14 +75,6 @@ HEADERS_PAGINATION = {
     'self_link': None,
     'current_offset': None,
     'current_limit': None,
-}
-HEADERS_SERVICE_INFO = {
-    'Content-type': 'application/json',
-    'Location': (
-        f"{SERVICE_CONFIG['url_prefix']}://{SERVICE_CONFIG['external_host']}:"
-        f"{SERVICE_CONFIG['external_port']}/{SERVICE_CONFIG['api_path']}/"
-        "service-info"
-    )
 }
 MOCK_TEST_FILE = {
     "file_wrapper": {

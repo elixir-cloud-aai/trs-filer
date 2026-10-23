@@ -39,9 +39,9 @@ echo " * Getting current default configuration"
 
 APP_CONFIG=$(yq --arg HOST_NAME "$HOST_NAME" \
     --arg MONGO_HOST "$MONGO_HOST" \
-    '.endpoints.service.url_prefix = "https" |
-     .endpoints.service.external_host = $HOST_NAME |
-     .endpoints.service.external_port = 443 |
+    '.custom.service.url_prefix = "https" |
+     .custom.service.external_host = $HOST_NAME |
+     .custom.service.external_port = 443 |
      .db.host = $MONGO_HOST' \
     "$APP_CONFIG_PATH") || exit 4
 

@@ -21,7 +21,6 @@ from tests.mock_data import (
     MOCK_TOOL_VERSION_ID,
     MOCK_VERSION_ID,
     MONGO_CONFIG,
-    SERVICE_INFO_CONFIG,
     MOCK_CONTAINER_FILE,
     MOCK_DESCRIPTOR_FILE,
     MOCK_DESCRIPTOR_SEC_FILE,
@@ -37,8 +36,6 @@ from trs_filer.ga4gh.trs.server import (
     deleteTool,
     deleteToolClass,
     deleteToolVersion,
-    getServiceInfo,
-    postServiceInfo,
     postTool,
     postToolClass,
     postToolVersion,
@@ -1264,42 +1261,6 @@ def test_toolsIdVersionsVersionIdTypeTestsGet_type_NotFound():
                 id=MOCK_ID,
                 version_id=MOCK_ID,
             )
-
-
-# GET /service-info
-def test_getServiceInfo():
-    """Test for getting service info."""
-    app = Flask(__name__)
-    app.config.foca = Config(
-        db=MongoConfig(**MONGO_CONFIG),
-        custom=CustomConfig(**CUSTOM_CONFIG),
-    )
-    mock_resp = deepcopy(SERVICE_INFO_CONFIG)
-    app.config.foca.db.dbs['trsStore'].collections['service_info'] \
-        .client = mongomock.MongoClient().db.collection
-    app.config.foca.db.dbs['trsStore'].collections['service_info'] \
-        .client.insert_one(mock_resp)
-
-    with app.app_context():
-        res = getServiceInfo.__wrapped__()
-        assert res == SERVICE_INFO_CONFIG
-
-
-# POST /service-info
-def test_postServiceInfo():
-    """Test for creating service info."""
-    app = Flask(__name__)
-    app.config.foca = Config(
-        db=MongoConfig(**MONGO_CONFIG),
-        custom=CustomConfig(**CUSTOM_CONFIG),
-    )
-    app.config.foca.db.dbs['trsStore'].collections['service_info'] \
-        .client = mongomock.MongoClient().db.collection
-
-    with app.test_request_context(json=deepcopy(SERVICE_INFO_CONFIG)):
-        postServiceInfo.__wrapped__()
-        res = getServiceInfo.__wrapped__()
-        assert res == SERVICE_INFO_CONFIG
 
 
 # POST /tools
