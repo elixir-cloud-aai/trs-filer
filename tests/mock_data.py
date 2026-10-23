@@ -1,6 +1,7 @@
 """Mock data for testing."""
 
 from copy import deepcopy
+from typing import Any
 
 MOCK_ID = "mock_id"
 MOCK_ID_2 = "mock_id2"
@@ -12,24 +13,24 @@ DEFAULT_LIMIT = 1000
 DEFAULT_OFFSET = "0"
 TEST_OFFSET = "1"
 TEST_OFFSET_2 = "-1"
-INDEX_CONFIG = {"keys": [("id", 1)]}
-COLLECTION_CONFIG = {
+INDEX_CONFIG: dict[str, Any] = {"keys": [("id", 1)]}
+COLLECTION_CONFIG: dict[str, Any] = {
     "indexes": [INDEX_CONFIG],
 }
-DB_CONFIG = {
+DB_CONFIG: dict[str, Any] = {
     "collections": {
         "toolclasses": COLLECTION_CONFIG,
         "tools": COLLECTION_CONFIG,
     },
 }
-MONGO_CONFIG = {
+MONGO_CONFIG: dict[str, Any] = {
     "host": "mongodb",
     "port": 27017,
     "dbs": {
         "trsStore": DB_CONFIG,
     },
 }
-TOOL_VERSION_CONFIG = {
+TOOL_VERSION_CONFIG: dict[str, Any] = {
     "id": {
         "charset": MOCK_CHARSET,
         "length": 6,
@@ -43,7 +44,7 @@ TOOL_VERSION_CONFIG_CHARSET_LITERAL = deepcopy(TOOL_VERSION_CONFIG)
 TOOL_VERSION_CONFIG_CHARSET_LITERAL["id"]["charset"] = MOCK_ID_ONE_CHAR
 TOOL_VERSION_CONFIG_ONE_ID = deepcopy(TOOL_VERSION_CONFIG_CHARSET_LITERAL)
 TOOL_VERSION_CONFIG_ONE_ID["id"]["length"] = 1
-SERVICE_CONFIG = {
+SERVICE_CONFIG: dict[str, Any] = {
     "url_prefix": "http",
     "external_host": "1.2.3.4",
     "external_port": 80,
@@ -51,7 +52,7 @@ SERVICE_CONFIG = {
 }
 TOOL_CLASS_CONFIG = deepcopy(TOOL_VERSION_CONFIG)
 TOOL_CLASS_CONFIG["validation"] = False
-CUSTOM_CONFIG = {
+CUSTOM_CONFIG: dict[str, Any] = {
     "service": SERVICE_CONFIG,
     "tool": TOOL_VERSION_CONFIG,
     "toolclass": TOOL_CLASS_CONFIG,
@@ -65,14 +66,14 @@ CUSTOM_CONFIG_ONE_ID["tool"] = TOOL_VERSION_CONFIG_ONE_ID
 CUSTOM_CONFIG_ONE_ID["version"] = TOOL_VERSION_CONFIG_ONE_ID
 CUSTOM_CONFIG_TOOL_CLASS_VALIDATION = deepcopy(CUSTOM_CONFIG)
 CUSTOM_CONFIG_TOOL_CLASS_VALIDATION["toolclass"]["validation"] = True
-HEADERS_PAGINATION = {
+HEADERS_PAGINATION: dict[str, Any] = {
     "next_page": None,
     "last_page": None,
     "self_link": None,
     "current_offset": None,
     "current_limit": None,
 }
-MOCK_TEST_FILE = {
+MOCK_TEST_FILE: dict[str, Any] = {
     "file_wrapper": {
         "checksum": [
             {
@@ -89,7 +90,7 @@ MOCK_TEST_FILE = {
     },
     "type": "CWL",
 }
-MOCK_DESCRIPTOR_FILE = {
+MOCK_DESCRIPTOR_FILE: dict[str, Any] = {
     "file_wrapper": {
         "checksum": [
             {
@@ -106,7 +107,7 @@ MOCK_DESCRIPTOR_FILE = {
     },
     "type": "CWL",
 }
-MOCK_DESCRIPTOR_SEC_FILE = {
+MOCK_DESCRIPTOR_SEC_FILE: dict[str, Any] = {
     "file_wrapper": {
         "checksum": [
             {
@@ -123,7 +124,7 @@ MOCK_DESCRIPTOR_SEC_FILE = {
     },
     "type": "CWL",
 }
-MOCK_CONTAINER_FILE = {
+MOCK_CONTAINER_FILE: dict[str, Any] = {
     "file_wrapper": {
         "checksum": [
             {
@@ -140,7 +141,7 @@ MOCK_CONTAINER_FILE = {
     },
     "type": "Docker",
 }
-MOCK_OTHER_FILE = {
+MOCK_OTHER_FILE: dict[str, Any] = {
     "file_wrapper": {
         "checksum": [
             {
@@ -157,14 +158,14 @@ MOCK_OTHER_FILE = {
     },
     "type": "CWL",
 }
-MOCK_FILES = [
+MOCK_FILES: list[dict[str, Any]] = [
     MOCK_TEST_FILE,
     MOCK_OTHER_FILE,
     MOCK_CONTAINER_FILE,
     MOCK_DESCRIPTOR_FILE,
     MOCK_DESCRIPTOR_SEC_FILE,
 ]
-MOCK_FILES_LIST = [
+MOCK_FILES_LIST: list[dict[str, Any]] = [
     MOCK_TEST_FILE["tool_file"],
     MOCK_OTHER_FILE["tool_file"],
     MOCK_DESCRIPTOR_FILE["tool_file"],
@@ -175,11 +176,11 @@ del MOCK_FILES_CONTENT_URL_MISSING[0]["file_wrapper"]["content"]
 del MOCK_FILES_CONTENT_URL_MISSING[0]["file_wrapper"]["url"]
 MOCK_FILES_CHECKSUM_MISSING = deepcopy(MOCK_FILES)
 del MOCK_FILES_CHECKSUM_MISSING[0]["file_wrapper"]["checksum"]
-MOCK_FILE_TYPE_MISSING = [deepcopy(MOCK_FILES)[1]]
+MOCK_FILE_TYPE_MISSING: list[dict[str, Any]] = [deepcopy(MOCK_FILES)[1]]
 del MOCK_FILE_TYPE_MISSING[0]["tool_file"]["file_type"]
-MOCK_FILES_TOOL_FILE_MISSING = [deepcopy(MOCK_FILES)[0]]
+MOCK_FILES_TOOL_FILE_MISSING: list[dict[str, Any]] = [deepcopy(MOCK_FILES)[0]]
 del MOCK_FILES_TOOL_FILE_MISSING[0]["tool_file"]
-MOCK_IMAGES = [
+MOCK_IMAGES: list[dict[str, Any]] = [
     {
         "checksum": [{"checksum": "checksums", "type": "sha256"}],
         "image_name": "image_name",
@@ -189,7 +190,7 @@ MOCK_IMAGES = [
         "updated": "updated",
     }
 ]
-MOCK_VERSION_NO_ID = {
+MOCK_VERSION_NO_ID: dict[str, Any] = {
     "author": ["author"],
     "descriptor_type": ["CWL"],
     "files": MOCK_FILES,
@@ -207,12 +208,12 @@ MOCK_VERSION_NO_ID = {
 }
 MOCK_VERSION_ID = deepcopy(MOCK_VERSION_NO_ID)
 MOCK_VERSION_ID["id"] = MOCK_ID
-MOCK_TOOL_CLASS = {
+MOCK_TOOL_CLASS: dict[str, Any] = {
     "description": "description",
     "id": MOCK_ID,
     "name": "name",
 }
-MOCK_TOOL = {
+MOCK_TOOL: dict[str, Any] = {
     "aliases": [
         "alias_1",
         "alias_2",

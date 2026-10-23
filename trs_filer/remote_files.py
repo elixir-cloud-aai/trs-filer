@@ -15,6 +15,8 @@ a timer that shuts down the connections of a retrieval when it expires.
 
 from __future__ import annotations
 
+from collections.abc import Callable, Collection
+import contextlib
 from dataclasses import dataclass
 import ipaddress
 import logging
@@ -23,12 +25,12 @@ import socket
 import threading
 from time import monotonic
 from types import TracebackType
-from typing import Any, Callable, ClassVar, Collection, Optional
+from typing import Any, ClassVar
 from urllib.parse import urljoin, urlsplit
 
 import requests
 from requests.adapters import HTTPAdapter
-from requests.compat import chardet
+from requests.compat import chardet  # type: ignore[attr-defined]  # not in the stubs
 from requests.utils import requote_uri
 from urllib3.connection import HTTPConnection, HTTPSConnection
 from urllib3.connectionpool import HTTPConnectionPool, HTTPSConnectionPool
@@ -130,7 +132,7 @@ class RemoteFile:
     """
 
     content: bytes
-    encoding: Optional[str] = None
+    encoding: str | None = None
 
     @property
     def text(self) -> str:
@@ -257,7 +259,7 @@ class _Deadline:
         self._timer = threading.Timer(timeout, self._expire)
         self._timer.daemon = True
 
-    def __enter__(self) -> "_Deadline":
+    def __enter__(self) -> _Deadline:
         """Start the timer.
 
         Returns:
@@ -268,9 +270,9 @@ class _Deadline:
 
     def __exit__(
         self,
-        exc_type: Optional[type[BaseException]],
-        exc: Optional[BaseException],
-        traceback: Optional[TracebackType],
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        traceback: TracebackType | None,
     ) -> None:
         """Stop the timer.
 
@@ -322,10 +324,8 @@ def _shutdown(sock: socket.socket) -> None:
     Args:
         sock: Socket.
     """
-    try:
+    with contextlib.suppress(OSError):
         sock.shutdown(socket.SHUT_RDWR)
-    except OSError:
-        pass
 
 
 class _CheckedConnectionMixin:
@@ -343,7 +343,8 @@ class _CheckedConnectionMixin:
         deadline: Total timeout of the retrieval.
     """
 
-    check: ClassVar[DestinationCheck]
+    # A static method, so that it isn't called with the connection
+    check: ClassVar[staticmethod[[str, str], None]]
     deadline: ClassVar[_Deadline]
     # Attributes of `urllib3` connections
     _dns_host: str
@@ -399,7 +400,7 @@ class _CheckedConnectionMixin:
                 )
                 self.deadline.register(sock)
                 return sock
-            except socket.timeout as exc:
+            except TimeoutError as exc:
                 error = ConnectTimeoutError(
                     conn, f"Connection to {self.host} timed out"
                 )
@@ -593,13 +594,14 @@ def fetch_remote_file(url: str, config: RemoteFilesConfig) -> RemoteFile:
         reason = f"{type(exc).__name__}: {exc}"
         if deadline.expired:
             reason = f"Retrieval exceeded the total timeout ({reason})"
-    logger.error(f"Could not retrieve file from URL {_redact(url)}: {reason!r}")
+    logger.error("Could not retrieve file from URL %s: %r", _redact(url), reason)
     raise RemoteFileError(str(reason))
 
 
 def _fetch(url: str, config: RemoteFilesConfig, deadline: _Deadline) -> RemoteFile:
-    """Retrieve the content of a file from its URL (cf.
-    :py:func:`fetch_remote_file`).
+    """Retrieve the content of a file from its URL.
+
+    Cf. :py:func:`fetch_remote_file`.
 
     Args:
         url: URL of the file.

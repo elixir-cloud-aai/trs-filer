@@ -1,7 +1,0 @@
-# TEMPORARY: replaced by ruff with the shared rule set (#106); the line
-# length of ruff (88), as for the files taken from Cloud Registry
-[flake8]
-exclude = .git,.eggs,build,venv,env
-max-line-length = 88
-# The slice spacing of ruff format, which E203 rejects
-extend-ignore = E203

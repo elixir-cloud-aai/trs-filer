@@ -6,16 +6,18 @@ that serve canned HTTP responses.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from io import BytesIO
 from pathlib import Path
 import socket
 import ssl
 import threading
 import time
-from typing import Any, Iterator, Optional
+from typing import Any, NoReturn
 
 from pydantic import ValidationError
 import pytest
+from requests.adapters import HTTPAdapter
 import yaml
 
 from trs_filer import remote_files
@@ -24,12 +26,12 @@ from trs_filer.errors.exceptions import RemoteFileError
 from trs_filer.remote_files import (
     DestinationNotAllowed,
     InvalidURL,
-    check_url,
+    RemoteFile,
     _CheckedConnectionMixin,
     _Deadline,
     _make_session,
     _redact,
-    RemoteFile,
+    check_url,
     fetch_remote_file,
     is_public_address,
     make_destination_check,
@@ -43,7 +45,7 @@ PRIVATE = "10.0.0.5"
 def _response(
     body: bytes = b"content",
     status: str = "200 OK",
-    headers: Optional[dict[str, str]] = None,
+    headers: dict[str, str] | None = None,
     length: bool = True,
 ) -> bytes:
     """Build a raw HTTP response; the connection is closed after it.
@@ -140,7 +142,9 @@ class FakeNetwork:
         self.connected: list[tuple[str, int, Any]] = []
         self.sockets: list[FakeSocket] = []
 
-    def getaddrinfo(self, host: str, port: int, *args: Any, **kwargs: Any):
+    def getaddrinfo(
+        self, host: str, port: int, *args: Any, **kwargs: Any
+    ) -> list[tuple[int, int, int, str, tuple[str, int]]]:
         """Resolve a host name, or an IP address to itself.
 
         Args:
@@ -362,7 +366,7 @@ class TestDestinationCheck:
             ("fe80::1%eth0", False),
             ("fd00::1", False),
             ("100.64.0.1", False),
-            ("0.0.0.0", False),
+            ("0.0.0.0", False),  # noqa: S104 (address checked, not bound)
             ("240.0.0.1", False),
             ("224.0.0.1", False),
             ("ff0e::1", False),
@@ -416,7 +420,7 @@ class TestRemoteFile:
             ("utf-8\x00", "grüß"),
         ],
     )
-    def test_text(self, encoding: Optional[str], text: str) -> None:
+    def test_text(self, encoding: str | None, text: str) -> None:
         """Content is decoded with the declared encoding, or UTF-8.
 
         Args:
@@ -427,16 +431,18 @@ class TestRemoteFile:
         assert file.text == text
 
     def test_text_detected(self) -> None:
-        """Content that isn't UTF-8, without declared encoding, is decoded
-        with the detected encoding.
+        """Content that isn't UTF-8 is decoded with the detected encoding.
+
+        The content has no declared encoding.
         """
         text = "Grüße aus Zürich, schöne Grüße und viele Äpfel. " * 4
         file = RemoteFile(content=text.encode("latin-1"))
         assert file.text == text
 
     def test_text_undetected(self) -> None:
-        """Content of undetected encoding is decoded as UTF-8, replacing
-        undecodable bytes.
+        """Content of undetected encoding is decoded as UTF-8.
+
+        Undecodable bytes are replaced.
         """
         assert RemoteFile(content=b"\xff\xfe\x00").text
 
@@ -509,8 +515,10 @@ class TestFetchRemoteFile:
         ],
     )
     def test_scheme_or_url_refused(self, network: FakeNetwork, url: str) -> None:
-        """URLs of other schemes than `https` (default), and invalid URLs,
-        are refused without connecting.
+        """URLs of other schemes and invalid URLs are refused.
+
+        Only `https` is allowed by default; refused URLs are not connected
+        to.
 
         Args:
             network: Fake network.
@@ -539,8 +547,9 @@ class TestFetchRemoteFile:
         config: RemoteFilesConfig,
         addresses: list[str],
     ) -> None:
-        """Hosts resolving to any address that isn't public are refused
-        without connecting.
+        """Hosts resolving to any address that isn't public are refused.
+
+        They are not connected to.
 
         Args:
             network: Fake network.
@@ -564,8 +573,9 @@ class TestFetchRemoteFile:
         config: RemoteFilesConfig,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """`https` connections are checked like `http` ones and made to
-        public destinations; TLS errors fail retrieval.
+        """`https` connections are checked like `http` ones.
+
+        They are made to public destinations; TLS errors fail retrieval.
 
         Args:
             network: Fake network.
@@ -574,7 +584,7 @@ class TestFetchRemoteFile:
         """
         hostnames = []
 
-        def wrap_socket(self: ssl.SSLContext, sock: Any, **kwargs: Any):
+        def wrap_socket(self: ssl.SSLContext, sock: Any, **kwargs: Any) -> NoReturn:
             """Fail the TLS handshake.
 
             Args:
@@ -607,6 +617,7 @@ class TestFetchRemoteFile:
             assert session.trust_env is False
             for scheme in ("http", "https"):
                 adapter = session.get_adapter(f"{scheme}://example.org")
+                assert isinstance(adapter, HTTPAdapter)
                 pool_class = adapter.poolmanager.pool_classes_by_scheme[scheme]
                 conn_class = pool_class.ConnectionCls
                 assert issubclass(conn_class, _CheckedConnectionMixin)
@@ -734,8 +745,9 @@ class TestFetchRemoteFile:
     def test_content_length_not_ascii(
         self, network: FakeNetwork, config: RemoteFilesConfig
     ) -> None:
-        """`Content-Length` values that aren't ASCII digits are ignored by
-        the size check.
+        """The size check ignores `Content-Length` values of non-digits.
+
+        Only ASCII digits are taken as a declared length.
 
         Args:
             network: Fake network.
@@ -814,8 +826,9 @@ class TestFetchRemoteFile:
 
     @pytest.mark.parametrize("length", [True, False])
     def test_too_large(self, network: FakeNetwork, length: bool) -> None:
-        """Content larger than the maximum size is refused, with and without
-        declared length.
+        """Content larger than the maximum size is refused.
+
+        Both with and without declared length.
 
         Args:
             network: Fake network.
@@ -892,7 +905,7 @@ class TestFetchRemoteFile:
             fetch_remote_file("http://unknown.example.org/", config)
 
     @pytest.mark.parametrize(
-        "error", [socket.timeout("timed out"), ConnectionRefusedError()]
+        "error", [TimeoutError("timed out"), ConnectionRefusedError()]
     )
     def test_connect_error(
         self,
@@ -971,7 +984,7 @@ class TestFetchRemoteFile:
                 Raises:
                     socket.timeout: Always.
                 """
-                raise socket.timeout("timed out")
+                raise TimeoutError("timed out")
 
         def timeout(*args: Any, **kwargs: Any) -> BytesIO:
             """Return a stream that times out.
@@ -1035,7 +1048,7 @@ def slow_server(monkeypatch: pytest.MonkeyPatch) -> Iterator[list[bytes]]:
         except OSError:
             pass
 
-    def connect(address: tuple[str, int], timeout: Any, **kwargs: Any):
+    def connect(address: tuple[str, int], timeout: Any, **kwargs: Any) -> socket.socket:
         """Connect to a socket pair.
 
         Args:
@@ -1069,8 +1082,9 @@ class TestConnect:
     """Tests for registering connections with the deadline."""
 
     def test_connect_registers_socket(self) -> None:
-        """Sockets in use after connecting (e.g., TLS sockets replacing the
-        sockets connected to) are registered with the deadline.
+        """Sockets in use after connecting are registered with the deadline.
+
+        E.g., TLS sockets replacing the sockets connected to.
         """
         registered = []
 
@@ -1132,8 +1146,9 @@ class TestTotalTimeout:
 
     @pytest.mark.parametrize("length", [True, False], ids=["length", "no-length"])
     def test_slow_body(self, slow_server: list[bytes], length: bool) -> None:
-        """Bodies sent slowly fail at the total timeout, also within reads
-        and without declared length.
+        """Bodies sent slowly fail at the total timeout.
+
+        Also within reads and without declared length.
 
         Args:
             slow_server: Parts of the response to send.

@@ -5,18 +5,22 @@ The app is created from `trs_filer/config.yaml`, with an in-memory database
 """
 
 from pathlib import Path
+from typing import Any
 
 from connexion import App
 from flask.testing import FlaskClient
 from foca.database import register_mongodb
 import mongomock
+from pymongo import MongoClient
 import pytest
 
 from trs_filer.app import create_app
 
 
 @pytest.fixture
-def mongo_client(monkeypatch: pytest.MonkeyPatch) -> mongomock.MongoClient:
+def mongo_client(
+    monkeypatch: pytest.MonkeyPatch,
+) -> MongoClient[dict[str, Any]]:
     """In-memory MongoDB client, used by all apps created in a test.
 
     Args:
@@ -25,7 +29,7 @@ def mongo_client(monkeypatch: pytest.MonkeyPatch) -> mongomock.MongoClient:
     Returns:
         MongoDB client.
     """
-    client: mongomock.MongoClient = mongomock.MongoClient()
+    client: MongoClient[dict[str, Any]] = mongomock.MongoClient()
     monkeypatch.setattr(register_mongodb, "MongoClient", lambda *args, **kwargs: client)
     return client
 
@@ -51,7 +55,7 @@ def overlay(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 @pytest.fixture
 def app(
-    mongo_client: mongomock.MongoClient,
+    mongo_client: MongoClient[dict[str, Any]],
     overlay: Path,
 ) -> App:
     """App created from `config.yaml` and the overlay.

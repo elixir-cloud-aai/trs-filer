@@ -2,7 +2,7 @@
 
 import ipaddress
 import math
-from typing import Annotated, List, Literal, Optional, Union
+from typing import Annotated, Literal
 
 from foca.models.config import FOCABaseConfig
 from foca.utils.misc import generate_id
@@ -10,8 +10,10 @@ from pydantic import Field, field_validator
 
 
 class ServiceConfig(FOCABaseConfig):
-    """Model for the public URL of the app, for building the `url` properties
-    of tools and tool versions.
+    """Model for the public URL of the app.
+
+    The URL is used for building the `url` properties of tools and tool
+    versions.
 
     Args:
         url_prefix: URL scheme of application.
@@ -37,9 +39,9 @@ class ServiceConfig(FOCABaseConfig):
     """
 
     url_prefix: str = "https"
-    external_host: Optional[str] = None
-    external_port: Optional[int] = None
-    api_path: Optional[str] = None
+    external_host: str | None = None
+    external_port: int | None = None
+    api_path: str | None = None
 
 
 class IdConfig(FOCABaseConfig):
@@ -207,10 +209,10 @@ class ToolClassConfig(FOCABaseConfig):
     validation: bool = False
 
 
-IPNetwork = Union[ipaddress.IPv4Network, ipaddress.IPv6Network]
+IPNetwork = ipaddress.IPv4Network | ipaddress.IPv6Network
 
 
-def _parse_network(host: str) -> Optional[IPNetwork]:
+def _parse_network(host: str) -> IPNetwork | None:
     """Parse an IP address or network (CIDR notation).
 
     Args:
@@ -275,11 +277,11 @@ class RemoteFilesConfig(FOCABaseConfig):
         .0, max_size=1048576, max_redirects=5)
     """
 
-    schemes: List[Literal["http", "https"]] = ["https"]
-    allowed_hosts: List[str] = []
-    connect_timeout: float = Field(5.0, gt=0)
-    read_timeout: float = Field(10.0, gt=0)
-    total_timeout: float = Field(30.0, gt=0)
+    schemes: list[Literal["http", "https"]] = Field(default=["https"])
+    allowed_hosts: list[str] = Field(default=[])
+    connect_timeout: float = Field(default=5.0, gt=0)
+    read_timeout: float = Field(default=10.0, gt=0)
+    total_timeout: float = Field(default=30.0, gt=0)
     max_size: Annotated[int, Field(strict=True, gt=0)] = 1048576
     max_redirects: Annotated[int, Field(strict=True, ge=0)] = 5
 
@@ -303,7 +305,7 @@ class RemoteFilesConfig(FOCABaseConfig):
 
     @field_validator("schemes")
     @classmethod
-    def check_schemes(cls, value: List[str]) -> List[str]:
+    def check_schemes(cls, value: list[str]) -> list[str]:
         """Check that at least one scheme is allowed.
 
         Args:
@@ -321,9 +323,11 @@ class RemoteFilesConfig(FOCABaseConfig):
 
     @field_validator("allowed_hosts")
     @classmethod
-    def normalize_allowed_hosts(cls, value: List[str]) -> List[str]:
-        """Normalize allowed hosts: IP networks in canonical form (without
-        brackets), host names lowercase and without a trailing dot.
+    def normalize_allowed_hosts(cls, value: list[str]) -> list[str]:
+        """Normalize allowed hosts.
+
+        IP networks are put in canonical form (without brackets), host names
+        in lowercase and without a trailing dot.
 
         Args:
             value: Allowed hosts.
@@ -335,20 +339,20 @@ class RemoteFilesConfig(FOCABaseConfig):
             ValueError: An allowed host is empty.
         """
         hosts = []
-        for host in value:
-            host = host.strip()
-            network = _parse_network(host)
+        for entry in value:
+            stripped = entry.strip()
+            network = _parse_network(stripped)
             if network is not None:
                 hosts.append(str(network))
                 continue
-            host = host.rstrip(".").lower()
+            host = stripped.rstrip(".").lower()
             if not host:
                 raise ValueError("Allowed hosts must not be empty")
             hosts.append(host)
         return hosts
 
     @property
-    def allowed_networks(self) -> List[IPNetwork]:
+    def allowed_networks(self) -> list[IPNetwork]:
         """IP networks of the allowed hosts.
 
         Returns:

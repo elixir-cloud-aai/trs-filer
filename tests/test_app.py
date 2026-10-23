@@ -5,14 +5,16 @@ from importlib.metadata import version
 import logging
 from pathlib import Path
 import re
+from typing import Any
 
 from connexion import App
 from flask import Flask
 from flask.testing import FlaskClient
 from foca import get_config
+from foca.config.access import set_app_config
 from foca.models.config import Config
-import mongomock
 import pydantic
+from pymongo import MongoClient
 import pytest
 
 from tests.mock_data import MOCK_TOOL
@@ -64,7 +66,7 @@ def test_service_info(client: FlaskClient) -> None:
 
 
 def test_service_info_not_writable(
-    client: FlaskClient, mongo_client: mongomock.MongoClient
+    client: FlaskClient, mongo_client: MongoClient[dict[str, Any]]
 ) -> None:
     """The service info can't be changed via the API, and is not stored.
 
@@ -101,7 +103,7 @@ class _Records(logging.Handler):
 
 
 def test_placeholder_warning(
-    mongo_client: mongomock.MongoClient,
+    mongo_client: MongoClient[dict[str, Any]],
     overlay: Path,
 ) -> None:
     """The app warns of placeholders of the service info, unless replaced.
@@ -167,7 +169,7 @@ def test_request_body_size_limit(client: FlaskClient) -> None:
 
 
 def test_no_request_body_size_limit(
-    mongo_client: mongomock.MongoClient, overlay: Path
+    mongo_client: MongoClient[dict[str, Any]], overlay: Path
 ) -> None:
     """The app refuses to start without a size limit of request bodies.
 
@@ -203,7 +205,7 @@ def test_no_request_body_size_limit(
     ids=["service-info", "expression", "empty-charset", "zero-length"],
 )
 def test_invalid_custom_config(
-    mongo_client: mongomock.MongoClient,
+    mongo_client: MongoClient[dict[str, Any]],
     overlay: Path,
     custom: str,
     reason: str,
@@ -228,7 +230,7 @@ def test_invalid_custom_config(
 
 @pytest.mark.parametrize("name", [None, "other"])
 def test_database_name(
-    mongo_client: mongomock.MongoClient,
+    mongo_client: MongoClient[dict[str, Any]],
     overlay: Path,
     monkeypatch: pytest.MonkeyPatch,
     name: str | None,
@@ -319,20 +321,24 @@ def test_collections(app: App) -> None:
     with app.app.app_context():
         for name in ("tools", "toolclasses"):
             assert get_collection(name).name == name
-        assert set(get_config().db.dbs) == {DB}
+        db = get_config().db
+        assert db is not None
+        assert set(db.dbs or {}) == {DB}
 
 
 def test_no_custom_config() -> None:
     """Apps without the custom config are refused."""
     app = Flask(__name__)
-    app.config.foca = Config()
-    with app.app_context():
-        with pytest.raises(RuntimeError, match="No custom configuration"):
-            get_custom_config()
+    set_app_config(app, Config())
+    with (
+        app.app_context(),
+        pytest.raises(RuntimeError, match="No custom configuration"),
+    ):
+        get_custom_config()
 
 
 def test_main(
-    mongo_client: mongomock.MongoClient,
+    mongo_client: MongoClient[dict[str, Any]],
     overlay: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
