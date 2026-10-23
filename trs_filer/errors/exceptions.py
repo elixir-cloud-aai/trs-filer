@@ -12,6 +12,16 @@ from werkzeug.exceptions import (
     NotFound,
 )
 
+
+class RemoteFileError(BadRequest):
+    """The content of a file could not be retrieved from its URL.
+
+    Raised if retrieval fails, or isn't allowed by the configuration
+    (`custom.remote_files`). The description says why; it is logged, not
+    returned to clients.
+    """
+
+
 # exceptions raised in app context
 exceptions = {
     Exception: {
@@ -24,6 +34,15 @@ exceptions = {
     },
     BadRequest: {
         "message": "The request is malformed.",
+        "code": 400,
+    },
+    RemoteFileError: {
+        "message": (
+            "The content of a file could not be retrieved from its URL. "
+            "Check that the URL is reachable and uses an allowed scheme and "
+            "destination, and that the content doesn't exceed the size "
+            "limit; or provide the content instead."
+        ),
         "code": 400,
     },
     ExtraParameterProblem: {
