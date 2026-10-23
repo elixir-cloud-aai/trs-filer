@@ -960,8 +960,12 @@ class TestFetchRemoteFile:
         """
         with pytest.raises(RemoteFileError) as exc_info:
             fetch_remote_file("ftp://files.example.org/", RemoteFilesConfig())
-        assert "ftp://files.example.org/" in caplog.text
-        assert "Not an HTTP(S) URL" in exc_info.value.description
+        reason = exc_info.value.description
+        assert reason.startswith("InvalidURL: Not an HTTP(S) URL")
+        assert [record.getMessage() for record in caplog.records] == [
+            "Could not retrieve file from URL 'ftp://files.example.org/': "
+            f"{reason}"
+        ]
 
 
 @pytest.fixture
