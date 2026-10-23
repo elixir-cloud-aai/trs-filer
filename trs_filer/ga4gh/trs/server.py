@@ -613,6 +613,15 @@ def postTool() -> str:
 
     Returns:
         Identifier of created tool.
+
+    Raises:
+        BadRequest: The tool is invalid, e.g., its version identifiers are
+            duplicated or the files of a version are invalid, or its tool
+            class does not exist while tool classes are validated.
+        InternalServerError: No unique identifier could be generated, or the
+            object could not be stored.
+        RemoteFileError: The content of a file could not be retrieved from its
+            URL.
     """
     tool = RegisterTool(data=request.json)
     tool.register_metadata()
@@ -630,6 +639,15 @@ def putTool(
 
     Returns:
         Identifier of created/updated tool.
+
+    Raises:
+        BadRequest: The tool is invalid, e.g., its version identifiers are
+            duplicated or the files of a version are invalid, or its tool
+            class does not exist while tool classes are validated.
+        InternalServerError: No unique identifier could be generated, or the
+            object could not be stored.
+        RemoteFileError: The content of a file could not be retrieved from its
+            URL.
     """
     tool = RegisterTool(
         data=request.json,
@@ -674,6 +692,14 @@ def postToolVersion(
 
     Returns:
         Identifier of created tool version.
+
+    Raises:
+        BadRequest: The files of the version are invalid.
+        InternalServerError: No unique identifier could be generated, or the
+            object could not be stored.
+        NotFound: No tool with the given identifier exists.
+        RemoteFileError: The content of a file could not be retrieved from its
+            URL.
     """
     version = RegisterToolVersion(
         id=id,
@@ -696,6 +722,14 @@ def putToolVersion(
 
     Returns:
         Identifier of created tool version.
+
+    Raises:
+        BadRequest: The files of the version are invalid.
+        InternalServerError: No unique identifier could be generated, or the
+            object could not be stored.
+        NotFound: No tool with the given identifier exists.
+        RemoteFileError: The content of a file could not be retrieved from its
+            URL.
     """
     version = RegisterToolVersion(
         id=id,
@@ -718,9 +752,7 @@ def deleteToolVersion(
         version_id: Identifier of tool version to be deleted.
 
     Returns:
-        Previous identifier of deleted tool version. Note that a
-        `BadRequest/400` error response is returned if attempting to delete
-        the only remaining tool version.
+        Previous identifier of deleted tool version.
 
     Raises:
         InternalServerError: The tool version could not be deleted.
@@ -756,6 +788,10 @@ def postToolClass() -> str:
 
     Returns:
         Identifier of created tool class.
+
+    Raises:
+        InternalServerError: No unique identifier could be generated, or the
+            object could not be stored.
     """
     tool_class = RegisterToolClass(data=request.json)
     tool_class.register_metadata()
@@ -773,6 +809,10 @@ def putToolClass(
 
     Returns:
         Identifier of created/updated tool class.
+
+    Raises:
+        InternalServerError: No unique identifier could be generated, or the
+            object could not be stored.
     """
     tool_class = RegisterToolClass(
         data=request.json,

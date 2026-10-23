@@ -81,9 +81,13 @@ class RegisterTool:
         """Register tool.
 
         Raises:
-            BadRequest: Version identifiers are duplicated, or the tool class
-                does not exist while tool classes are validated.
-            InternalServerError: No unique identifier could be generated.
+            BadRequest: Version identifiers are duplicated, the files of a
+                version are invalid, or the tool class does not exist while
+                tool classes are validated.
+            InternalServerError: No unique identifier could be generated, or the
+                object could not be stored.
+            trs_filer.errors.exceptions.RemoteFileError: The content of a file
+                could not be retrieved from its URL.
         """
         self.process_metadata()
         # keep trying to generate unique ID
@@ -127,7 +131,7 @@ class RegisterTool:
                     version_id=version.get("id", None),
                     data=version,
                 )
-                # Processes `version` in place
+                # Modifies the `version` dict in place
                 version_proc.process_metadata()
 
             if self.replace:
@@ -371,7 +375,8 @@ class RegisterToolVersion:
 
         Raises:
             BadRequest: The files of the version are invalid.
-            InternalServerError: No unique identifier could be generated.
+            InternalServerError: No unique identifier could be generated, or the
+                object could not be stored.
             NotFound: The tool does not exist.
             trs_filer.errors.exceptions.RemoteFileError: The content of a file
                 could not be retrieved from its URL.
