@@ -1,7 +1,7 @@
 # Everything that must pass on pull requests and pushes: lints, builds and
-# tests the project, checks the dependency pins of release tags, and
-# publishes the image for pushes of `dev`. The ruleset requires the gate
-# `CI passed` only
+# tests the project (also for release tags), checks the dependency pins of
+# release tags, and publishes the image for pushes of `dev`. The ruleset is
+# to require the gate `CI passed` only
 
 name: CI
 on:
@@ -92,14 +92,15 @@ jobs:
         run: |
           coverage run -m pytest -W ignore::DeprecationWarning
           coverage xml
-      # Upload errors fail the workflow only on pushes, because pull requests
-      # from forks and Dependabot get no access to the Codecov token
+      # Upload errors fail the workflow only on branch pushes, because pull
+      # requests from forks and Dependabot get no access to the Codecov
+      # token, and so that release tags don't fail for Codecov outages
       - name: Submit Report to Codecov
         uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: ./coverage.xml
-          fail_ci_if_error: ${{ github.event_name == 'push' }}
+          fail_ci_if_error: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/heads/') }}
           verbose: true
       - name: Deploy app
         # Waits until the containers are healthy (see their health checks)
@@ -136,6 +137,7 @@ jobs:
     name: Release pins
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    # Same condition as `PINS_MAY_SKIP` of the gate
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     steps:
       - name: Check out repository
@@ -159,6 +161,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     needs: [lint, test]
+    # Same condition as `PUBLISH_MAY_SKIP` of the gate
     if: github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
     steps:
       - name: Check out repository
@@ -201,7 +204,8 @@ jobs:
   # Gate, the only check that the ruleset requires: fails if any other job
   # failed or was cancelled, or was skipped where it should have run. Only
   # `pins` (except for release tags) and `publish` (except for pushes of the
-  # default branch) may be skipped. Every new job goes into `needs`
+  # default branch) may be skipped. Every other job goes into `needs` (see
+  # `tests/test_config.py`)
   passed:
     name: CI passed
     runs-on: ubuntu-latest
@@ -215,8 +219,9 @@ jobs:
           TEST: ${{ needs.test.result }}
           PINS: ${{ needs.pins.result }}
           PUBLISH: ${{ needs.publish.result }}
-          IS_TAG: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') }}
-          IS_DEFAULT_PUSH: ${{ github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
+          # Negated `if` conditions of the jobs that may be skipped
+          PINS_MAY_SKIP: ${{ !(github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')) }}
+          PUBLISH_MAY_SKIP: ${{ !(github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)) }}
         run: |
           status=0
           check() {
@@ -230,6 +235,6 @@ jobs:
           }
           check lint "${LINT}" false
           check test "${TEST}" false
-          check pins "${PINS}" "$([ "${IS_TAG}" = true ] && echo false || echo true)"
-          check publish "${PUBLISH}" "$([ "${IS_DEFAULT_PUSH}" = true ] && echo false || echo true)"
+          check pins "${PINS}" "${PINS_MAY_SKIP}"
+          check publish "${PUBLISH}" "${PUBLISH_MAY_SKIP}"
           exit "${status}"

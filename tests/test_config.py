@@ -222,3 +222,18 @@ def test_python_version() -> None:
         ROOT / "deployment" / "templates" / "trs-filer-configmap-job.yaml"
     ).read_text()
     assert f"/usr/local/lib/python{image}/site-packages/trs_filer/" in job
+
+
+def test_ci_gate() -> None:
+    """The gate `passed` of the CI workflow needs every other job.
+
+    The ruleset requires the gate only, so a job that it doesn't need could
+    fail without blocking pull requests.
+    """
+    jobs = yaml.safe_load((ROOT / ".github" / "workflows" / "ci.yml").read_text())[
+        "jobs"
+    ]
+    gate = jobs.pop("passed")
+    assert gate["name"] == "CI passed"
+    assert gate["if"] == "always()"
+    assert sorted(gate["needs"]) == sorted(jobs)
