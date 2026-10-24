@@ -1,10 +1,14 @@
-# This workflow will lint, build the project, run tests, and build and push
-# Docker images.
+# Everything that must pass on pull requests and pushes: lints, builds and
+# tests the project, checks the dependency pins of release tags, and
+# publishes the image for pushes of `dev`. The ruleset requires the gate
+# `CI passed` only
 
 name: CI
 on:
   push:
     branches: [dev]
+    # Release tags (also pre-releases), for the `pins` job
+    tags: ["v*"]
   pull_request:
     branches: [dev]
 
@@ -12,14 +16,15 @@ permissions:
   contents: read
 
 # Cancel superseded runs of a pull request; runs for pushes get their own
-# group, so that queued runs for successive pushes are not dropped
+# group (per ref, as a tag may point to a commit of `dev`), so that queued
+# runs for successive pushes are not dropped
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name == 'push' && github.sha || github.ref }}
+  group: ${{ github.workflow }}-${{ github.event_name == 'push' && format('{0}-{1}', github.ref, github.sha) || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  analyze_code:
-    name: Static code analysis
+  lint:
+    name: Lint
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -61,8 +66,8 @@ jobs:
           grep -qx 'trs_filer/config.yaml' wheel-contents.txt
           grep -Eqx 'trs_filer-[^/]+\.dist-info/licenses/LICENSE' wheel-contents.txt
           grep -q '^trs_filer/api/.*\.yaml$' wheel-contents.txt
-  Test:
-    name: Run unit and integration tests
+  test:
+    name: Test
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
@@ -122,15 +127,38 @@ jobs:
         if: always()
         run: docker compose down
 
+  # Checks that release tags pin released versions of the dependencies only
+  # (`scripts/check_release_pins.py`), e.g., no FOCA commit or development
+  # image, before a GitHub release is published from the tag. Release tags
+  # only, as `dev` may pin development versions. To be replaced by a step of
+  # the release workflow (#133)
+  pins:
+    name: Release pins
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # The script uses the standard library only
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+      - name: Check that dependencies are releases
+        run: python scripts/check_release_pins.py
+
   # TEMPORARY: replaced by the release and supply-chain workflows (#133,
   # #134). Pushes of the default branch only: pull requests get no Docker
   # Hub secrets (e.g., of Dependabot and forks), and the Compose build of
-  # `Test` builds the image for them
-  Publish:
-    name: Build and publish app image
+  # `test` builds the image for them
+  publish:
+    name: Publish image
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    needs: [analyze_code, Test]
+    needs: [lint, test]
     if: github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
     steps:
       - name: Check out repository
@@ -169,3 +197,39 @@ jobs:
             docker login -u "${DOCKERHUB_LOGIN}" --password-stdin
           docker push "${image}:latest"
           rm "${HOME}/.docker/config.json"  # delete token
+
+  # Gate, the only check that the ruleset requires: fails if any other job
+  # failed or was cancelled, or was skipped where it should have run. Only
+  # `pins` (except for release tags) and `publish` (except for pushes of the
+  # default branch) may be skipped. Every new job goes into `needs`
+  passed:
+    name: CI passed
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: [lint, test, pins, publish]
+    if: always()
+    steps:
+      - name: Check job results
+        env:
+          LINT: ${{ needs.lint.result }}
+          TEST: ${{ needs.test.result }}
+          PINS: ${{ needs.pins.result }}
+          PUBLISH: ${{ needs.publish.result }}
+          IS_TAG: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') }}
+          IS_DEFAULT_PUSH: ${{ github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
+        run: |
+          status=0
+          check() {
+            # <job> <result> <whether the job may be skipped>
+            if [ "$2" = success ] || { [ "$2" = skipped ] && [ "$3" = true ]; }; then
+              echo "$1: $2"
+            else
+              echo "::error::Job '$1' ended with '$2'"
+              status=1
+            fi
+          }
+          check lint "${LINT}" false
+          check test "${TEST}" false
+          check pins "${PINS}" "$([ "${IS_TAG}" = true ] && echo false || echo true)"
+          check publish "${PUBLISH}" "$([ "${IS_DEFAULT_PUSH}" = true ] && echo false || echo true)"
+          exit "${status}"
