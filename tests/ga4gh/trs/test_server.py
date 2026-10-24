@@ -1,11 +1,11 @@
 """Unit tests for endpoint controllers."""
 
 from copy import deepcopy
-
-from flask import Flask
-from flask import request
+import inspect
 from io import BytesIO
-from zipfile import ZipFile, ZIP_DEFLATED
+from zipfile import ZIP_DEFLATED, ZipFile
+
+from flask import Flask, request
 from foca.models.config import Config, MongoConfig
 import mongomock
 import pytest
@@ -15,22 +15,29 @@ from tests.mock_data import (
     DEFAULT_LIMIT,
     DEFAULT_OFFSET,
     HEADERS_PAGINATION,
-    MOCK_ID,
-    MOCK_ID_2,
-    MOCK_TOOL_CLASS,
-    MOCK_TOOL_VERSION_ID,
-    MOCK_VERSION_ID,
-    MONGO_CONFIG,
     MOCK_CONTAINER_FILE,
     MOCK_DESCRIPTOR_FILE,
     MOCK_DESCRIPTOR_SEC_FILE,
+    MOCK_ID,
+    MOCK_ID_2,
     MOCK_OTHER_FILE,
     MOCK_TEST_FILE,
+    MOCK_TOOL_CLASS,
+    MOCK_TOOL_VERSION_ID,
+    MOCK_VERSION_ID,
     MOCK_VERSION_NO_ID,
+    MONGO_CONFIG,
     TEST_LIMIT,
     TEST_LIMIT_2,
     TEST_OFFSET,
     TEST_OFFSET_2,
+)
+from trs_filer.custom_config import CustomConfig
+from trs_filer.errors.exceptions import (
+    BadRequest,
+    InternalServerError,
+    NotFound,
+    RemoteFileError,
 )
 from trs_filer.ga4gh.trs.server import (
     deleteTool,
@@ -46,25 +53,18 @@ from trs_filer.ga4gh.trs.server import (
     toolsGet,
     toolsIdGet,
     toolsIdVersionsGet,
-    toolsIdVersionsVersionIdTypeFilesGet,
     toolsIdVersionsVersionIdContainerfileGet,
     toolsIdVersionsVersionIdGet,
     toolsIdVersionsVersionIdTypeDescriptorGet,
     toolsIdVersionsVersionIdTypeDescriptorRelativePathGet,
+    toolsIdVersionsVersionIdTypeFilesGet,
     toolsIdVersionsVersionIdTypeTestsGet,
-)
-from trs_filer.custom_config import CustomConfig
-from trs_filer.errors.exceptions import (
-    BadRequest,
-    InternalServerError,
-    NotFound,
-    RemoteFileError,
 )
 from trs_filer.remote_files import RemoteFile
 
 
 # GET /toolClasses
-def test_toolClassesGet():
+def test_toolClassesGet() -> None:
     """Test for getting a list of all available tool classes."""
     app = Flask(__name__)
     app.config.foca = Config(db=MongoConfig(**MONGO_CONFIG))
@@ -80,12 +80,12 @@ def test_toolClassesGet():
     data = deepcopy(MOCK_TOOL_VERSION_ID)
     data["id"] = MOCK_ID
     with app.app_context():
-        res = toolClassesGet.__wrapped__()
+        res = inspect.unwrap(toolClassesGet)()
         assert res == [data]
 
 
 # GET /tools
-def test_toolsGet():
+def test_toolsGet() -> None:
     """Test for getting a list of all available tools; no filters specified."""
     app = Flask(__name__)
     app.config.foca = Config(db=MongoConfig(**MONGO_CONFIG))
@@ -111,14 +111,12 @@ def test_toolsGet():
         )
         HEADERS_PAGINATION_RESULT["current_offset"] = DEFAULT_OFFSET
         HEADERS_PAGINATION_RESULT["current_limit"] = DEFAULT_LIMIT
-        res = toolsGet.__wrapped__()
-        assert res == ([data], "200", HEADERS_PAGINATION_RESULT)
+        res = inspect.unwrap(toolsGet)()
+        assert res == ([data], 200, HEADERS_PAGINATION_RESULT)
 
 
-def test_toolsGet_pagination():
-    """Test for getting a list of all available tools; pagination values
-    specified.
-    """
+def test_toolsGet_pagination() -> None:
+    """Test for getting a list of all available tools; pagination values specified."""
     app = Flask(__name__)
     app.config.foca = Config(db=MongoConfig(**MONGO_CONFIG))
     mock_resp = deepcopy(MOCK_VERSION_NO_ID)
@@ -151,14 +149,14 @@ def test_toolsGet_pagination():
         )
         HEADERS_PAGINATION_RESULT["current_offset"] = TEST_OFFSET
         HEADERS_PAGINATION_RESULT["current_limit"] = TEST_LIMIT
-        res = toolsGet.__wrapped__(
+        res = inspect.unwrap(toolsGet)(
             limit=TEST_LIMIT,
             offset=TEST_OFFSET,
         )
-        assert res == ([data], "200", HEADERS_PAGINATION_RESULT)
+        assert res == ([data], 200, HEADERS_PAGINATION_RESULT)
 
 
-def test_toolsGet_pagination_negativeLimit():
+def test_toolsGet_pagination_negativeLimit() -> None:
     """Test for getting a list of all available tools; pagination values
     specified, given a negative limit.
     """
@@ -182,14 +180,14 @@ def test_toolsGet_pagination_negativeLimit():
     HEADERS_PAGINATION_RESULT = {}
 
     with app.test_request_context():
-        res = toolsGet.__wrapped__(
+        res = inspect.unwrap(toolsGet)(
             limit=TEST_LIMIT_2,
             offset=TEST_OFFSET,
         )
-        assert res == ([], "422", HEADERS_PAGINATION_RESULT)
+        assert res == ([], 422, HEADERS_PAGINATION_RESULT)
 
 
-def test_toolsGet_pagination_negativeOffset():
+def test_toolsGet_pagination_negativeOffset() -> None:
     """Test for getting a list of all available tools; pagination values
     specified, given a negative offset.
     """
@@ -213,17 +211,15 @@ def test_toolsGet_pagination_negativeOffset():
     HEADERS_PAGINATION_RESULT = {}
 
     with app.test_request_context():
-        res = toolsGet.__wrapped__(
+        res = inspect.unwrap(toolsGet)(
             limit=TEST_LIMIT,
             offset=TEST_OFFSET_2,
         )
-        assert res == ([], "422", HEADERS_PAGINATION_RESULT)
+        assert res == ([], 422, HEADERS_PAGINATION_RESULT)
 
 
-def test_toolsGet_filters():
-    """Test for getting a list of all available tools; all defined filters
-    specified.
-    """
+def test_toolsGet_filters() -> None:
+    """Test for getting a list of all available tools; all defined filters specified."""
     app = Flask(__name__)
     app.config.foca = Config(db=MongoConfig(**MONGO_CONFIG))
     mock_resp = deepcopy(MOCK_TOOL_VERSION_ID)
@@ -249,7 +245,7 @@ def test_toolsGet_filters():
         )
         HEADERS_PAGINATION_RESULT["current_offset"] = DEFAULT_OFFSET
         HEADERS_PAGINATION_RESULT["current_limit"] = DEFAULT_LIMIT
-        res = toolsGet.__wrapped__(
+        res = inspect.unwrap(toolsGet)(
             id=data["id"],
             checker=data["has_checker"],
             name=data["versions"][0]["images"][0]["image_name"],
@@ -262,11 +258,11 @@ def test_toolsGet_filters():
             description=data["description"],
             organization=data["organization"],
         )
-        assert res == ([data], "200", HEADERS_PAGINATION_RESULT)
+        assert res == ([data], 200, HEADERS_PAGINATION_RESULT)
 
 
 # GET /tools/{id}
-def test_toolsIdGet():
+def test_toolsIdGet() -> None:
     """Test for getting a tool associated with a given identifier."""
     app = Flask(__name__)
     app.config.foca = Config(db=MongoConfig(**MONGO_CONFIG))
@@ -280,11 +276,11 @@ def test_toolsIdGet():
     del mock_resp["versions"][0]["files"]
 
     with app.app_context():
-        res = toolsIdGet.__wrapped__(id=MOCK_ID)
+        res = inspect.unwrap(toolsIdGet)(id=MOCK_ID)
         assert res == mock_resp
 
 
-def test_toolsIdGet_NotFound():
+def test_toolsIdGet_NotFound() -> None:
     """Test for getting a tool associated with a given identifier when a tool
     with that identifier is not available.
     """
@@ -298,13 +294,12 @@ def test_toolsIdGet_NotFound():
     app.config.foca.db.dbs["trsStore"].collections["tools"].client.insert_one(mock_resp)
     del mock_resp["_id"]
 
-    with app.app_context():
-        with pytest.raises(NotFound):
-            toolsIdGet.__wrapped__(id=MOCK_ID + MOCK_ID)
+    with app.app_context(), pytest.raises(NotFound):
+        inspect.unwrap(toolsIdGet)(id=MOCK_ID + MOCK_ID)
 
 
 # GET /tools/{id}/versions
-def test_toolsIdVersionsGet():
+def test_toolsIdVersionsGet() -> None:
     """Test for getting tool versions associated with a given identifier."""
     app = Flask(__name__)
     app.config.foca = Config(db=MongoConfig(**MONGO_CONFIG))
@@ -318,11 +313,11 @@ def test_toolsIdVersionsGet():
     del mock_resp["versions"][0]["files"]
 
     with app.app_context():
-        res = toolsIdVersionsGet.__wrapped__(id=MOCK_ID)
+        res = inspect.unwrap(toolsIdVersionsGet)(id=MOCK_ID)
         assert res == mock_resp["versions"]
 
 
-def test_toolsIdVersionsGet_NotFound():
+def test_toolsIdVersionsGet_NotFound() -> None:
     """Test for getting tool versions associated with a given identifier when a
     tool with that identifier is not available.
     """
@@ -336,13 +331,12 @@ def test_toolsIdVersionsGet_NotFound():
     app.config.foca.db.dbs["trsStore"].collections["tools"].client.insert_one(mock_resp)
     del mock_resp["_id"]
 
-    with app.app_context():
-        with pytest.raises(NotFound):
-            toolsIdVersionsGet.__wrapped__(id=MOCK_ID + MOCK_ID)
+    with app.app_context(), pytest.raises(NotFound):
+        inspect.unwrap(toolsIdVersionsGet)(id=MOCK_ID + MOCK_ID)
 
 
 # GET /tools/{id}/versions/{version_id}
-def test_toolsIdVersionsVersionIdGet():
+def test_toolsIdVersionsVersionIdGet() -> None:
     """Test for getting a specific version of a tool associated with given tool
     and version identifiers.
     """
@@ -357,14 +351,14 @@ def test_toolsIdVersionsVersionIdGet():
     del mock_resp["versions"][0]["files"]
 
     with app.app_context():
-        res = toolsIdVersionsVersionIdGet.__wrapped__(
+        res = inspect.unwrap(toolsIdVersionsVersionIdGet)(
             id=MOCK_ID,
             version_id=MOCK_ID,
         )
         assert res == mock_resp["versions"][0]
 
 
-def test_toolsIdVersionsVersionIdGet_tool_NotFound():
+def test_toolsIdVersionsVersionIdGet_tool_NotFound() -> None:
     """Test for getting a specific version of a tool associated with given tool
     and version identifiers when a tool with the specified identifier is not
     available.
@@ -378,15 +372,14 @@ def test_toolsIdVersionsVersionIdGet_tool_NotFound():
     ].client = mongomock.MongoClient().db.collection
     app.config.foca.db.dbs["trsStore"].collections["tools"].client.insert_one(mock_resp)
 
-    with app.app_context():
-        with pytest.raises(NotFound):
-            toolsIdVersionsVersionIdGet.__wrapped__(
-                id=MOCK_ID + MOCK_ID,
-                version_id=MOCK_ID,
-            )
+    with app.app_context(), pytest.raises(NotFound):
+        inspect.unwrap(toolsIdVersionsVersionIdGet)(
+            id=MOCK_ID + MOCK_ID,
+            version_id=MOCK_ID,
+        )
 
 
-def test_toolsIdVersionsVersionIdGet_version_NotFound():
+def test_toolsIdVersionsVersionIdGet_version_NotFound() -> None:
     """Test for getting a specific version of a tool associated with given tool
     and version identifiers when a version with the specified identifier is not
     available.
@@ -400,15 +393,14 @@ def test_toolsIdVersionsVersionIdGet_version_NotFound():
     ].client = mongomock.MongoClient().db.collection
     app.config.foca.db.dbs["trsStore"].collections["tools"].client.insert_one(mock_resp)
 
-    with app.app_context():
-        with pytest.raises(NotFound):
-            toolsIdVersionsVersionIdGet.__wrapped__(
-                id=MOCK_ID, version_id=MOCK_ID + MOCK_ID
-            )
+    with app.app_context(), pytest.raises(NotFound):
+        inspect.unwrap(toolsIdVersionsVersionIdGet)(
+            id=MOCK_ID, version_id=MOCK_ID + MOCK_ID
+        )
 
 
 # GET /tools/{id}/versions/{version_id}/containerfile
-def test_toolsIdVersionsVersionIdContainerfileGet():
+def test_toolsIdVersionsVersionIdContainerfileGet() -> None:
     """Test for getting container files associated with a specific tool version
     identified by the given tool and version identifiers.
     """
@@ -422,14 +414,14 @@ def test_toolsIdVersionsVersionIdContainerfileGet():
     app.config.foca.db.dbs["trsStore"].collections["tools"].client.insert_one(mock_resp)
 
     with app.app_context():
-        res = toolsIdVersionsVersionIdContainerfileGet.__wrapped__(
+        res = inspect.unwrap(toolsIdVersionsVersionIdContainerfileGet)(
             id=MOCK_ID,
             version_id=MOCK_ID,
         )
         assert res == [MOCK_CONTAINER_FILE["file_wrapper"]]
 
 
-def test_toolsIdVersionsVersionIdContainerfileGet_tool_na_NotFound():
+def test_toolsIdVersionsVersionIdContainerfileGet_tool_na_NotFound() -> None:
     """Test for getting container files associated with a specific tool version
     identified by the given tool and version identifiers when a tool with the
     specified identifier is not available.
@@ -443,15 +435,14 @@ def test_toolsIdVersionsVersionIdContainerfileGet_tool_na_NotFound():
     ].client = mongomock.MongoClient().db.collection
     app.config.foca.db.dbs["trsStore"].collections["tools"].client.insert_one(mock_resp)
 
-    with app.app_context():
-        with pytest.raises(NotFound):
-            toolsIdVersionsVersionIdContainerfileGet.__wrapped__(
-                id=MOCK_ID + MOCK_ID,
-                version_id=MOCK_ID,
-            )
+    with app.app_context(), pytest.raises(NotFound):
+        inspect.unwrap(toolsIdVersionsVersionIdContainerfileGet)(
+            id=MOCK_ID + MOCK_ID,
+            version_id=MOCK_ID,
+        )
 
 
-def test_toolsIdVersionsVersionIdContainerfileGet_version_na_NotFound():
+def test_toolsIdVersionsVersionIdContainerfileGet_version_na_NotFound() -> None:
     """Test for getting container files associated with a specific tool version
     identified by the given tool and version identifiers when a version with
     the specified identifier is not available.
@@ -465,15 +456,14 @@ def test_toolsIdVersionsVersionIdContainerfileGet_version_na_NotFound():
     ].client = mongomock.MongoClient().db.collection
     app.config.foca.db.dbs["trsStore"].collections["tools"].client.insert_one(mock_resp)
 
-    with app.app_context():
-        with pytest.raises(NotFound):
-            toolsIdVersionsVersionIdContainerfileGet.__wrapped__(
-                id=MOCK_ID,
-                version_id=MOCK_ID + MOCK_ID,
-            )
+    with app.app_context(), pytest.raises(NotFound):
+        inspect.unwrap(toolsIdVersionsVersionIdContainerfileGet)(
+            id=MOCK_ID,
+            version_id=MOCK_ID + MOCK_ID,
+        )
 
 
-def test_toolsIdVersionsVersionIdContainerfileGet_no_containerfile_NotFound():
+def test_toolsIdVersionsVersionIdContainerfileGet_no_containerfile_NotFound() -> None:
     """Test for getting container files associated with a specific tool version
     identified by the given tool and version identifiers when no container
     specification file is available for the tool version.
@@ -489,17 +479,16 @@ def test_toolsIdVersionsVersionIdContainerfileGet_no_containerfile_NotFound():
     ].client = mongomock.MongoClient().db.collection
     app.config.foca.db.dbs["trsStore"].collections["tools"].client.insert_one(mock_resp)
 
-    with app.app_context():
-        with pytest.raises(NotFound):
-            res = toolsIdVersionsVersionIdContainerfileGet.__wrapped__(
-                id=MOCK_ID,
-                version_id=MOCK_ID,
-            )
-            assert res == []
+    with app.app_context(), pytest.raises(NotFound):
+        res = inspect.unwrap(toolsIdVersionsVersionIdContainerfileGet)(
+            id=MOCK_ID,
+            version_id=MOCK_ID,
+        )
+        assert res == []
 
 
 # GET /tools/{id}/versions/{version_id}/{type}/descriptor
-def test_toolsIdVersionsVersionIdTypeDescriptorGet():
+def test_toolsIdVersionsVersionIdTypeDescriptorGet() -> None:
     """Test for getting `PRIMARY_DESCRIPTOR` wrapper associated with a specific
     tool version identified by the given tool and version identifiers for the
     given input `type`.
@@ -514,7 +503,7 @@ def test_toolsIdVersionsVersionIdTypeDescriptorGet():
     app.config.foca.db.dbs["trsStore"].collections["tools"].client.insert_one(mock_resp)
 
     with app.app_context():
-        res = toolsIdVersionsVersionIdTypeDescriptorGet.__wrapped__(
+        res = inspect.unwrap(toolsIdVersionsVersionIdTypeDescriptorGet)(
             type="CWL",
             id=MOCK_ID,
             version_id=MOCK_ID,
@@ -522,7 +511,7 @@ def test_toolsIdVersionsVersionIdTypeDescriptorGet():
         assert res == MOCK_DESCRIPTOR_FILE["file_wrapper"]
 
 
-def test_toolsIdVersionsVersionIdTypeDescriptorGet_tool_na_NotFound():
+def test_toolsIdVersionsVersionIdTypeDescriptorGet_tool_na_NotFound() -> None:
     """Test for getting `PRIMARY_DESCRIPTOR` wrapper associated with a specific
     tool version identified by the given tool and version identifiers for the
     given input `type` when a tool with the specified identifier is not
@@ -537,16 +526,15 @@ def test_toolsIdVersionsVersionIdTypeDescriptorGet_tool_na_NotFound():
     ].client = mongomock.MongoClient().db.collection
     app.config.foca.db.dbs["trsStore"].collections["tools"].client.insert_one(mock_resp)
 
-    with app.app_context():
-        with pytest.raises(NotFound):
-            toolsIdVersionsVersionIdTypeDescriptorGet.__wrapped__(
-                id=MOCK_ID + MOCK_ID,
-                version_id=MOCK_ID,
-                type="CWL",
-            )
+    with app.app_context(), pytest.raises(NotFound):
+        inspect.unwrap(toolsIdVersionsVersionIdTypeDescriptorGet)(
+            id=MOCK_ID + MOCK_ID,
+            version_id=MOCK_ID,
+            type="CWL",
+        )
 
 
-def test_toolsIdVersionsVersionIdTypeDescriptorGet_version_na_NotFound():
+def test_toolsIdVersionsVersionIdTypeDescriptorGet_version_na_NotFound() -> None:
     """Test for getting `PRIMARY_DESCRIPTOR` wrapper associated with a specific
     tool version identified by the given tool and version identifiers for the
     given input `type` when a version with the specified identifier is not
@@ -561,16 +549,15 @@ def test_toolsIdVersionsVersionIdTypeDescriptorGet_version_na_NotFound():
     ].client = mongomock.MongoClient().db.collection
     app.config.foca.db.dbs["trsStore"].collections["tools"].client.insert_one(mock_resp)
 
-    with app.app_context():
-        with pytest.raises(NotFound):
-            toolsIdVersionsVersionIdTypeDescriptorGet.__wrapped__(
-                id=MOCK_ID,
-                version_id=MOCK_ID + MOCK_ID,
-                type="CWL",
-            )
+    with app.app_context(), pytest.raises(NotFound):
+        inspect.unwrap(toolsIdVersionsVersionIdTypeDescriptorGet)(
+            id=MOCK_ID,
+            version_id=MOCK_ID + MOCK_ID,
+            type="CWL",
+        )
 
 
-def test_toolsIdVersionsVersionIdTypeDescriptorGet_type_NotFound():
+def test_toolsIdVersionsVersionIdTypeDescriptorGet_type_NotFound() -> None:
     """Test for getting `PRIMARY_DESCRIPTOR` wrapper associated with a specific
     tool version identified by the given tool and version identifiers for the
     given input `type` when the descriptor type is not available.
@@ -585,17 +572,16 @@ def test_toolsIdVersionsVersionIdTypeDescriptorGet_type_NotFound():
     ].client = mongomock.MongoClient().db.collection
     app.config.foca.db.dbs["trsStore"].collections["tools"].client.insert_one(mock_resp)
 
-    with app.app_context():
-        with pytest.raises(NotFound):
-            toolsIdVersionsVersionIdTypeDescriptorGet.__wrapped__(
-                id=MOCK_ID,
-                version_id=MOCK_ID,
-                type="CWL",
-            )
+    with app.app_context(), pytest.raises(NotFound):
+        inspect.unwrap(toolsIdVersionsVersionIdTypeDescriptorGet)(
+            id=MOCK_ID,
+            version_id=MOCK_ID,
+            type="CWL",
+        )
 
 
 # GET /tools/{id}/versions/{version_id}/{type}/descriptor/{relative_path}
-def test_toolsIdVersionsVersionIdTypeDescriptorRelativePathGet():
+def test_toolsIdVersionsVersionIdTypeDescriptorRelativePathGet() -> None:
     """Test for getting descriptor wrapper associated with a specific tool
     version identified by the given tool and version identifiers for the
     given input `type` and `relative_path`.
@@ -610,7 +596,7 @@ def test_toolsIdVersionsVersionIdTypeDescriptorRelativePathGet():
     app.config.foca.db.dbs["trsStore"].collections["tools"].client.insert_one(mock_resp)
 
     with app.app_context():
-        res = toolsIdVersionsVersionIdTypeDescriptorRelativePathGet.__wrapped__(
+        res = inspect.unwrap(toolsIdVersionsVersionIdTypeDescriptorRelativePathGet)(
             type="CWL",
             id=MOCK_ID,
             version_id=MOCK_ID,
@@ -619,7 +605,7 @@ def test_toolsIdVersionsVersionIdTypeDescriptorRelativePathGet():
         assert res == MOCK_DESCRIPTOR_SEC_FILE["file_wrapper"]
 
 
-def test_toolsIdVersionsVersionIdTypeDescriptorRelativePathGet_tool_NotFound():
+def test_toolsIdVersionsVersionIdTypeDescriptorRelativePathGet_tool_NotFound() -> None:
     """Test for getting descriptor wrapper associated with a specific tool
     version identified by the given tool and version identifiers for the
     given input `type` and `relative_path` when a tool with the specified
@@ -634,17 +620,16 @@ def test_toolsIdVersionsVersionIdTypeDescriptorRelativePathGet_tool_NotFound():
     ].client = mongomock.MongoClient().db.collection
     app.config.foca.db.dbs["trsStore"].collections["tools"].client.insert_one(mock_resp)
 
-    with app.app_context():
-        with pytest.raises(NotFound):
-            toolsIdVersionsVersionIdTypeDescriptorRelativePathGet.__wrapped__(
-                id=MOCK_ID + MOCK_ID,
-                version_id=MOCK_ID,
-                type="CWL",
-                relative_path="path_tmp",
-            )
+    with app.app_context(), pytest.raises(NotFound):
+        inspect.unwrap(toolsIdVersionsVersionIdTypeDescriptorRelativePathGet)(
+            id=MOCK_ID + MOCK_ID,
+            version_id=MOCK_ID,
+            type="CWL",
+            relative_path="path_tmp",
+        )
 
 
-def test_toolsIdVersionsVersionIdTypeDescriptorRelativePathGet_vers_NotFound():
+def test_toolsIdVersionsVersionIdTypeDescriptorRelativePathGet_vers_NotFound() -> None:
     """Test for getting descriptor wrapper associated with a specific tool
     version identified by the given tool and version identifiers for the
     given input `type` and `relative_path` when a tool version with the
@@ -659,17 +644,16 @@ def test_toolsIdVersionsVersionIdTypeDescriptorRelativePathGet_vers_NotFound():
     ].client = mongomock.MongoClient().db.collection
     app.config.foca.db.dbs["trsStore"].collections["tools"].client.insert_one(mock_resp)
 
-    with app.app_context():
-        with pytest.raises(NotFound):
-            toolsIdVersionsVersionIdTypeDescriptorRelativePathGet.__wrapped__(
-                id=MOCK_ID,
-                version_id=MOCK_ID + MOCK_ID,
-                type="CWL",
-                relative_path="path_tmp",
-            )
+    with app.app_context(), pytest.raises(NotFound):
+        inspect.unwrap(toolsIdVersionsVersionIdTypeDescriptorRelativePathGet)(
+            id=MOCK_ID,
+            version_id=MOCK_ID + MOCK_ID,
+            type="CWL",
+            relative_path="path_tmp",
+        )
 
 
-def test_toolsIdVersionsVersionIdTypeDescriptorRelativePathGet_type_NotFound():
+def test_toolsIdVersionsVersionIdTypeDescriptorRelativePathGet_type_NotFound() -> None:
     """Test for getting descriptor wrapper associated with a specific tool
     version identified by the given tool and version identifiers for the
     given input `type` and `relative_path` when a descriptor of the specified
@@ -684,17 +668,16 @@ def test_toolsIdVersionsVersionIdTypeDescriptorRelativePathGet_type_NotFound():
     ].client = mongomock.MongoClient().db.collection
     app.config.foca.db.dbs["trsStore"].collections["tools"].client.insert_one(mock_resp)
 
-    with app.app_context():
-        with pytest.raises(NotFound):
-            toolsIdVersionsVersionIdTypeDescriptorRelativePathGet.__wrapped__(
-                type="WDL",
-                id=MOCK_ID,
-                version_id=MOCK_ID,
-                relative_path="path_tmp",
-            )
+    with app.app_context(), pytest.raises(NotFound):
+        inspect.unwrap(toolsIdVersionsVersionIdTypeDescriptorRelativePathGet)(
+            type="WDL",
+            id=MOCK_ID,
+            version_id=MOCK_ID,
+            relative_path="path_tmp",
+        )
 
 
-def test_toolsIdVersionsVersionIdTypeDescriptorRelativePathGet_path_NotFound():
+def test_toolsIdVersionsVersionIdTypeDescriptorRelativePathGet_path_NotFound() -> None:
     """Test for getting descriptor wrapper associated with a specific tool
     version identified by the given tool and version identifiers for the
     given input `type` and `relative_path` when a descriptor is not available
@@ -709,18 +692,17 @@ def test_toolsIdVersionsVersionIdTypeDescriptorRelativePathGet_path_NotFound():
     ].client = mongomock.MongoClient().db.collection
     app.config.foca.db.dbs["trsStore"].collections["tools"].client.insert_one(mock_resp)
 
-    with app.app_context():
-        with pytest.raises(NotFound):
-            toolsIdVersionsVersionIdTypeDescriptorRelativePathGet.__wrapped__(
-                type="CWL",
-                id=MOCK_ID,
-                version_id=MOCK_ID,
-                relative_path="path_tmp_na",
-            )
+    with app.app_context(), pytest.raises(NotFound):
+        inspect.unwrap(toolsIdVersionsVersionIdTypeDescriptorRelativePathGet)(
+            type="CWL",
+            id=MOCK_ID,
+            version_id=MOCK_ID,
+            relative_path="path_tmp_na",
+        )
 
 
 # GET /tools/{id}/versions/{version_id}/{type}/files
-def test_toolsIdVersionsVersionIdTypeFilesGet():
+def test_toolsIdVersionsVersionIdTypeFilesGet() -> None:
     """Test for getting descriptor files associated with a specific tool
     version identified by the given tool and version identifiers.
     """
@@ -735,7 +717,7 @@ def test_toolsIdVersionsVersionIdTypeFilesGet():
     app.config.foca.db.dbs["trsStore"].collections["tools"].client.insert_one(mock_resp)
 
     with app.app_context():
-        res = toolsIdVersionsVersionIdTypeFilesGet.__wrapped__(
+        res = inspect.unwrap(toolsIdVersionsVersionIdTypeFilesGet)(
             id=MOCK_ID, version_id=MOCK_ID, type="CWL"
         )
         descriptors = [
@@ -749,7 +731,7 @@ def test_toolsIdVersionsVersionIdTypeFilesGet():
         assert len(res) == len(descriptors) - 1
 
 
-def test_toolsIdVersionsVersionIdTypeFilesGet_tool_na_NotFound():
+def test_toolsIdVersionsVersionIdTypeFilesGet_tool_na_NotFound() -> None:
     """Test for getting descriptor files associated with a specific tool
     version identified by the given tool and version identifiers, with
     the specified tool identifier not present.
@@ -764,14 +746,13 @@ def test_toolsIdVersionsVersionIdTypeFilesGet_tool_na_NotFound():
     ].client = mongomock.MongoClient().db.collection
     app.config.foca.db.dbs["trsStore"].collections["tools"].client.insert_one(mock_resp)
 
-    with app.app_context():
-        with pytest.raises(NotFound):
-            toolsIdVersionsVersionIdTypeFilesGet.__wrapped__(
-                id=MOCK_ID + MOCK_ID, version_id=MOCK_ID, type="CWL"
-            )
+    with app.app_context(), pytest.raises(NotFound):
+        inspect.unwrap(toolsIdVersionsVersionIdTypeFilesGet)(
+            id=MOCK_ID + MOCK_ID, version_id=MOCK_ID, type="CWL"
+        )
 
 
-def test_toolsIdVersionsVersionIdTypeFilesGet_version_na_NotFound():
+def test_toolsIdVersionsVersionIdTypeFilesGet_version_na_NotFound() -> None:
     """Test for getting descriptor files associated with a specific tool
     version identified by the given tool and version identifiers, with
     the specified tool version identifier not present.
@@ -786,14 +767,13 @@ def test_toolsIdVersionsVersionIdTypeFilesGet_version_na_NotFound():
     ].client = mongomock.MongoClient().db.collection
     app.config.foca.db.dbs["trsStore"].collections["tools"].client.insert_one(mock_resp)
 
-    with app.app_context():
-        with pytest.raises(NotFound):
-            toolsIdVersionsVersionIdTypeFilesGet.__wrapped__(
-                id=MOCK_ID, version_id=MOCK_ID + MOCK_ID, type="CWL"
-            )
+    with app.app_context(), pytest.raises(NotFound):
+        inspect.unwrap(toolsIdVersionsVersionIdTypeFilesGet)(
+            id=MOCK_ID, version_id=MOCK_ID + MOCK_ID, type="CWL"
+        )
 
 
-def test_toolsIdVersionsVersionIdTypeFilesGet_no_tool_file_NotFound():
+def test_toolsIdVersionsVersionIdTypeFilesGet_no_tool_file_NotFound() -> None:
     """Test for getting tool files associated with a specific tool version
     identified by the given tool and version identifiers when no
     specification file is available for the tool version.
@@ -808,27 +788,25 @@ def test_toolsIdVersionsVersionIdTypeFilesGet_no_tool_file_NotFound():
     ].client = mongomock.MongoClient().db.collection
     app.config.foca.db.dbs["trsStore"].collections["tools"].client.insert_one(mock_resp)
 
-    with app.app_context():
-        with pytest.raises(NotFound):
-            toolsIdVersionsVersionIdTypeFilesGet.__wrapped__(
-                id=MOCK_ID, version_id=MOCK_ID + MOCK_ID, type=MOCK_OTHER_FILE["type"]
-            )
+    with app.app_context(), pytest.raises(NotFound):
+        inspect.unwrap(toolsIdVersionsVersionIdTypeFilesGet)(
+            id=MOCK_ID, version_id=MOCK_ID + MOCK_ID, type=MOCK_OTHER_FILE["type"]
+        )
 
 
-def test_toolsIdVersionsVersionIdTypeFilesGet_wrong_type_BadRequest():
+def test_toolsIdVersionsVersionIdTypeFilesGet_wrong_type_BadRequest() -> None:
     """Test for getting files when an invalid type is specified."""
     app = Flask(__name__)
     app.config.foca = Config(db=MongoConfig(**MONGO_CONFIG))
 
-    with app.app_context():
-        with pytest.raises(BadRequest):
-            toolsIdVersionsVersionIdTypeFilesGet.__wrapped__(
-                id=MOCK_ID, version_id=MOCK_ID + MOCK_ID, type="foo"
-            )
+    with app.app_context(), pytest.raises(BadRequest):
+        inspect.unwrap(toolsIdVersionsVersionIdTypeFilesGet)(
+            id=MOCK_ID, version_id=MOCK_ID + MOCK_ID, type="foo"
+        )
 
 
 # GET /tools/{id}/versions/{version_id}/{type}/files?format=zip
-def test_toolsIdVersionsVersionIdTypeFilesGet_zip_success_content():
+def test_toolsIdVersionsVersionIdTypeFilesGet_zip_success_content() -> None:
     """Zip response contains expected files with inline content and headers."""
     app = Flask(__name__)
     app.config.foca = Config(db=MongoConfig(**MONGO_CONFIG))
@@ -842,7 +820,7 @@ def test_toolsIdVersionsVersionIdTypeFilesGet_zip_success_content():
 
     # Test the non-zip path first to ensure it works
     with app.app_context():
-        resp_list = toolsIdVersionsVersionIdTypeFilesGet.__wrapped__(
+        resp_list = inspect.unwrap(toolsIdVersionsVersionIdTypeFilesGet)(
             id=MOCK_ID,
             version_id=MOCK_ID,
             type="CWL",
@@ -938,7 +916,7 @@ def _app_with_url_file() -> Flask:
     return app
 
 
-def test_toolsIdVersionsVersionIdTypeFilesGet_zip_success_url(monkeypatch):
+def test_toolsIdVersionsVersionIdTypeFilesGet_zip_success_url(monkeypatch) -> None:
     """Zip response retrieves files without stored content from their URLs,
     as configured.
     """
@@ -952,7 +930,7 @@ def test_toolsIdVersionsVersionIdTypeFilesGet_zip_success_url(monkeypatch):
     app = _app_with_url_file()
 
     with app.test_request_context():
-        resp = toolsIdVersionsVersionIdTypeFilesGet.__wrapped__(
+        resp = inspect.unwrap(toolsIdVersionsVersionIdTypeFilesGet)(
             id=MOCK_ID,
             version_id=MOCK_ID,
             type="CWL",
@@ -975,7 +953,9 @@ def test_toolsIdVersionsVersionIdTypeFilesGet_zip_success_url(monkeypatch):
     ]
 
 
-def test_toolsIdVersionsVersionIdTypeFilesGet_zip_missing_content_url_NotFound():  # noqa: E501
+def test_toolsIdVersionsVersionIdTypeFilesGet_zip_missing_content_url_NotFound() -> (
+    None
+):
     """Zip building fails when a selected file lacks both content and URL."""
     app = Flask(__name__)
     app.config.foca = Config(db=MongoConfig(**MONGO_CONFIG))
@@ -992,17 +972,16 @@ def test_toolsIdVersionsVersionIdTypeFilesGet_zip_missing_content_url_NotFound()
     ].client = mongomock.MongoClient().db.collection
     app.config.foca.db.dbs["trsStore"].collections["tools"].client.insert_one(mock_resp)
 
-    with app.app_context():
-        with pytest.raises(NotFound):
-            toolsIdVersionsVersionIdTypeFilesGet.__wrapped__(
-                id=MOCK_ID,
-                version_id=MOCK_ID,
-                type="CWL",
-                format="zip",
-            )
+    with app.app_context(), pytest.raises(NotFound):
+        inspect.unwrap(toolsIdVersionsVersionIdTypeFilesGet)(
+            id=MOCK_ID,
+            version_id=MOCK_ID,
+            type="CWL",
+            format="zip",
+        )
 
 
-def test_toolsIdVersionsVersionIdTypeFilesGet_zip_non_string_content():
+def test_toolsIdVersionsVersionIdTypeFilesGet_zip_non_string_content() -> None:
     """Zip response stores content that is neither text nor bytes as text."""
     app = Flask(__name__)
     app.config.foca = Config(db=MongoConfig(**MONGO_CONFIG))
@@ -1017,7 +996,7 @@ def test_toolsIdVersionsVersionIdTypeFilesGet_zip_non_string_content():
     app.config.foca.db.dbs["trsStore"].collections["tools"].client.insert_one(mock_resp)
 
     with app.test_request_context():
-        resp = toolsIdVersionsVersionIdTypeFilesGet.__wrapped__(
+        resp = inspect.unwrap(toolsIdVersionsVersionIdTypeFilesGet)(
             id=MOCK_ID,
             version_id=MOCK_ID,
             type="CWL",
@@ -1034,7 +1013,9 @@ def test_toolsIdVersionsVersionIdTypeFilesGet_zip_non_string_content():
     }
 
 
-def test_toolsIdVersionsVersionIdTypeFilesGet_zip_fetch_error_NotFound(monkeypatch):  # noqa: E501
+def test_toolsIdVersionsVersionIdTypeFilesGet_zip_fetch_error_NotFound(
+    monkeypatch,
+) -> None:
     """Zip building fails when a file can't be retrieved from its URL."""
 
     def _raise(url, config):
@@ -1043,18 +1024,64 @@ def test_toolsIdVersionsVersionIdTypeFilesGet_zip_fetch_error_NotFound(monkeypat
     monkeypatch.setattr("trs_filer.ga4gh.trs.server.fetch_remote_file", _raise)
     app = _app_with_url_file()
 
-    with app.app_context():
-        with pytest.raises(NotFound):
-            toolsIdVersionsVersionIdTypeFilesGet.__wrapped__(
-                id=MOCK_ID,
-                version_id=MOCK_ID,
-                type="CWL",
-                format="zip",
-            )
+    with app.app_context(), pytest.raises(NotFound):
+        inspect.unwrap(toolsIdVersionsVersionIdTypeFilesGet)(
+            id=MOCK_ID,
+            version_id=MOCK_ID,
+            type="CWL",
+            format="zip",
+        )
+
+
+def test_toolsIdVersionsVersionIdTypeFilesGet_zip_bytes_content() -> None:
+    """Zip response stores content that is already bytes as is."""
+    app = Flask(__name__)
+    app.config.foca = Config(db=MongoConfig(**MONGO_CONFIG))
+    mock_resp = deepcopy(MOCK_TOOL_VERSION_ID)
+    mock_resp["id"] = MOCK_ID
+    for f in mock_resp["versions"][0]["files"]:
+        if f["type"] == "CWL" and f["tool_file"]["file_type"] == "TEST_FILE":
+            f["file_wrapper"]["content"] = b"raw"
+    app.config.foca.db.dbs["trsStore"].collections[
+        "tools"
+    ].client = mongomock.MongoClient().db.collection
+    app.config.foca.db.dbs["trsStore"].collections["tools"].client.insert_one(mock_resp)
+
+    with app.test_request_context():
+        resp = inspect.unwrap(toolsIdVersionsVersionIdTypeFilesGet)(
+            id=MOCK_ID,
+            version_id=MOCK_ID,
+            type="CWL",
+            format="zip",
+        )
+        resp.direct_passthrough = False
+        with ZipFile(BytesIO(resp.get_data())) as zf:
+            content = zf.read("path_test_cwl")
+    assert content == b"raw"
+
+
+def test_toolsIdVersionsVersionIdTypeFilesGet_zip_InternalServerError(
+    monkeypatch,
+) -> None:
+    """Zip building fails with an internal error on unexpected errors."""
+
+    def _raise(url, config):
+        raise ValueError("unexpected")
+
+    monkeypatch.setattr("trs_filer.ga4gh.trs.server.fetch_remote_file", _raise)
+    app = _app_with_url_file()
+
+    with app.app_context(), pytest.raises(InternalServerError):
+        inspect.unwrap(toolsIdVersionsVersionIdTypeFilesGet)(
+            id=MOCK_ID,
+            version_id=MOCK_ID,
+            type="CWL",
+            format="zip",
+        )
 
 
 # GET /tools/{id}/versions/{version_id}/{type}/tests
-def test_toolsIdVersionsVersionIdTypeTestsGet():
+def test_toolsIdVersionsVersionIdTypeTestsGet() -> None:
     """Test for getting list of test JSONs associated with a specific tool
     version identified by the given tool and version identifiers for the given
     input `type`.
@@ -1069,7 +1096,7 @@ def test_toolsIdVersionsVersionIdTypeTestsGet():
     app.config.foca.db.dbs["trsStore"].collections["tools"].client.insert_one(mock_resp)
 
     with app.app_context():
-        res = toolsIdVersionsVersionIdTypeTestsGet.__wrapped__(
+        res = inspect.unwrap(toolsIdVersionsVersionIdTypeTestsGet)(
             type="CWL",
             id=MOCK_ID,
             version_id=MOCK_ID,
@@ -1077,7 +1104,7 @@ def test_toolsIdVersionsVersionIdTypeTestsGet():
         assert res == [MOCK_TEST_FILE["file_wrapper"]]
 
 
-def test_toolsIdVersionsVersionIdTypeTestsGet_tool_na_NotFound():
+def test_toolsIdVersionsVersionIdTypeTestsGet_tool_na_NotFound() -> None:
     """Test for getting list of test JSONs associated with a specific tool
     version identified by the given tool and version identifiers for the given
     input `type` with specified tool identifier not present.
@@ -1091,16 +1118,15 @@ def test_toolsIdVersionsVersionIdTypeTestsGet_tool_na_NotFound():
     ].client = mongomock.MongoClient().db.collection
     app.config.foca.db.dbs["trsStore"].collections["tools"].client.insert_one(mock_resp)
 
-    with app.app_context():
-        with pytest.raises(NotFound):
-            toolsIdVersionsVersionIdTypeTestsGet.__wrapped__(
-                type="CWL",
-                id=MOCK_ID + MOCK_ID,
-                version_id=MOCK_ID,
-            )
+    with app.app_context(), pytest.raises(NotFound):
+        inspect.unwrap(toolsIdVersionsVersionIdTypeTestsGet)(
+            type="CWL",
+            id=MOCK_ID + MOCK_ID,
+            version_id=MOCK_ID,
+        )
 
 
-def test_toolsIdVersionsVersionIdTypeTestsGet_version_na_NotFound():
+def test_toolsIdVersionsVersionIdTypeTestsGet_version_na_NotFound() -> None:
     """Test for getting list of test JSONs associated with a specific tool
     version identified by the given tool and version identifiers for the given
     input `type` with specified tool version identifier not present.
@@ -1114,16 +1140,15 @@ def test_toolsIdVersionsVersionIdTypeTestsGet_version_na_NotFound():
     ].client = mongomock.MongoClient().db.collection
     app.config.foca.db.dbs["trsStore"].collections["tools"].client.insert_one(mock_resp)
 
-    with app.app_context():
-        with pytest.raises(NotFound):
-            toolsIdVersionsVersionIdTypeTestsGet.__wrapped__(
-                type="CWL",
-                id=MOCK_ID,
-                version_id=MOCK_ID + MOCK_ID,
-            )
+    with app.app_context(), pytest.raises(NotFound):
+        inspect.unwrap(toolsIdVersionsVersionIdTypeTestsGet)(
+            type="CWL",
+            id=MOCK_ID,
+            version_id=MOCK_ID + MOCK_ID,
+        )
 
 
-def test_toolsIdVersionsVersionIdTypeTestsGet_type_NotFound():
+def test_toolsIdVersionsVersionIdTypeTestsGet_type_NotFound() -> None:
     """Test for getting list of test JSONs associated with a specific tool
     version identified by the given tool and version identifiers for the given
     input `type` when no test files are available for the specified descriptor
@@ -1138,17 +1163,16 @@ def test_toolsIdVersionsVersionIdTypeTestsGet_type_NotFound():
     ].client = mongomock.MongoClient().db.collection
     app.config.foca.db.dbs["trsStore"].collections["tools"].client.insert_one(mock_resp)
 
-    with app.app_context():
-        with pytest.raises(NotFound):
-            toolsIdVersionsVersionIdTypeTestsGet.__wrapped__(
-                type="WDL",
-                id=MOCK_ID,
-                version_id=MOCK_ID,
-            )
+    with app.app_context(), pytest.raises(NotFound):
+        inspect.unwrap(toolsIdVersionsVersionIdTypeTestsGet)(
+            type="WDL",
+            id=MOCK_ID,
+            version_id=MOCK_ID,
+        )
 
 
 # POST /tools
-def test_postTool():
+def test_postTool() -> None:
     """Test for creating a tool; identifier assigned by implementation."""
     app = Flask(__name__)
     app.config.foca = Config(
@@ -1163,12 +1187,12 @@ def test_postTool():
     ].client = mongomock.MongoClient().db.collection
 
     with app.test_request_context(json=deepcopy(MOCK_TOOL_VERSION_ID)):
-        res = postTool.__wrapped__()
+        res = inspect.unwrap(postTool)()
         assert isinstance(res, str)
 
 
 # PUT /tools/{id}
-def test_putTool():
+def test_putTool() -> None:
     """Test for creating a tool; identifier provided by user."""
     app = Flask(__name__)
     app.config.foca = Config(
@@ -1183,11 +1207,11 @@ def test_putTool():
     ].client = mongomock.MongoClient().db.collection
 
     with app.test_request_context(json=deepcopy(MOCK_TOOL_VERSION_ID)):
-        res = putTool.__wrapped__(id=MOCK_ID)
+        res = inspect.unwrap(putTool)(id=MOCK_ID)
         assert res == MOCK_ID
 
 
-def test_putTool_update():
+def test_putTool_update() -> None:
     """Test for updating an existing tool."""
     app = Flask(__name__)
     app.config.foca = Config(
@@ -1208,12 +1232,12 @@ def test_putTool_update():
     )
 
     with app.test_request_context(json=deepcopy(MOCK_TOOL_VERSION_ID)):
-        res = putTool.__wrapped__(id=MOCK_ID)
+        res = inspect.unwrap(putTool)(id=MOCK_ID)
         assert res == MOCK_ID
 
 
 # DELETE /tools/{id}
-def test_deleteTool():
+def test_deleteTool() -> None:
     """Test for deleting a tool."""
     app = Flask(__name__)
     app.config.foca = Config(
@@ -1228,11 +1252,11 @@ def test_deleteTool():
     app.config.foca.db.dbs["trsStore"].collections["tools"].client.insert_one(mock_resp)
 
     with app.app_context():
-        res = deleteTool.__wrapped__(id=MOCK_ID)
+        res = inspect.unwrap(deleteTool)(id=MOCK_ID)
         assert res == MOCK_ID
 
 
-def test_deleteTool_NotFound():
+def test_deleteTool_NotFound() -> None:
     """Test `DELETE /tools/{id}` endpoint with unavailable id."""
     app = Flask(__name__)
     app.config.foca = Config(
@@ -1245,13 +1269,12 @@ def test_deleteTool_NotFound():
     ].client = mongomock.MongoClient().db.collection
     app.config.foca.db.dbs["trsStore"].collections["tools"].client.insert_one(mock_resp)
 
-    with app.app_context():
-        with pytest.raises(NotFound):
-            deleteTool.__wrapped__(id=MOCK_ID)
+    with app.app_context(), pytest.raises(NotFound):
+        inspect.unwrap(deleteTool)(id=MOCK_ID)
 
 
 # POST /tools/{id}/versions
-def test_postToolVersion():
+def test_postToolVersion() -> None:
     """Test for appending or replacing a version of a tool associated with a
     given `id`.
     """
@@ -1268,12 +1291,12 @@ def test_postToolVersion():
     app.config.foca.db.dbs["trsStore"].collections["tools"].client.insert_one(mock_resp)
 
     with app.test_request_context(json=deepcopy(MOCK_VERSION_ID)):
-        res = postToolVersion.__wrapped__(id=MOCK_ID)
+        res = inspect.unwrap(postToolVersion)(id=MOCK_ID)
         assert isinstance(res, str)
 
 
 # PUT /tools/{id}/versions/{version_id}
-def test_putToolVersion():
+def test_putToolVersion() -> None:
     """Test for creating a tool version; identifier provided by user."""
     app = Flask(__name__)
     app.config.foca = Config(
@@ -1288,14 +1311,14 @@ def test_putToolVersion():
     app.config.foca.db.dbs["trsStore"].collections["tools"].client.insert_one(mock_resp)
 
     with app.test_request_context(json=deepcopy(MOCK_VERSION_ID)):
-        res = putToolVersion.__wrapped__(
+        res = inspect.unwrap(putToolVersion)(
             id=MOCK_ID,
             version_id=MOCK_ID,
         )
         assert isinstance(res, str)
 
 
-def test_putToolVersion_update():
+def test_putToolVersion_update() -> None:
     """Test for updating an existing tool version."""
     app = Flask(__name__)
     app.config.foca = Config(
@@ -1310,7 +1333,7 @@ def test_putToolVersion_update():
     app.config.foca.db.dbs["trsStore"].collections["tools"].client.insert_one(mock_resp)
 
     with app.test_request_context(json=deepcopy(MOCK_VERSION_ID)):
-        res = putToolVersion.__wrapped__(
+        res = inspect.unwrap(putToolVersion)(
             id=MOCK_ID,
             version_id=MOCK_ID,
         )
@@ -1318,7 +1341,7 @@ def test_putToolVersion_update():
 
 
 # DELETE /tools/{id}/versions/{version_id}
-def test_deleteToolVersion():
+def test_deleteToolVersion() -> None:
     """Test for deleting a version `version_id` of a tool associated with a
     given `id`.
     """
@@ -1337,14 +1360,14 @@ def test_deleteToolVersion():
 
     data = deepcopy(MOCK_TOOL_VERSION_ID)
     with app.app_context():
-        res = deleteToolVersion.__wrapped__(
+        res = inspect.unwrap(deleteToolVersion)(
             id=MOCK_ID,
             version_id=data["versions"][0]["id"],
         )
         assert res == data["versions"][0]["id"]
 
 
-def test_deleteToolVersion_tool_NotFound():
+def test_deleteToolVersion_tool_NotFound() -> None:
     """Test for deleting a version `version_id` of a tool associated with a
     given `id` when a tool with the specified identifier is not available.
     """
@@ -1360,15 +1383,14 @@ def test_deleteToolVersion_tool_NotFound():
     ].client = mongomock.MongoClient().db.collection
     app.config.foca.db.dbs["trsStore"].collections["tools"].client.insert_one(mock_resp)
 
-    with app.app_context():
-        with pytest.raises(NotFound):
-            deleteToolVersion.__wrapped__(
-                id=MOCK_ID + MOCK_ID,
-                version_id=MOCK_ID,
-            )
+    with app.app_context(), pytest.raises(NotFound):
+        inspect.unwrap(deleteToolVersion)(
+            id=MOCK_ID + MOCK_ID,
+            version_id=MOCK_ID,
+        )
 
 
-def test_deleteToolVersion_version_NotFound():
+def test_deleteToolVersion_version_NotFound() -> None:
     """Test for deleting a version `version_id` of a tool associated with a
     given `id` when a version with the specified `version_id` is not available.
     """
@@ -1384,15 +1406,14 @@ def test_deleteToolVersion_version_NotFound():
     ].client = mongomock.MongoClient().db.collection
     app.config.foca.db.dbs["trsStore"].collections["tools"].client.insert_one(mock_resp)
 
-    with app.app_context():
-        with pytest.raises(NotFound):
-            deleteToolVersion.__wrapped__(
-                id=MOCK_ID,
-                version_id=MOCK_ID + MOCK_ID,
-            )
+    with app.app_context(), pytest.raises(NotFound):
+        inspect.unwrap(deleteToolVersion)(
+            id=MOCK_ID,
+            version_id=MOCK_ID + MOCK_ID,
+        )
 
 
-def test_deleteToolVersion_InternalServerError(monkeypatch):
+def test_deleteToolVersion_InternalServerError(monkeypatch) -> None:
     """Test for deleting a version `version_id` of a tool associated with a
     given `id` when the deletion was incomplete (either only the tool or only
     the associated files were deleted).
@@ -1422,16 +1443,15 @@ def test_deleteToolVersion_InternalServerError(monkeypatch):
     app.config.foca.db.dbs["trsStore"].collections["tools"].client.insert_one(mock_resp)
 
     data = deepcopy(MOCK_TOOL_VERSION_ID)
-    with app.app_context():
-        with pytest.raises(InternalServerError):
-            deleteToolVersion.__wrapped__(
-                id=MOCK_ID,
-                version_id=data["versions"][0]["id"],
-            )
+    with app.app_context(), pytest.raises(InternalServerError):
+        inspect.unwrap(deleteToolVersion)(
+            id=MOCK_ID,
+            version_id=data["versions"][0]["id"],
+        )
 
 
 # POST /toolClasses
-def test_postToolClass():
+def test_postToolClass() -> None:
     """Test for creating a tool class; identifier assigned by implementation."""
     app = Flask(__name__)
     app.config.foca = Config(
@@ -1444,12 +1464,12 @@ def test_postToolClass():
     data = deepcopy(MOCK_TOOL_CLASS)
     del data["id"]
     with app.test_request_context(json=data):
-        res = postToolClass.__wrapped__()
+        res = inspect.unwrap(postToolClass)()
         assert isinstance(res, str)
 
 
 # PUT /toolClasses
-def test_putToolClass():
+def test_putToolClass() -> None:
     """Test for creating a tool class; identifier provided by user."""
     app = Flask(__name__)
     app.config.foca = Config(
@@ -1462,12 +1482,12 @@ def test_putToolClass():
     data = deepcopy(MOCK_TOOL_CLASS)
     del data["id"]
     with app.test_request_context(json=MOCK_TOOL_CLASS):
-        res = putToolClass.__wrapped__(id=MOCK_ID)
+        res = inspect.unwrap(putToolClass)(id=MOCK_ID)
         assert isinstance(res, str)
         assert res == MOCK_ID
 
 
-def test_putToolClass_update():
+def test_putToolClass_update() -> None:
     """Test for updating an existing tool class."""
     app = Flask(__name__)
     app.config.foca = Config(
@@ -1484,13 +1504,13 @@ def test_putToolClass_update():
     data = deepcopy(MOCK_TOOL_CLASS)
     del data["id"]
     with app.test_request_context(json=MOCK_TOOL_CLASS):
-        res = putToolClass.__wrapped__(id=MOCK_ID)
+        res = inspect.unwrap(putToolClass)(id=MOCK_ID)
         assert isinstance(res, str)
         assert res == MOCK_ID
 
 
 # DELETE /toolClasses
-def test_deleteToolClass():
+def test_deleteToolClass() -> None:
     """Test for deleting a tool class associated with a given `id`."""
     app = Flask(__name__)
     app.config.foca = Config(
@@ -1509,13 +1529,13 @@ def test_deleteToolClass():
     )
 
     with app.test_request_context():
-        res = deleteToolClass.__wrapped__(
+        res = inspect.unwrap(deleteToolClass)(
             id=MOCK_ID,
         )
         assert res == MOCK_ID
 
 
-def test_deleteToolClass_NotFound():
+def test_deleteToolClass_NotFound() -> None:
     """Test for deleting a tool associated with a given tool `id` when a tool
     class with the specified `id` is not available.
     """
@@ -1535,14 +1555,13 @@ def test_deleteToolClass_NotFound():
         mock_resp
     )
 
-    with app.test_request_context():
-        with pytest.raises(NotFound):
-            deleteToolClass.__wrapped__(
-                id=MOCK_ID + MOCK_ID,
-            )
+    with app.test_request_context(), pytest.raises(NotFound):
+        inspect.unwrap(deleteToolClass)(
+            id=MOCK_ID + MOCK_ID,
+        )
 
 
-def test_deleteToolClass_BadRequest():
+def test_deleteToolClass_BadRequest() -> None:
     """Test for deleting a tool class associated with a given `id` when a tool
     associated with this tool class exists.
     """
@@ -1566,8 +1585,7 @@ def test_deleteToolClass_BadRequest():
         mock_resp_classes
     )
 
-    with app.test_request_context():
-        with pytest.raises(BadRequest):
-            deleteToolClass.__wrapped__(
-                id=MOCK_ID,
-            )
+    with app.test_request_context(), pytest.raises(BadRequest):
+        inspect.unwrap(deleteToolClass)(
+            id=MOCK_ID,
+        )

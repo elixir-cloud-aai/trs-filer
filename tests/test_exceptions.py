@@ -8,8 +8,9 @@ from trs_filer.errors.exceptions import RemoteFileError
 
 
 def test_remote_file_error(app: App) -> None:
-    """Files that can't be retrieved from their URLs are answered with
-    `400 Bad Request` and a fixed detail, without the reason.
+    """Files that can't be retrieved are answered with `400 Bad Request`.
+
+    The response has a fixed detail, without the reason.
 
     Args:
         app: FOCA app.

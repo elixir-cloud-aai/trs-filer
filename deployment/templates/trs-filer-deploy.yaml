@@ -60,4 +60,3 @@ spec:
               path: config.yaml
           name: app-config-{{ .Values.trs_filer.appName }}
         name: config-yaml
-

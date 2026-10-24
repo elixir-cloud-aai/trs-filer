@@ -8,6 +8,82 @@ build-backend = "setuptools.build_meta"
 line-length = 88
 target-version = "py313"
 
+[tool.ruff.lint]
+# The rule set shared by FOCA and FOCA apps: FOCA's rules plus `G` and `S`;
+# unlike in FOCA, `D` applies everywhere, also to the tests
+select = [
+    "B",    # flake8-bugbear
+    "C4",   # flake8-comprehensions
+    "D",    # pydocstyle (docstrings)
+    "E",    # pycodestyle errors
+    "F",    # Pyflakes
+    "G",    # flake8-logging-format
+    "I",    # isort
+    "PL",   # Pylint
+    "RUF",  # Ruff-specific rules
+    "S",    # flake8-bandit (security)
+    "SIM",  # flake8-simplify
+    "UP",   # pyupgrade
+    "W",    # pycodestyle warnings
+]
+ignore = [
+    # Complexity limits, as in FOCA: some functions mirror the API's
+    # operations or take many test fixtures, and splitting them would obscure
+    # them
+    "PLR0912",  # too-many-branches
+    "PLR0913",  # too-many-arguments
+    "PLR0915",  # too-many-statements
+    "PLR0917",  # too-many-positional-arguments
+    # Flags HTTP status codes and other literals (e.g., lengths), which are
+    # clear as is
+    "PLR2004",  # magic-value-comparison
+]
+
+[tool.ruff.lint.isort]
+force-sort-within-sections = true
+known-first-party = ["trs_filer", "tests"]
+
+[tool.ruff.lint.per-file-ignores]
+# pytest checks with `assert`
+"tests/**" = ["S101"]
+# TEMPORARY: until these tests are rewritten (#147)
+"tests/ga4gh/trs/test_server.py" = ["D205"]
+"tests/ga4gh/trs/endpoints/test_register_objects.py" = ["D205"]
+"tests/integration_tests.py" = ["D205", "PLW0603", "S113"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.mypy]
+files = ["trs_filer", "scripts", "tests"]
+python_version = "3.13"
+# Complete type hints: all functions annotated, generic types parametrized
+# (instead of ruff's `ANN` rules, which report missing hints only, without
+# checking them)
+disallow_untyped_defs = true
+disallow_any_generics = true
+warn_unused_ignores = true
+
+# Connexion 2 ships no type information
+[[tool.mypy.overrides]]
+module = ["connexion", "connexion.*"]
+ignore_missing_imports = true
+
+# Gunicorn ships no type information (used by the tests only)
+[[tool.mypy.overrides]]
+module = ["gunicorn", "gunicorn.*"]
+ignore_missing_imports = true
+
+# TEMPORARY: until these tests are typed (#147)
+[[tool.mypy.overrides]]
+module = [
+    "tests.ga4gh.trs.test_server",
+    "tests.ga4gh.trs.endpoints.test_register_objects",
+    "tests.ga4gh.trs.endpoints.test_register_tool_classes",
+    "tests.integration_tests",
+]
+ignore_errors = true
+
 [tool.coverage.run]
 source = ["trs_filer", "scripts"]
 
@@ -53,20 +129,20 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# Local hooks of `.pre-commit-config.yaml` use these too
 dev = [
+    "ast-grep-cli>=0.51",
     "build>=1.6",
     "coverage>=7.16",
-    # TEMPORARY: the linter until the shared ruff, mypy and pre-commit setup
-    # replaces it (#106); settings in `.flake8`
-    "flake8>=7.1",
     "mongomock>=4.3",
+    "mypy>=2.4",
     "packaging>=26.3",
+    "pre-commit>=4.6",
     "pytest>=9.1",
-    # TEMPORARY: the formatter, until pre-commit runs it (#106); ruff's
-    # minor versions change the format style, so the minor is pinned
-    "ruff>=0.17.1,<0.18",
     # Used by the tests; builds use `build-system.requires`
     "setuptools-scm>=10.3",
+    "types-PyYAML>=6.0.12",
+    "types-requests>=2.31",
 ]
 
 [project.readme]

@@ -23,12 +23,13 @@ from tests.mock_data import (
     MOCK_ID,
     MOCK_ID_ONE_CHAR,
     MOCK_TOOL,
-    MOCK_TOOL_VERSION_ID,
     MOCK_TOOL_DUPLICATE_VERSION_IDS,
+    MOCK_TOOL_VERSION_ID,
     MOCK_VERSION_ID,
     MOCK_VERSION_NO_ID,
     MONGO_CONFIG,
 )
+from trs_filer.custom_config import CustomConfig
 from trs_filer.errors.exceptions import (
     BadRequest,
     InternalServerError,
@@ -40,7 +41,6 @@ from trs_filer.ga4gh.trs.endpoints.register_objects import (
     RegisterToolVersion,
 )
 from trs_filer.remote_files import RemoteFile
-from trs_filer.custom_config import CustomConfig
 
 
 def _mock_collections(app: Flask) -> None:
@@ -66,7 +66,7 @@ def _raise(exception) -> None:
 class TestRegisterTool:
     """Tests for `RegisterTool` class."""
 
-    def test_init(self):
+    def test_init(self) -> None:
         """Test for constructing class."""
         app = Flask(__name__)
         app.config.foca = Config(
@@ -81,7 +81,7 @@ class TestRegisterTool:
             assert tool.data["description"] == MOCK_TOOL["description"]
             assert tool.data["id"] is None
 
-    def test_process_metadata(self):
+    def test_process_metadata(self) -> None:
         """Test for processing metadata."""
         app = Flask(__name__)
         app.config.foca = Config(
@@ -96,7 +96,7 @@ class TestRegisterTool:
             tool.process_metadata()
             assert isinstance(tool.id_charset, str)
 
-    def test_register_metadata(self):
+    def test_register_metadata(self) -> None:
         """Test for creating a tool with a randomly assigned identifier."""
         app = Flask(__name__)
         app.config.foca = Config(
@@ -115,7 +115,7 @@ class TestRegisterTool:
             tool.register_metadata()
             assert isinstance(tool.data["id"], str)
 
-    def test_register_metadata_with_id(self):
+    def test_register_metadata_with_id(self) -> None:
         """Test for creating a tool with a user-supplied identifier."""
         app = Flask(__name__)
         app.config.foca = Config(
@@ -134,7 +134,7 @@ class TestRegisterTool:
             tool.register_metadata()
             assert tool.data["id"] == MOCK_ID
 
-    def test_register_metadata_with_id_replace(self):
+    def test_register_metadata_with_id_replace(self) -> None:
         """Test for updating an existing tool."""
         app = Flask(__name__)
         app.config.foca = Config(
@@ -158,7 +158,7 @@ class TestRegisterTool:
             tool.register_metadata()
             assert tool.data["id"] == MOCK_ID
 
-    def test_register_metadata_duplicate_version_ids_BadRequest(self):
+    def test_register_metadata_duplicate_version_ids_BadRequest(self) -> None:
         """Test for creating a tool; duplicate version identifiers supplied."""
         app = Flask(__name__)
         app.config.foca = Config(
@@ -172,15 +172,12 @@ class TestRegisterTool:
         ].client.insert_one = MagicMock()
 
         data = deepcopy(MOCK_TOOL_DUPLICATE_VERSION_IDS)
-        with app.app_context():
-            with pytest.raises(BadRequest):
-                tool = RegisterTool(data=data)
-                tool.register_metadata()
+        with app.app_context(), pytest.raises(BadRequest):
+            tool = RegisterTool(data=data)
+            tool.register_metadata()
 
-    def test_create_tool_invalid_file_data_no_content_or_url_BadRequest(self):
-        """Test for creating a tool; both file `content` and `url` fields
-        missing.
-        """
+    def test_create_tool_invalid_file_data_no_content_or_url_BadRequest(self) -> None:
+        """Test for creating a tool; both file `content` and `url` fields missing."""
         app = Flask(__name__)
         app.config.foca = Config(
             db=MongoConfig(**MONGO_CONFIG),
@@ -195,12 +192,11 @@ class TestRegisterTool:
         temp_data = deepcopy(MOCK_TOOL_VERSION_ID)
         temp_data["versions"][0]["files"] = MOCK_FILES_CONTENT_URL_MISSING
         data = temp_data
-        with app.app_context():
-            with pytest.raises(BadRequest):
-                tool = RegisterTool(data=data)
-                tool.register_metadata()
+        with app.app_context(), pytest.raises(BadRequest):
+            tool = RegisterTool(data=data)
+            tool.register_metadata()
 
-    def test_create_tool_invalid_file_data_no_checksum_BadRequest(self):
+    def test_create_tool_invalid_file_data_no_checksum_BadRequest(self) -> None:
         """Test for creating a tool; file `checksum` field missing although
         production tool.
         """
@@ -217,12 +213,11 @@ class TestRegisterTool:
 
         data = deepcopy(MOCK_TOOL_VERSION_ID)
         data["versions"][0]["files"] = MOCK_FILES_CHECKSUM_MISSING
-        with app.app_context():
-            with pytest.raises(BadRequest):
-                tool = RegisterTool(data=data)
-                tool.register_metadata()
+        with app.app_context(), pytest.raises(BadRequest):
+            tool = RegisterTool(data=data)
+            tool.register_metadata()
 
-    def test_register_metadata_with_tool_class_validation(self):
+    def test_register_metadata_with_tool_class_validation(self) -> None:
         """Test for creating a tool with tool class validation passing."""
         app = Flask(__name__)
         app.config.foca = Config(
@@ -241,7 +236,7 @@ class TestRegisterTool:
             tool.register_metadata()
             assert isinstance(tool.data["id"], str)
 
-    def test_register_metadata_with_tool_class_validation_BadRequest(self):
+    def test_register_metadata_with_tool_class_validation_BadRequest(self) -> None:
         """Test for creating a tool with tool class validation failing."""
         app = Flask(__name__)
         app.config.foca = Config(
@@ -258,12 +253,11 @@ class TestRegisterTool:
 
         data = deepcopy(MOCK_TOOL_VERSION_ID)
         data["toolclass"]["id"] = MOCK_ID + MOCK_ID
-        with app.app_context():
-            with pytest.raises(BadRequest):
-                tool = RegisterTool(data=data)
-                tool.register_metadata()
+        with app.app_context(), pytest.raises(BadRequest):
+            tool = RegisterTool(data=data)
+            tool.register_metadata()
 
-    def test_register_metadata_without_tool_class_identifier(self):
+    def test_register_metadata_without_tool_class_identifier(self) -> None:
         """Test for creating a tool with tool class without an identifier."""
         app = Flask(__name__)
         app.config.foca = Config(
@@ -283,7 +277,7 @@ class TestRegisterTool:
             tool.register_metadata()
             assert isinstance(tool.data["id"], str)
 
-    def test_register_metadata_tool_duplicate_key(self):
+    def test_register_metadata_tool_duplicate_key(self) -> None:
         """Test for creating a tool; duplicate key error occurs."""
         app = Flask(__name__)
         app.config.foca = Config(
@@ -307,7 +301,7 @@ class TestRegisterTool:
             tool.register_metadata()
             assert isinstance(tool.data["id"], str)
 
-    def test_register_metadata_duplicate_keys_repeated(self):
+    def test_register_metadata_duplicate_keys_repeated(self) -> None:
         """Test for creating a tool; running out of unique identifiers."""
         app = Flask(__name__)
         app.config.foca = Config(
@@ -328,19 +322,18 @@ class TestRegisterTool:
         )
 
         data = deepcopy(MOCK_TOOL)
-        with app.app_context():
-            with pytest.raises(InternalServerError):
-                tool = RegisterTool(data=data)
-                tool.register_metadata()
-                tool = RegisterTool(data=data)
-                tool.register_metadata()
-                print(tool.data["id"])
+        with app.app_context(), pytest.raises(InternalServerError):
+            tool = RegisterTool(data=data)
+            tool.register_metadata()
+            tool = RegisterTool(data=data)
+            tool.register_metadata()
+            print(tool.data["id"])
 
 
 class TestRegisterToolVersion:
     """Tests for `RegisterToolVersion` class."""
 
-    def test_init(self):
+    def test_init(self) -> None:
         """Test for constructing class."""
         app = Flask(__name__)
         app.config.foca = Config(
@@ -355,7 +348,7 @@ class TestRegisterToolVersion:
             assert tool.data["name"] == MOCK_VERSION_NO_ID["name"]
             assert tool.id == MOCK_ID
 
-    def test_process_metadata(self):
+    def test_process_metadata(self) -> None:
         """Test for processing metadata."""
         app = Flask(__name__)
         app.config.foca = Config(
@@ -370,7 +363,7 @@ class TestRegisterToolVersion:
             tool.process_metadata()
             assert isinstance(tool.id_charset, str)
 
-    def test_process_files_invalid_descriptor_type(self):
+    def test_process_files_invalid_descriptor_type(self) -> None:
         """Test for processing files with an invalid descriptor type."""
         app = Flask(__name__)
         app.config.foca = Config(
@@ -382,13 +375,12 @@ class TestRegisterToolVersion:
         data = deepcopy(MOCK_VERSION_NO_ID)
         mock_file = deepcopy(MOCK_DESCRIPTOR_FILE)
         mock_file["type"] = "invalid"
-        with app.app_context():
-            with pytest.raises(BadRequest):
-                tool = RegisterToolVersion(data=data, id=MOCK_ID)
-                tool.data["files"] = [mock_file]
-                tool.process_files()
+        with app.app_context(), pytest.raises(BadRequest):
+            tool = RegisterToolVersion(data=data, id=MOCK_ID)
+            tool.data["files"] = [mock_file]
+            tool.process_files()
 
-    def test_process_files_multiple_primary_descriptors(self):
+    def test_process_files_multiple_primary_descriptors(self) -> None:
         """Test for processing files with more than one descriptor being
         annotated as primary descriptor.
         """
@@ -403,13 +395,12 @@ class TestRegisterToolVersion:
         mock_descriptor = deepcopy(MOCK_DESCRIPTOR_FILE)
         mock_descriptor["tool_file"]["path"] = "random_path"
         data["files"].append(mock_descriptor)
-        with app.app_context():
-            with pytest.raises(BadRequest):
-                tool = RegisterToolVersion(data=data, id=MOCK_ID)
-                tool.data["files"] = data["files"]
-                tool.process_files()
+        with app.app_context(), pytest.raises(BadRequest):
+            tool = RegisterToolVersion(data=data, id=MOCK_ID)
+            tool.data["files"] = data["files"]
+            tool.process_files()
 
-    def test_process_files_secondary_but_not_primary_descriptor(self):
+    def test_process_files_secondary_but_not_primary_descriptor(self) -> None:
         """Test for processing files with a secondary descriptor but no
         primary descriptor file.
         """
@@ -422,13 +413,12 @@ class TestRegisterToolVersion:
 
         data = deepcopy(MOCK_VERSION_NO_ID)
         data["files"] = [MOCK_DESCRIPTOR_SEC_FILE]
-        with app.app_context():
-            with pytest.raises(BadRequest):
-                tool = RegisterToolVersion(data=data, id=MOCK_ID)
-                tool.data["files"] = data["files"]
-                tool.process_files()
+        with app.app_context(), pytest.raises(BadRequest):
+            tool = RegisterToolVersion(data=data, id=MOCK_ID)
+            tool.data["files"] = data["files"]
+            tool.process_files()
 
-    def test_process_files_invalid_container_type(self):
+    def test_process_files_invalid_container_type(self) -> None:
         """Test for processing files with an invalid container type."""
         app = Flask(__name__)
         app.config.foca = Config(
@@ -440,13 +430,12 @@ class TestRegisterToolVersion:
         data = deepcopy(MOCK_VERSION_NO_ID)
         mock_file = deepcopy(MOCK_CONTAINER_FILE)
         mock_file["type"] = "invalid"
-        with app.app_context():
-            with pytest.raises(BadRequest):
-                tool = RegisterToolVersion(data=data, id=MOCK_ID)
-                tool.data["files"] = [mock_file]
-                tool.process_files()
+        with app.app_context(), pytest.raises(BadRequest):
+            tool = RegisterToolVersion(data=data, id=MOCK_ID)
+            tool.data["files"] = [mock_file]
+            tool.process_files()
 
-    def test_process_files_non_unique_paths(self):
+    def test_process_files_non_unique_paths(self) -> None:
         """Test for processing files when multiple file objects associated
         with a given descriptor type share the same path.
         """
@@ -463,13 +452,12 @@ class TestRegisterToolVersion:
         tmp_file_obj1["tool_file"]["path"] = "tmp_url"
         tmp_file_obj2["tool_file"]["path"] = "tmp_url"
         data["files"] = [tmp_file_obj1, tmp_file_obj2]
-        with app.app_context():
-            with pytest.raises(BadRequest):
-                tool = RegisterToolVersion(data=data, id=MOCK_ID)
-                tool.data["files"] = data["files"]
-                tool.process_files()
+        with app.app_context(), pytest.raises(BadRequest):
+            tool = RegisterToolVersion(data=data, id=MOCK_ID)
+            tool.data["files"] = data["files"]
+            tool.process_files()
 
-    def test_process_files_no_content(self, monkeypatch):
+    def test_process_files_no_content(self, monkeypatch) -> None:
         """Test for processing files with no content provided."""
         app = Flask(__name__)
         app.config.foca = Config(
@@ -504,10 +492,8 @@ class TestRegisterToolVersion:
                 )
             ]
 
-    def test_process_files_no_content_invalid_url(self, monkeypatch):
-        """Test for processing files with no content provided and an invalid
-        URL.
-        """
+    def test_process_files_no_content_invalid_url(self, monkeypatch) -> None:
+        """Test for processing files with no content provided and an invalid URL."""
         app = Flask(__name__)
         app.config.foca = Config(
             db=MongoConfig(**MONGO_CONFIG),
@@ -523,13 +509,12 @@ class TestRegisterToolVersion:
         mock_file = deepcopy(MOCK_CONTAINER_FILE)
         del mock_file["file_wrapper"]["content"]
         mock_file["file_wrapper"]["url"] = "https://example.com/Dockerfile"
-        with app.app_context():
-            with pytest.raises(RemoteFileError):
-                tool = RegisterToolVersion(data=data, id=MOCK_ID)
-                tool.data["files"] = [mock_file]
-                tool.process_files()
+        with app.app_context(), pytest.raises(RemoteFileError):
+            tool = RegisterToolVersion(data=data, id=MOCK_ID)
+            tool.data["files"] = [mock_file]
+            tool.process_files()
 
-    def test_register_metadata(self):
+    def test_register_metadata(self) -> None:
         """Test for creating a version with a randomly assigned identifier."""
         app = Flask(__name__)
         app.config.foca = Config(
@@ -550,7 +535,7 @@ class TestRegisterToolVersion:
             version.register_metadata()
             assert isinstance(version.data, dict)
 
-    def test_register_metadata_with_id(self):
+    def test_register_metadata_with_id(self) -> None:
         """Test for creating a version with a user-supplied identifier."""
         app = Flask(__name__)
         app.config.foca = Config(
@@ -570,7 +555,7 @@ class TestRegisterToolVersion:
             version.register_metadata()
             assert isinstance(version.data, dict)
 
-    def test_register_metadata_with_id_replace(self):
+    def test_register_metadata_with_id_replace(self) -> None:
         """Test for updating an existing version."""
         app = Flask(__name__)
         app.config.foca = Config(
@@ -591,7 +576,7 @@ class TestRegisterToolVersion:
             version.register_metadata()
             assert isinstance(version.data, dict)
 
-    def test_register_metadata_duplicate_keys(self):
+    def test_register_metadata_duplicate_keys(self) -> None:
         """Test for creating a version; running out of unique identifiers."""
         app = Flask(__name__)
         app.config.foca = Config(
@@ -613,14 +598,13 @@ class TestRegisterToolVersion:
         )
 
         data = deepcopy(MOCK_VERSION_NO_ID)
-        with app.app_context():
-            with pytest.raises(InternalServerError):
-                version = RegisterToolVersion(data=data, id=MOCK_ID)
-                version.register_metadata()
-                version = RegisterToolVersion(data=data, id=MOCK_ID)
-                version.register_metadata()
+        with app.app_context(), pytest.raises(InternalServerError):
+            version = RegisterToolVersion(data=data, id=MOCK_ID)
+            version.register_metadata()
+            version = RegisterToolVersion(data=data, id=MOCK_ID)
+            version.register_metadata()
 
-    def test_register_metadata_tool_na(self):
+    def test_register_metadata_tool_na(self) -> None:
         """Test for creating/updating a version; tool not available."""
         app = Flask(__name__)
         app.config.foca = Config(
@@ -638,7 +622,6 @@ class TestRegisterToolVersion:
         )
 
         data = deepcopy(MOCK_VERSION_NO_ID)
-        with app.app_context():
-            with pytest.raises(NotFound):
-                version = RegisterToolVersion(data=data, id=MOCK_ID)
-                version.register_metadata()
+        with app.app_context(), pytest.raises(NotFound):
+            version = RegisterToolVersion(data=data, id=MOCK_ID)
+            version.register_metadata()

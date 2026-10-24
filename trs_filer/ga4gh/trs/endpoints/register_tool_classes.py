@@ -1,7 +1,7 @@
 """Controller for registering new objects."""
 
 import logging
-from typing import Dict, Optional
+from typing import Any
 
 from foca.utils.misc import generate_id
 from pymongo.errors import DuplicateKeyError
@@ -19,8 +19,8 @@ class RegisterToolClass:
 
     def __init__(
         self,
-        data: Dict,
-        id: Optional[str] = None,
+        data: dict[str, Any],
+        id: str | None = None,
     ) -> None:
         """Initialize tool class data.
 
@@ -69,8 +69,9 @@ class RegisterToolClass:
     def register_metadata(self) -> None:
         """Register toolClass with TRS.
 
-        Returns:
-            ToolClass object.
+        Raises:
+            InternalServerError: No unique identifier could be generated, or the
+                object could not be stored.
         """
         # set unique ID, dependent values and register object
         i = 0
@@ -91,7 +92,7 @@ class RegisterToolClass:
                 )
                 # verify replacement
                 if result.modified_count:
-                    logger.info(f"Replaced tool class with id '{self.data['id']}'.")
+                    logger.info("Replaced tool class with id '%s'.", self.data["id"])
                     break
 
             # insert tool class into database
@@ -100,11 +101,11 @@ class RegisterToolClass:
             except DuplicateKeyError:
                 continue
 
-            logger.info(f"Added tool class with id '{self.data['id']}'.")
+            logger.info("Added tool class with id '%s'.", self.data["id"])
             break
         else:
             raise InternalServerError
         logger.debug(
-            "Entry in 'toolclasses' collection: "
-            f"{self.db_coll_classes.find_one({'id': self.data['id']})}"
+            "Entry in 'toolclasses' collection: %s",
+            self.db_coll_classes.find_one({"id": self.data["id"]}),
         )

@@ -17,4 +17,6 @@ On-Cloud](https://elixir-cloud-aai.github.io/contribute/); in short:
   Commits](https://www.conventionalcommits.org/)
   (`<type>[(<scope>)][!]: <description>`, at most 50 characters).
 - Keep the checks green and the coverage at 100%, with docstrings, type hints
-  and the pre-commit hooks; update the documentation.
+  and the pre-commit hooks; update the documentation. Install the hooks with
+  `pip install -e ".[dev]"` and `pre-commit install`; CI runs them with
+  `pre-commit run --all-files`.

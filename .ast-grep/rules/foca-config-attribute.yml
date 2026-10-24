@@ -1,0 +1,13 @@
+id: foca-config-attribute
+language: python
+severity: error
+message: Untyped access to the FOCA config
+note: |
+  Use `get_custom_config()` and `get_collection()` from
+  `trs_filer.utils` (or `foca.get_config()`). Only direct attribute
+  access is detected.
+# Scoped to app code: tests may access and change the config of test apps
+files:
+  - trs_filer/**
+rule:
+  pattern: $APP.config.foca

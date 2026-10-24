@@ -36,4 +36,3 @@ mongodb:
     requests:
       cpu: 200m
       memory: 512Mi
-

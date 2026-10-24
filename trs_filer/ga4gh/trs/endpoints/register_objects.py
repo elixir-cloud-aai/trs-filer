@@ -2,7 +2,7 @@
 
 from collections import defaultdict
 import logging
-from typing import Dict, Optional
+from typing import Any, ClassVar
 
 from foca.utils.misc import generate_id
 from pymongo.errors import DuplicateKeyError
@@ -12,8 +12,8 @@ from trs_filer.errors.exceptions import (
     InternalServerError,
     NotFound,
 )
-from trs_filer.remote_files import fetch_remote_file
 from trs_filer.ga4gh.trs.endpoints.register_tool_classes import RegisterToolClass
+from trs_filer.remote_files import fetch_remote_file
 from trs_filer.utils import get_collection, get_custom_config
 
 logger = logging.getLogger(__name__)
@@ -24,8 +24,8 @@ class RegisterTool:
 
     def __init__(
         self,
-        data: Dict,
-        id: Optional[str] = None,
+        data: dict[str, Any],
+        id: str | None = None,
     ) -> None:
         """Initialize tool data.
 
@@ -78,7 +78,17 @@ class RegisterTool:
         self.data["meta_version"] = str(self.meta_version_init)
 
     def register_metadata(self) -> None:
-        """Register tool."""
+        """Register tool.
+
+        Raises:
+            BadRequest: Version identifiers are duplicated, the files of a
+                version are invalid, or the tool class does not exist while
+                tool classes are validated.
+            InternalServerError: No unique identifier could be generated, or the
+                object could not be stored.
+            trs_filer.errors.exceptions.RemoteFileError: The content of a file
+                could not be retrieved from its URL.
+        """
         self.process_metadata()
         # keep trying to generate unique ID
         i = 0
@@ -121,8 +131,8 @@ class RegisterTool:
                     version_id=version.get("id", None),
                     data=version,
                 )
+                # Modifies the `version` dict in place
                 version_proc.process_metadata()
-                version = version_proc.data
 
             if self.replace:
                 # replace tool in database
@@ -133,7 +143,7 @@ class RegisterTool:
 
                 # verify replacement
                 if result_tools.modified_count:
-                    logger.info(f"Replaced tool with id '{self.data['id']}'.")
+                    logger.info("Replaced tool with id '%s'.", self.data["id"])
                     break
 
             # insert tool into database
@@ -159,26 +169,26 @@ class RegisterTool:
             )
             tool_class.register_metadata()
 
-            logger.info(f"Added tool with id '{self.data['id']}'.")
+            logger.info("Added tool with id '%s'.", self.data["id"])
             break
         else:
             raise InternalServerError
         logger.debug(
-            "Entry in 'tools' collection: "
-            f"{self.db_coll_tools.find_one({'id': self.data['id']})}"
+            "Entry in 'tools' collection: %s",
+            self.db_coll_tools.find_one({"id": self.data["id"]}),
         )
 
 
 class RegisterToolVersion:
     """Class to register a version with a tool object."""
 
-    descriptor_types = [
+    descriptor_types: ClassVar[list[str]] = [
         "CWL",
         "WDL",
         "NFL",
         "GALAXY",
     ]
-    image_types = [
+    image_types: ClassVar[list[str]] = [
         "Docker",
         "Singularity",
         "Conda",
@@ -186,9 +196,9 @@ class RegisterToolVersion:
 
     def __init__(
         self,
-        data: Dict,
+        data: dict[str, Any],
         id: str,
-        version_id: str = None,
+        version_id: str | None = None,
     ) -> None:
         """Initialize tool version data.
 
@@ -218,7 +228,7 @@ class RegisterToolVersion:
             db_coll_tools: Database collection for storing tool objects.
         """
         conf = get_custom_config()
-        self.data: Dict = data
+        self.data: dict[str, Any] = data
         self.data["id"] = None if version_id is None else version_id
         self.id: str = id
         self.replace: bool = True
@@ -226,13 +236,19 @@ class RegisterToolVersion:
         self.id_length: int = int(conf.version.id.length)
         self.meta_version_init: int = int(conf.version.meta_version.init)
         self.url_prefix: str = conf.service.url_prefix
-        self.host_name: str = conf.service.external_host
-        self.external_port: int = conf.service.external_port
-        self.api_path: str = conf.service.api_path
+        self.host_name: str | None = conf.service.external_host
+        self.external_port: int | None = conf.service.external_port
+        self.api_path: str | None = conf.service.api_path
         self.db_coll_tools = get_collection("tools")
 
     def process_metadata(self) -> None:
-        """Process version metadata."""
+        """Process version metadata.
+
+        Raises:
+            BadRequest: The files of the version are invalid.
+            trs_filer.errors.exceptions.RemoteFileError: The content of a file
+                could not be retrieved from its URL.
+        """
         # init meta version
         self.data["meta_version"] = str(self.meta_version_init)
 
@@ -254,11 +270,16 @@ class RegisterToolVersion:
         self.process_files()
 
     def process_files(self) -> None:
-        """Process file (meta)data."""
+        """Process file (meta)data.
 
+        Raises:
+            BadRequest: The files of the version are invalid.
+            trs_filer.errors.exceptions.RemoteFileError: The content of a file
+                could not be retrieved from its URL.
+        """
         # validate file types and unique paths
-        file_types = defaultdict(list)
-        file_path_dict = defaultdict(list)
+        file_types: defaultdict[str, list[str]] = defaultdict(list)
+        file_path_dict: defaultdict[str, list[str]] = defaultdict(list)
         for f in self.data.get("files", []):
             file_types[f["type"]].append(f["tool_file"]["file_type"])
             if f["tool_file"]["path"] in file_path_dict.get(f["type"], []):
@@ -271,7 +292,8 @@ class RegisterToolVersion:
             if f_types.count("PRIMARY_DESCRIPTOR") > 1:
                 logger.error(
                     "More than one file is annotated as a "
-                    f"'PRIMARY_DESCRIPTOR' file for descriptor type '{d_type}'"
+                    "'PRIMARY_DESCRIPTOR' file for descriptor type '%s'",
+                    d_type,
                 )
                 invalid = True
             if (
@@ -281,8 +303,9 @@ class RegisterToolVersion:
                 logger.error(
                     "At least one file is annotated as a "
                     "'SECONDARY_DESCRIPTOR' file for descriptor type "
-                    f"'{d_type}', but no 'PRIMARY_DESCRIPTOR' file is "
-                    "available."
+                    "'%s', but no 'PRIMARY_DESCRIPTOR' file is "
+                    "available.",
+                    d_type,
                 )
                 invalid = True
         if invalid:
@@ -340,13 +363,24 @@ class RegisterToolVersion:
                     raise BadRequest
 
             # validate image file types
-            elif _file["tool_file"]["file_type"] == "CONTAINERFILE":
-                if _file["type"] not in self.image_types:
-                    logger.error("Missing or invalid image file type.")
-                    raise BadRequest
+            elif (
+                _file["tool_file"]["file_type"] == "CONTAINERFILE"
+                and _file["type"] not in self.image_types
+            ):
+                logger.error("Missing or invalid image file type.")
+                raise BadRequest
 
     def register_metadata(self) -> None:
-        """Register version with tool."""
+        """Register version with tool.
+
+        Raises:
+            BadRequest: The files of the version are invalid.
+            InternalServerError: No unique identifier could be generated, or the
+                object could not be stored.
+            NotFound: The tool does not exist.
+            trs_filer.errors.exceptions.RemoteFileError: The content of a file
+                could not be retrieved from its URL.
+        """
         # check if tool is available
         obj = self.db_coll_tools.find_one(filter={"id": self.id})
         if obj is None:
@@ -372,10 +406,11 @@ class RegisterToolVersion:
                 )
 
                 # verify replacement
-                if result_tools.raw_result["updatedExisting"]:
+                if result_tools.matched_count:
                     logger.info(
-                        f"Replaced version with id '{self.data['id']}' in "
-                        f"tool '{self.id}'."
+                        "Replaced version with id '%s' in tool '%s'.",
+                        self.data["id"],
+                        self.id,
                     )
                     break
 
@@ -395,12 +430,14 @@ class RegisterToolVersion:
             # verify insertion
             if result_tools.modified_count:
                 logger.info(
-                    f"Added version with id '{self.data['id']}' to tool '{self.id}'."
+                    "Added version with id '%s' to tool '%s'.",
+                    self.data["id"],
+                    self.id,
                 )
                 break
         else:
             raise InternalServerError
         logger.debug(
-            "Entry in 'tools' collection: "
-            f"{self.db_coll_tools.find_one({'id': self.data['id']})}"
+            "Entry in 'tools' collection: %s",
+            self.db_coll_tools.find_one({"id": self.data["id"]}),
         )

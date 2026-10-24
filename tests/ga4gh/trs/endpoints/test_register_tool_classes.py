@@ -1,9 +1,9 @@
 """Tests for setting tool classes."""
 
 from copy import deepcopy
-from flask import Flask
 from unittest.mock import MagicMock
 
+from flask import Flask
 from foca.models.config import Config, MongoConfig
 import mongomock
 from pymongo.errors import DuplicateKeyError
@@ -17,13 +17,13 @@ from tests.mock_data import (
     MOCK_TOOL_CLASS,
     MONGO_CONFIG,
 )
+from trs_filer.custom_config import CustomConfig
 from trs_filer.errors.exceptions import (
     InternalServerError,
 )
 from trs_filer.ga4gh.trs.endpoints.register_tool_classes import (
     RegisterToolClass,
 )
-from trs_filer.custom_config import CustomConfig
 
 
 def _mock_collections(app: Flask) -> None:
@@ -44,7 +44,7 @@ def _mock_collections(app: Flask) -> None:
 class TestRegisterToolClass:
     """Tests for `RegisterToolClass` class."""
 
-    def test_init(self):
+    def test_init(self) -> None:
         """Test for constructing class."""
         app = Flask(__name__)
         app.config.foca = Config(
@@ -59,7 +59,7 @@ class TestRegisterToolClass:
             assert tool.data["description"] == MOCK_TOOL_CLASS["description"]
             assert tool.data["id"] is None
 
-    def test_register_metadata(self):
+    def test_register_metadata(self) -> None:
         """Test for creating a tool class with a randomly assigned identifier."""
         app = Flask(__name__)
         app.config.foca = Config(
@@ -77,7 +77,7 @@ class TestRegisterToolClass:
             tool_class.register_metadata()
             assert isinstance(tool_class.data["id"], str)
 
-    def test_register_metadata_with_id(self):
+    def test_register_metadata_with_id(self) -> None:
         """Test for creating a tool class with a user-supplied identifier."""
         app = Flask(__name__)
         app.config.foca = Config(
@@ -95,7 +95,7 @@ class TestRegisterToolClass:
             tool_class.register_metadata()
             assert isinstance(tool_class.data["id"], str)
 
-    def test_register_metadata_with_id_replace(self):
+    def test_register_metadata_with_id_replace(self) -> None:
         """Test for updating an existing tool class."""
         app = Flask(__name__)
         app.config.foca = Config(
@@ -118,7 +118,7 @@ class TestRegisterToolClass:
             tool_class.register_metadata()
             assert isinstance(tool_class.data["id"], str)
 
-    def test_register_metadata_duplicate_key(self):
+    def test_register_metadata_duplicate_key(self) -> None:
         """Test for creating a tool class; duplicate key error occurs."""
         app = Flask(__name__)
         app.config.foca = Config(
@@ -141,7 +141,7 @@ class TestRegisterToolClass:
             tool.register_metadata()
             assert isinstance(tool.data["id"], str)
 
-    def test_register_metadata_duplicate_keys_repeated(self):
+    def test_register_metadata_duplicate_keys_repeated(self) -> None:
         """Test for creating a tool class; running out of unique identifiers."""
         app = Flask(__name__)
         app.config.foca = Config(
@@ -160,9 +160,8 @@ class TestRegisterToolClass:
 
         data = deepcopy(MOCK_TOOL_CLASS)
         del data["id"]
-        with app.app_context():
-            with pytest.raises(InternalServerError):
-                version = RegisterToolClass(data=data)
-                version.register_metadata()
-                version = RegisterToolClass(data=data)
-                version.register_metadata()
+        with app.app_context(), pytest.raises(InternalServerError):
+            version = RegisterToolClass(data=data)
+            version.register_metadata()
+            version = RegisterToolClass(data=data)
+            version.register_metadata()

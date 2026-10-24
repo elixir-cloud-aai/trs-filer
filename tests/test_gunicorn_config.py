@@ -9,9 +9,9 @@ from urllib.parse import urlsplit
 
 import pytest
 
+from tests.gunicorn_settings import DOCKERFILE, load_settings
 from trs_filer import gunicorn_config
 from trs_filer.gunicorn_config import _worker_tmp_dir
-from tests.gunicorn_settings import DOCKERFILE, load_settings
 
 APP = "trs_filer.app:create_app()"
 
