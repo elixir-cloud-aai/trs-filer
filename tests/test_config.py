@@ -225,9 +225,9 @@ def test_python_version() -> None:
 
 
 def test_ci_gate() -> None:
-    """The gate `passed` of the CI workflow needs every other job.
+    """The gate `passed` of the CI workflow needs and checks every other job.
 
-    The ruleset requires the gate only, so a job that it doesn't need could
+    The ruleset requires the gate only, so a job that it doesn't check could
     fail without blocking pull requests.
     """
     jobs = yaml.safe_load((ROOT / ".github" / "workflows" / "ci.yml").read_text())[
@@ -237,3 +237,12 @@ def test_ci_gate() -> None:
     assert gate["name"] == "CI passed"
     assert gate["if"] == "always()"
     assert sorted(gate["needs"]) == sorted(jobs)
+    (step,) = gate["steps"]
+    results = {
+        value.removeprefix("${{ needs.").removesuffix(".result }}")
+        for value in step["env"].values()
+        if value.startswith("${{ needs.")
+    }
+    assert results == set(jobs)
+    for job in jobs:
+        assert re.search(rf"^check {job} ", step["run"], flags=re.MULTILINE), job
