@@ -62,11 +62,11 @@ curl -X GET "http://localhost:8080/ga4gh/trs/v2/tools" -H "accept: application/j
 Contributions are welcome! See [`CONTRIBUTING.md`](CONTRIBUTING.md) and mind
 our [code of conduct](CODE_OF_CONDUCT.md).
 
-[badge-build-status]: <https://github.com/elixir-cloud-aai/trs-filer/actions/workflows/checks.yaml/badge.svg>
+[badge-build-status]: <https://github.com/elixir-cloud-aai/trs-filer/actions/workflows/ci.yml/badge.svg>
 [badge-coverage]: <https://codecov.io/gh/elixir-cloud-aai/trs-filer/branch/dev/graph/badge.svg?branch=dev>
 [badge-github-tag]: <https://img.shields.io/github/v/tag/elixir-cloud-aai/trs-filer?color=C39BD3>
 [badge-license]: <https://img.shields.io/badge/license-Apache%202.0-blue.svg>
-[badge-url-build-status]: <https://github.com/elixir-cloud-aai/trs-filer/actions/workflows/checks.yaml>
+[badge-url-build-status]: <https://github.com/elixir-cloud-aai/trs-filer/actions/workflows/ci.yml>
 [badge-url-coverage]: <https://codecov.io/gh/elixir-cloud-aai/trs-filer?branch=dev>
 [badge-url-github-tag]: <https://github.com/elixir-cloud-aai/trs-filer/releases>
 [badge-url-license]: <https://www.apache.org/licenses/LICENSE-2.0>

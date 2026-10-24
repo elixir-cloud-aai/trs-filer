@@ -208,7 +208,7 @@ def test_python_version() -> None:
     ]
     assert classifiers == [image]
     workflows = sorted((ROOT / ".github" / "workflows").glob("*"))
-    assert [workflow.suffix for workflow in workflows] == [".yaml"] * len(workflows)
+    assert [workflow.suffix for workflow in workflows] == [".yml"] * len(workflows)
     for workflow in workflows:
         jobs = yaml.safe_load(workflow.read_text())["jobs"]
         for name, job in jobs.items():
@@ -222,3 +222,84 @@ def test_python_version() -> None:
         ROOT / "deployment" / "templates" / "trs-filer-configmap-job.yaml"
     ).read_text()
     assert f"/usr/local/lib/python{image}/site-packages/trs_filer/" in job
+
+
+def _ci_gate() -> tuple[dict[str, str], dict[str, str], str]:
+    """Read the gate `passed` of the CI workflow.
+
+    Returns:
+        The other jobs of the workflow, mapped to the variable of the gate's
+        step that holds their result (`${{ needs.<job>.result }}`), the
+        jobs that may be skipped, mapped to the variable that says whether
+        they may be skipped (`<VARIABLE>_MAY_SKIP`), and the step's script.
+    """
+    workflow = yaml.safe_load((ROOT / ".github" / "workflows" / "ci.yml").read_text())
+    jobs = workflow["jobs"]
+    gate = jobs.pop("passed")
+    assert gate["name"] == "CI passed"
+    assert gate["if"] == "always()"
+    assert sorted(gate["needs"]) == sorted(jobs)
+    (step,) = gate["steps"]
+    results = {
+        value.removeprefix("${{ needs.").removesuffix(".result }}"): variable
+        for variable, value in step["env"].items()
+        if value.startswith("${{ needs.")
+    }
+    assert sorted(results) == sorted(jobs)
+    may_skip = {
+        job: f"{variable}_MAY_SKIP"
+        for job, variable in results.items()
+        if f"{variable}_MAY_SKIP" in step["env"]
+    }
+    return results, may_skip, step["run"]
+
+
+def _run_ci_gate(results: dict[str, str], env: dict[str, str]) -> bool:
+    """Run the script of the gate `passed` of the CI workflow.
+
+    Args:
+        results: Results of the other jobs (`success`, `failure`,
+            `cancelled` or `skipped`).
+        env: Whether the jobs that may be skipped may be skipped (`true` or
+            `false`), by job.
+
+    Returns:
+        Whether the gate passes.
+    """
+    variables, may_skip, script = _ci_gate()
+    bash = shutil.which("bash")
+    assert bash
+    result = subprocess.run(  # noqa: S603 (the gate's script, no input)
+        [bash, "-c", script],
+        env={
+            "PATH": os.environ["PATH"],
+            **{variables[job]: value for job, value in results.items()},
+            **{may_skip[job]: value for job, value in env.items()},
+        },
+        capture_output=True,
+        check=False,
+    )
+    return result.returncode == 0
+
+
+def test_ci_gate() -> None:
+    """The gate `passed` of the CI workflow needs and checks every other job.
+
+    The ruleset requires the gate only, so a job that it doesn't check could
+    fail without blocking pull requests. Only `pins` and `publish` may be
+    skipped, and only where their conditions say so.
+    """
+    variables, may_skip, _ = _ci_gate()
+    assert sorted(may_skip) == ["pins", "publish"]
+    jobs = sorted(variables)
+    allowed = dict.fromkeys(may_skip, "true")
+    required = dict.fromkeys(may_skip, "false")
+    passing = dict.fromkeys(jobs, "success")
+    assert _run_ci_gate(passing, required)
+    assert _run_ci_gate(passing | dict.fromkeys(may_skip, "skipped"), allowed)
+    for job in jobs:
+        for result in ["failure", "cancelled", "skipped"]:
+            for env in [allowed, required]:
+                passes = result == "skipped" and job in may_skip and env is allowed
+                outcome = _run_ci_gate(passing | {job: result}, env)
+                assert outcome == passes, (job, result, env)

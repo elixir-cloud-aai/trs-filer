@@ -2,7 +2,7 @@
 
 For releases, so that temporary pins to development versions (e.g., of
 FOCA, to use unreleased changes) can't be released by accident: run for
-release tags (`.github/workflows/release-pins.yaml`, until a release
+release tags (the `pins` job of `.github/workflows/ci.yml`, until a release
 workflow runs it). Fails, with errors as GitHub annotations on standard
 error, if:
 
