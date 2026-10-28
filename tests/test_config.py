@@ -8,6 +8,7 @@ import shutil
 import subprocess
 import sys
 import tomllib
+from typing import Any
 import zipfile
 
 from foca.config.config_parser import ConfigParser
@@ -224,7 +225,7 @@ def test_python_version() -> None:
     assert f"/usr/local/lib/python{image}/site-packages/trs_filer/" in job
 
 
-def _ci_gate() -> tuple[dict, dict]:
+def _ci_gate() -> tuple[dict[str, Any], dict[str, Any]]:
     """Read the gate `passed` of the CI workflow.
 
     Returns:
