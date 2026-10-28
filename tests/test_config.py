@@ -303,3 +303,17 @@ def test_ci_gate() -> None:
                 passes = result == "skipped" and job in may_skip and env is allowed
                 outcome = _run_ci_gate(passing | {job: result}, env)
                 assert outcome == passes, (job, result, env)
+
+
+def test_ci_gate_conditions() -> None:
+    """The gate may skip a job exactly where the job's condition is false.
+
+    `<VARIABLE>_MAY_SKIP` is the negated `if:` of the job, so that a job
+    skipped where it should run fails the gate.
+    """
+    workflow = yaml.safe_load((ROOT / ".github" / "workflows" / "ci.yml").read_text())
+    jobs = workflow["jobs"]
+    (step,) = jobs["passed"]["steps"]
+    _, may_skip, _ = _ci_gate()
+    for job, variable in may_skip.items():
+        assert step["env"][variable] == f"${{{{ !({jobs[job]['if']}) }}}}"
