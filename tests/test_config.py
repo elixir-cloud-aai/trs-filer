@@ -8,6 +8,7 @@ import shutil
 import subprocess
 import sys
 import tomllib
+from typing import Any
 import zipfile
 
 from foca.config.config_parser import ConfigParser
@@ -224,14 +225,11 @@ def test_python_version() -> None:
     assert f"/usr/local/lib/python{image}/site-packages/trs_filer/" in job
 
 
-def _ci_gate() -> tuple[dict[str, str], dict[str, str], str]:
+def _ci_gate() -> tuple[dict[str, Any], dict[str, Any]]:
     """Read the gate `passed` of the CI workflow.
 
     Returns:
-        The other jobs of the workflow, mapped to the variable of the gate's
-        step that holds their result (`${{ needs.<job>.result }}`), the
-        jobs that may be skipped, mapped to the variable that says whether
-        they may be skipped (`<VARIABLE>_MAY_SKIP`), and the step's script.
+        The other jobs of the workflow, by ID, and the gate's only step.
     """
     workflow = yaml.safe_load((ROOT / ".github" / "workflows" / "ci.yml").read_text())
     jobs = workflow["jobs"]
@@ -240,80 +238,36 @@ def _ci_gate() -> tuple[dict[str, str], dict[str, str], str]:
     assert gate["if"] == "always()"
     assert sorted(gate["needs"]) == sorted(jobs)
     (step,) = gate["steps"]
-    results = {
-        value.removeprefix("${{ needs.").removesuffix(".result }}"): variable
-        for variable, value in step["env"].items()
-        if value.startswith("${{ needs.")
-    }
-    assert sorted(results) == sorted(jobs)
-    may_skip = {
-        job: f"{variable}_MAY_SKIP"
-        for job, variable in results.items()
-        if f"{variable}_MAY_SKIP" in step["env"]
-    }
-    return results, may_skip, step["run"]
-
-
-def _run_ci_gate(results: dict[str, str], env: dict[str, str]) -> bool:
-    """Run the script of the gate `passed` of the CI workflow.
-
-    Args:
-        results: Results of the other jobs (`success`, `failure`,
-            `cancelled` or `skipped`).
-        env: Whether the jobs that may be skipped may be skipped (`true` or
-            `false`), by job.
-
-    Returns:
-        Whether the gate passes.
-    """
-    variables, may_skip, script = _ci_gate()
-    bash = shutil.which("bash")
-    assert bash
-    result = subprocess.run(  # noqa: S603 (the gate's script, no input)
-        [bash, "-c", script],
-        env={
-            "PATH": os.environ["PATH"],
-            **{variables[job]: value for job, value in results.items()},
-            **{may_skip[job]: value for job, value in env.items()},
-        },
-        capture_output=True,
-        check=False,
-    )
-    return result.returncode == 0
+    return jobs, step
 
 
 def test_ci_gate() -> None:
-    """The gate `passed` of the CI workflow needs and checks every other job.
+    """The gate `passed` of the CI workflow checks every other job.
 
     The ruleset requires the gate only, so a job that it doesn't check could
-    fail without blocking pull requests. Only `pins` and `publish` may be
-    skipped, and only where their conditions say so.
+    fail without blocking pull requests. The shared gate action (tested in
+    `elixir-cloud-aai/.github`) gets the results of all needed jobs, pinned
+    to a full commit SHA.
     """
-    variables, may_skip, _ = _ci_gate()
-    assert sorted(may_skip) == ["pins", "publish"]
-    jobs = sorted(variables)
-    allowed = dict.fromkeys(may_skip, "true")
-    required = dict.fromkeys(may_skip, "false")
-    passing = dict.fromkeys(jobs, "success")
-    assert _run_ci_gate(passing, required)
-    assert _run_ci_gate(passing | dict.fromkeys(may_skip, "skipped"), allowed)
-    for job in jobs:
-        for result in ["failure", "cancelled", "skipped"]:
-            for env in [allowed, required]:
-                passes = result == "skipped" and job in may_skip and env is allowed
-                outcome = _run_ci_gate(passing | {job: result}, env)
-                assert outcome == passes, (job, result, env)
+    _, step = _ci_gate()
+    assert re.fullmatch(
+        r"elixir-cloud-aai/\.github/actions/gate@[0-9a-f]{40}", step["uses"]
+    )
+    assert step["with"]["needs"] == "${{ toJSON(needs) }}"
 
 
 def test_ci_gate_conditions() -> None:
     """The gate may skip a job exactly where the job's condition is false.
 
-    `<VARIABLE>_MAY_SKIP` is the negated `if:` of the job, so that a job
-    skipped where it should run fails the gate.
+    Only `pins` and `publish` may be skipped; `allow-skipped` names each of
+    them under the negated `if:` of the job, so that a job skipped where it
+    should run fails the gate.
     """
-    workflow = yaml.safe_load((ROOT / ".github" / "workflows" / "ci.yml").read_text())
-    jobs = workflow["jobs"]
-    (step,) = jobs["passed"]["steps"]
-    _, may_skip, _ = _ci_gate()
-    for job, variable in may_skip.items():
-        assert step["env"][variable] == f"${{{{ !({jobs[job]['if']}) }}}}"
+    jobs, step = _ci_gate()
+    allowed = " ".join(step["with"]["allow-skipped"].split())
+    named = re.findall(r"&& '([a-z-]+)' \|\| ''", allowed)
+    assert sorted(named) == ["pins", "publish"]
+    conditions = [
+        f"!({' '.join(jobs[job]['if'].split())}) && '{job}' || ''" for job in named
+    ]
+    assert allowed == f"${{{{ format('{{0}} {{1}}', {', '.join(conditions)}) }}}}"
