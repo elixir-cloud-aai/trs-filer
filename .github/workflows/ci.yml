@@ -140,7 +140,7 @@ jobs:
     name: Release pins
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    # Same condition as `PINS_MAY_SKIP` of the gate
+    # Same condition as the `pins` skip allowed by the gate
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     steps:
       - name: Check out repository
@@ -165,7 +165,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     needs: [lint, test]
-    # Same condition as `PUBLISH_MAY_SKIP` of the gate
+    # Same condition as the `publish` skip allowed by the gate
     if: github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && github.repository_owner == 'elixir-cloud-aai'
     steps:
       - name: Check out repository
@@ -216,29 +216,15 @@ jobs:
     timeout-minutes: 5
     needs: [lint, test, pins, publish]
     if: always()
+    permissions: {}
     steps:
-      - name: Check job results
-        env:
-          LINT: ${{ needs.lint.result }}
-          TEST: ${{ needs.test.result }}
-          PINS: ${{ needs.pins.result }}
-          PUBLISH: ${{ needs.publish.result }}
-          # Negated `if` conditions of the jobs that may be skipped
-          PINS_MAY_SKIP: ${{ !(github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')) }}
-          PUBLISH_MAY_SKIP: ${{ !(github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && github.repository_owner == 'elixir-cloud-aai') }}
-        run: |
-          status=0
-          check() {
-            # <job> <result> <whether the job may be skipped>
-            if [ "$2" = success ] || { [ "$2" = skipped ] && [ "$3" = true ]; }; then
-              echo "$1: $2"
-            else
-              echo "::error::Job '$1' ended with '$2'"
-              status=1
-            fi
-          }
-          check lint "${LINT}" false
-          check test "${TEST}" false
-          check pins "${PINS}" "${PINS_MAY_SKIP}"
-          check publish "${PUBLISH}" "${PUBLISH_MAY_SKIP}"
-          exit "${status}"
+      - name: Check results of all jobs
+        uses: elixir-cloud-aai/.github/actions/gate@397a1c8a82d72af2a3a5908c546a9ad1101de32d # gate
+        with:
+          needs: ${{ toJSON(needs) }}
+          # Jobs that may be skipped: `pins` except on version tags, `publish`
+          # except on pushes to the default branch of the upstream repository
+          allow-skipped: >-
+            ${{ format('{0} {1}',
+              !(github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')) && 'pins' || '',
+              !(github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && github.repository_owner == 'elixir-cloud-aai') && 'publish' || '') }}
