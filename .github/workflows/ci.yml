@@ -189,7 +189,7 @@ jobs:
       # Tags `latest` (pushed) and the date (local only), as before
       - name: Build & Publish image to DockerHub
         env:
-          DOCKERHUB_ORG: ${{ secrets.DOCKERHUB_ORG }}
+          DOCKERHUB_ORG: ${{ vars.DOCKERHUB_ORG || 'elixircloud' }}
           DOCKERHUB_LOGIN: ${{ secrets.DOCKERHUB_LOGIN }}
           DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
           REPO_NAME: ${{ github.event.repository.name }}
