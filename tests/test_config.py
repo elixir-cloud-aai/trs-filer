@@ -247,7 +247,7 @@ def test_ci_gate() -> None:
     The ruleset requires the gate only, so a job that it doesn't check could
     fail without blocking pull requests. The shared gate action (tested in
     `elixir-cloud-aai/.github`) gets the results of all needed jobs, pinned
-    to a full commit SHA.
+    to the full commit SHA of a release (`# vX.Y.Z`; Dependabot bumps it).
     """
     _, step = _ci_gate()
     assert re.fullmatch(
