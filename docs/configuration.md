@@ -67,24 +67,28 @@ classes](#tool-classes), get identifiers like tools). `charset` lists the charac
 the client (`PUT`, see [API](api.md)).
 
 Tools and versions get a `meta_version` (a field of the TRS API that tells
-clients that an object changed) of `init` (`custom.tool.meta_version`,
-`custom.version.meta_version`) on registration; it is not incremented yet
-when they change (`increment` is unused).
+clients that an object changed) on registration: the configured `init`
+value (default 1) of `custom.tool.meta_version` and
+`custom.version.meta_version`. It is not incremented yet when they change
+(`increment` is unused), and tool classes get none
+(`custom.toolclass.meta_version` is unused).
 
 ## Tool classes
 
 Each tool has a tool class (e.g., workflow or command-line tool), which is
 stored with the tool and in the list of tool classes (`GET /toolClasses`):
-tool classes are created or updated along with the tools that name them
-(`toolclass`), or registered with the [tool class
+tool classes are created or updated when a tool that names them
+(`toolclass`) is created (`POST /tools`, or `PUT /tools/{id}` with a new
+identifier), or registered with the [tool class
 endpoints](api.md#registering-tools). With `custom.toolclass.validation:
-true`, `POST /tools` fails with `400 Bad Request` unless the tool's
+true`, creating a tool fails with `400 Bad Request` unless its
 `toolclass.id` is the identifier of an existing tool class.
 
 !!! note
-    Known issues: with validation, the tool is stored nevertheless, and
-    `PUT /tools/{id}` doesn't check the tool class; tools may change
-    existing tool classes of the same identifier (see the [issue
+    Known issues: with validation, the tool is stored nevertheless; tools
+    may change existing tool classes of the same identifier; and replacing
+    an existing tool with `PUT /tools/{id}` neither checks nor stores its
+    tool class (see the [issue
     tracker](https://github.com/elixir-cloud-aai/trs-filer/issues/126)).
 
 ## Remote files
