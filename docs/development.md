@@ -111,13 +111,30 @@ The project adopts the [semantic versioning](https://semver.org/) scheme for
 versioning. Currently the service is in beta stage, so the API may change
 without further notice.
 
-The version is only stored in Git tags (`vX.Y.Z`): the package version is
-derived from them (via
+The version is only stored in Git tags (`vX.Y.Z`), and, set before each
+release, in the citation metadata (see below): the package version is
+derived from the tags (via
 [setuptools-scm](https://setuptools-scm.readthedocs.io/)), and the service
 info reports it. Builds without Git metadata, such as local Docker builds
 (e.g., with Docker Compose), report `0.0.0.dev0`; pass the version to the
 image build as the build argument `SETUPTOOLS_SCM_PRETEND_VERSION`, as the
 CI workflow does.
+
+Shortly before a release, set its version and date in the citation
+metadata, which Zenodo archives with each release, and merge the change into
+`dev`; each version, also each pre-release (e.g., `X.Y.Zrc1`), needs its own
+such change. Then check it on the commit to release:
+
+```bash
+python scripts/citation.py set X.Y.Z  # date: today (UTC), or --date YYYY-MM-DD
+python scripts/citation.py check X.Y.Z  # on the release commit
+```
+
+CI runs the check for release tags (job "Release pins"), too.
+
+`scripts/citation.py` uses the standard library only and is tested in
+`tests/test_citation.py`; `check` fails unless `version` is `X.Y.Z` and
+`date-released` is a date that is not in the future (UTC).
 
 To test unreleased changes of FOCA, `pyproject.toml` may pin a FOCA commit
 (`foca @ git+https://github.com/elixir-cloud-aai/foca@<sha>`), with FOCA's

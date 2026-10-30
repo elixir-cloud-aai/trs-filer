@@ -42,6 +42,10 @@ files](configuration.md#remote-files)). A [Helm](https://helm.sh/) chart and
 a [Docker Compose](https://docs.docker.com/compose/) setup are provided for
 deployments on Kubernetes and for development, respectively.
 
+## Citation
+
+--8<-- "README.md:citation"
+
 ## License
 
 This project is covered by the [Apache License

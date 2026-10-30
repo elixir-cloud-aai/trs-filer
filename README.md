@@ -60,6 +60,15 @@ curl -X GET "http://localhost:8080/ga4gh/trs/v2/tools" -H "accept: application/j
 ```
 <!-- --8<-- [end:quick-start] -->
 
+## Citation
+
+<!-- --8<-- [start:citation] -->
+If you use TRS-Filer, please cite it with the metadata in
+[`CITATION.cff`](https://github.com/elixir-cloud-aai/trs-filer/blob/dev/CITATION.cff):
+on GitHub, "Cite this repository" in the sidebar of the repository formats it
+as APA or BibTeX.
+<!-- --8<-- [end:citation] -->
+
 ## Contributing
 
 Contributions are welcome! See [Contributing][docs-contributing] in the
