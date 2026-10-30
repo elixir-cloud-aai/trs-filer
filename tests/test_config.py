@@ -271,3 +271,79 @@ def test_ci_gate_conditions() -> None:
         f"!({' '.join(jobs[job]['if'].split())}) && '{job}' || ''" for job in named
     ]
     assert allowed == f"${{{{ format('{{0}} {{1}}', {', '.join(conditions)}) }}}}"
+
+
+# Values specific to identity providers or deployments, which this generic
+# repository must not contain (examples use fictitious values)
+IDP_SPECIFIC = re.compile(
+    # Names not preceded or followed by letters (e.g., also `perun_groups`)
+    r"lifescience|(?<![a-z])ls[ -]login(?![a-z])|eduperson|(?<![a-z])perun(?![a-z])"
+    r"|(?<![a-z])ecp(?![a-z])|urn:geant",
+    re.IGNORECASE,
+)
+
+
+def _text_lines(path: Path) -> list[str]:
+    """Get the lines of a file, or none if it is not text (UTF-8).
+
+    Args:
+        path: The file.
+
+    Returns:
+        Its lines.
+    """
+    try:
+        return path.read_text(encoding="utf-8").splitlines()
+    except UnicodeDecodeError:
+        return []
+
+
+def test_text_lines(tmp_path: Path) -> None:
+    """Files that aren't UTF-8 text (e.g., images) have no lines.
+
+    Args:
+        tmp_path: Directory for the files.
+    """
+    (tmp_path / "text.md").write_text("a\nb\n")
+    (tmp_path / "image.png").write_bytes(b"\x89PNG\r\n\x1a\n\xff")
+    assert _text_lines(tmp_path / "text.md") == ["a", "b"]
+    assert _text_lines(tmp_path / "image.png") == []
+
+
+def _repository_lines() -> list[tuple[str, int, str]]:
+    """Get the lines of the repository's tracked text files.
+
+    Returns:
+        The file name, line number and line of each line.
+    """
+    files = (
+        subprocess.run(
+            ["git", "ls-files", "-z"],  # noqa: S607 (git from PATH)
+            capture_output=True,
+            check=True,
+            cwd=ROOT,
+        )
+        .stdout.decode()
+        .split("\0")
+    )
+    return [
+        (name, number, line)
+        for name in files
+        if name and (ROOT / name).is_file()
+        for number, line in enumerate(_text_lines(ROOT / name), start=1)
+    ]
+
+
+def test_repository_generic() -> None:
+    """No file of the repository has identity provider specific values.
+
+    Guides for specific identity providers or deployments are kept
+    elsewhere.
+    """
+    found = [
+        f"{name}:{number}: {line.strip()}"
+        for name, number, line in _repository_lines()
+        # This file names the values to find
+        if name != "tests/test_config.py" and IDP_SPECIFIC.search(line)
+    ]
+    assert found == []

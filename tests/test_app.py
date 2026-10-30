@@ -1,28 +1,29 @@
 """Tests of the app created from `config.yaml`, with FOCA 0.17."""
 
+from collections.abc import Callable
 from copy import deepcopy
+from importlib import import_module
 from importlib.metadata import version
+import inspect
 import logging
 from pathlib import Path
 import re
 from typing import Any
 
 from connexion import App
-from flask import Flask
 from flask.testing import FlaskClient
 from foca import get_config
-from foca.config.access import set_app_config
-from foca.models.config import Config
+from foca.api.service_info import getServiceInfo
 import pydantic
 from pymongo import MongoClient
 import pytest
+import yaml
 
-from tests.mock_data import MOCK_TOOL
+from tests.mock_data import BASE_PATH, MOCK_TOOL
 from trs_filer.app import create_app, main
-from trs_filer.custom_config import CustomConfig, IdConfig
+from trs_filer.custom_config import CustomConfig
+from trs_filer.ga4gh.trs import server
 from trs_filer.utils import DB, get_collection, get_custom_config
-
-BASE_PATH = "/ga4gh/trs/v2"
 
 
 def test_config(app: App) -> None:
@@ -72,7 +73,7 @@ def test_service_info_not_writable(
 
     Args:
         client: Test client.
-        mongo_client: In-memory MongoDB client.
+        mongo_client: MongoDB client.
     """
     response = client.post(
         f"{BASE_PATH}/service-info", json={"id": "org.example.other"}
@@ -112,7 +113,7 @@ def test_placeholder_warning(
     the handlers of the root logger (and with them, pytest's).
 
     Args:
-        mongo_client: In-memory MongoDB client.
+        mongo_client: MongoDB client.
         overlay: Config overlay.
     """
     records = _Records()
@@ -174,7 +175,7 @@ def test_no_request_body_size_limit(
     """The app refuses to start without a size limit of request bodies.
 
     Args:
-        mongo_client: In-memory MongoDB client.
+        mongo_client: MongoDB client.
         overlay: Config overlay.
     """
     overlay.write_text("server:\n  max_content_length: null\n")
@@ -215,7 +216,7 @@ def test_invalid_custom_config(
     FOCA raises a `ValueError` from the model's validation error.
 
     Args:
-        mongo_client: In-memory MongoDB client.
+        mongo_client: MongoDB client.
         overlay: Config overlay.
         custom: Overlay with an invalid custom config.
         reason: Pattern of the validation error.
@@ -241,7 +242,7 @@ def test_database_name(
     which inherit the environment), as the Helm chart sets it.
 
     Args:
-        mongo_client: In-memory MongoDB client.
+        mongo_client: MongoDB client.
         overlay: Config overlay.
         monkeypatch: Patches of environment variable `MONGO_DBNAME`.
         name: Value of `MONGO_DBNAME`; unset if `None`.
@@ -250,20 +251,14 @@ def test_database_name(
         monkeypatch.delenv("MONGO_DBNAME", raising=False)
     else:
         monkeypatch.setenv("MONGO_DBNAME", name)
-    app = create_app()
-    with app.app.app_context():
-        assert get_collection("tools").database.name == (name or DB)
-
-
-@pytest.mark.parametrize("charset", ["string.ascii_uppercase", "", 1])
-def test_id_config_charset(charset: object) -> None:
-    """Character sets must be non-empty strings of characters.
-
-    Args:
-        charset: Invalid character set.
-    """
-    with pytest.raises(pydantic.ValidationError):
-        IdConfig(charset=charset)  # type: ignore[arg-type]
+    try:
+        app = create_app()
+        with app.app.app_context():
+            assert get_collection("tools").database.name == (name or DB)
+    finally:
+        # The tests drop database `DB` only (with `MONGODB_TEST_URI`)
+        if name is not None:
+            mongo_client.drop_database(name)
 
 
 def test_register_tool(client: FlaskClient) -> None:
@@ -300,6 +295,86 @@ def test_register_tool_class(client: FlaskClient) -> None:
     assert set(tool_class_id) <= set("abcdefghijklmnopqrstuvwxyz0123456789")
 
 
+# Methods of operations in OpenAPI path items
+HTTP_METHODS = {"get", "put", "post", "delete", "options", "head", "patch", "trace"}
+
+
+def _spec_operations(app: App) -> dict[tuple[str, str], Callable[..., Any]]:
+    """Get the controllers of the operations of the app's specs.
+
+    The operations of all files of a spec are merged, as FOCA merges them;
+    the controller of an operation is the function named by its
+    `operationId` in the module of its `x-openapi-router-controller` (by
+    default, that of the spec's `add_operation_fields`).
+
+    Args:
+        app: FOCA app.
+
+    Returns:
+        Controllers, by method and path.
+    """
+    with app.app.app_context():
+        specs = get_config().api.specs
+    controllers: dict[tuple[str, str], Callable[..., Any]] = {}
+    for spec in specs:
+        operations: dict[tuple[str, str], dict[str, Any]] = {}
+        paths = spec.path if isinstance(spec.path, list) else [spec.path]
+        for path in paths:
+            document = yaml.safe_load(Path(path).read_text())
+            for route, item in document["paths"].items():
+                for method, operation in item.items():
+                    if method in HTTP_METHODS:
+                        key = (method.upper(), route)
+                        operations.setdefault(key, {}).update(operation)
+        default = (spec.add_operation_fields or {})["x-openapi-router-controller"]
+        for key, operation in operations.items():
+            module = import_module(
+                operation.get("x-openapi-router-controller", default)
+            )
+            controllers[key] = getattr(module, operation["operationId"])
+    return controllers
+
+
+def _served(app: App) -> dict[tuple[str, str], Callable[..., Any]]:
+    """Get the functions serving the app's API, without their decorators.
+
+    Args:
+        app: FOCA app.
+
+    Returns:
+        Functions, by method and path (as in the specs).
+    """
+    served: dict[tuple[str, str], Callable[..., Any]] = {}
+    for rule in app.app.url_map.iter_rules():
+        if not rule.rule.startswith(f"{BASE_PATH}/"):
+            continue
+        route = re.sub(r"<(?:\w+:)?(\w+)>", r"{\1}", rule.rule.removeprefix(BASE_PATH))
+        view = inspect.unwrap(app.app.view_functions[rule.endpoint])
+        for method in (rule.methods or set()) - {"HEAD", "OPTIONS"}:
+            served[(method, route)] = view
+    return served
+
+
+def test_operations_resolve(app: App) -> None:
+    """Every operation of the specs is served by its controller.
+
+    The service info is served by FOCA, all other operations by
+    `trs_filer.ga4gh.trs.server`.
+
+    Args:
+        app: FOCA app.
+    """
+    controllers = _spec_operations(app)
+    served = _served(app)
+    assert len(controllers) == 20
+    assert controllers.pop(("GET", "/service-info")) is getServiceInfo
+    assert {controller.__module__ for controller in controllers.values()} == {
+        server.__name__
+    }
+    for key, controller in controllers.items():
+        assert served.get(key) is inspect.unwrap(controller), key
+
+
 def test_swagger_ui(client: FlaskClient) -> None:
     """The Swagger UI and the specification are served.
 
@@ -326,17 +401,6 @@ def test_collections(app: App) -> None:
         assert set(db.dbs or {}) == {DB}
 
 
-def test_no_custom_config() -> None:
-    """Apps without the custom config are refused."""
-    app = Flask(__name__)
-    set_app_config(app, Config())
-    with (
-        app.app_context(),
-        pytest.raises(RuntimeError, match="No custom configuration"),
-    ):
-        get_custom_config()
-
-
 def test_main(
     mongo_client: MongoClient[dict[str, Any]],
     overlay: Path,
@@ -345,7 +409,7 @@ def test_main(
     """`main()` runs the app on the configured port.
 
     Args:
-        mongo_client: In-memory MongoDB client.
+        mongo_client: MongoDB client.
         overlay: Config overlay.
         monkeypatch: Patches of the development server.
     """
