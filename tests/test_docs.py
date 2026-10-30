@@ -39,14 +39,9 @@ def test_docs_dependencies_bounded() -> None:
 
 def test_nav_lists_all_pages() -> None:
     """Every page in `docs/` is in the navigation of `mkdocs.yml`."""
-
-    class Loader(yaml.SafeLoader):
-        """YAML loader that accepts the `!ENV` tag of MkDocs."""
-
-    Loader.add_constructor("!ENV", lambda loader, node: None)
-    config = yaml.load(  # noqa: S506 (a safe loader with one more tag)
-        (ROOT / "mkdocs.yml").read_text(encoding="utf-8"), Loader=Loader
-    )
+    # Without MkDocs' `!ENV` tag, which the safe loader doesn't know
+    text = (ROOT / "mkdocs.yml").read_text(encoding="utf-8")
+    config = yaml.safe_load(text.replace("!ENV ", ""))
 
     def pages(nav: object) -> list[str]:
         """Collect the pages of (a part of) the navigation.
