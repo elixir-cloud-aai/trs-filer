@@ -66,6 +66,11 @@ def test_no_network() -> None:
         pytest.raises(OSError, match="Network access blocked in tests"),
     ):
         sock.connect(("192.0.2.1", 443))
+    with (
+        socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock,
+        pytest.raises(OSError, match="Network access blocked in tests"),
+    ):
+        sock.connect_ex(("192.0.2.1", 443))
 
 
 def test_no_network_db(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -82,11 +87,12 @@ def test_no_network_db(monkeypatch: pytest.MonkeyPatch) -> None:
     )
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         conftest._no_network(sock, ("127.0.0.1", 12345))
+        assert conftest._no_network_ex(sock, ("127.0.0.1", 12345)) == 0
         with pytest.raises(OSError, match="Network access blocked in tests"):
             conftest._no_network(sock, ("127.0.0.1", 12346))
         with pytest.raises(OSError, match="Network access blocked in tests"):
             conftest._no_network(sock, "/tmp/socket")  # noqa: S108 (not created)
-    assert calls == [("127.0.0.1", 12345)]
+    assert calls == [("127.0.0.1", 12345)] * 2
 
 
 def test_no_database_name() -> None:
