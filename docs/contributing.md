@@ -142,8 +142,8 @@ checked in reviews.
   and generic types have them (`disallow_untyped_defs`,
   `disallow_any_generics`); reviews check those of variables.
 - **Tests:** [pytest](https://docs.pytest.org/), with coverage measured by
-  [coverage](https://coverage.readthedocs.io/) of `trs_filer` and
-  `scripts`, reported to Codecov by CI: cover all code that you add or
+  [coverage](https://coverage.readthedocs.io/) of `trs_filer`, `scripts`
+  and `docs/hooks.py`, reported to Codecov by CI: cover all code that you add or
   change, with tests that fail without your change.
 - **Further checks:** [ast-grep](https://ast-grep.github.io/) (rules in
   `.ast-grep/`, with tests), [semgrep](https://semgrep.dev/) (security rules

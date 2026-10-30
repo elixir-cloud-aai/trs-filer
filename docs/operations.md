@@ -7,8 +7,9 @@ A deployment of TRS-Filer consists of:
 - the app (the TRS API), served by Gunicorn (see
   [Server](configuration.md#server));
 - MongoDB, which stores the tools, with their versions and files, and the
-  tool classes (database `trsStore`, collections `tools` and `toolclasses`;
-  see [Database](configuration.md#database)).
+  tool classes (database `trsStore`, or `trs-filer-db` with the Helm chart,
+  collections `tools` and `toolclasses`; see
+  [Database](configuration.md#database)).
 
 The Docker Compose setup and the [Helm chart](deployment.md) run both.
 
@@ -34,7 +35,7 @@ if this fails, Gunicorn exits.
 ## Backups
 
 All state is in MongoDB: back up the database (`trsStore`, or the one set in
-`MONGO_DBNAME`) with
+`MONGO_DBNAME`, e.g., `trs-filer-db` with the Helm chart) with
 [`mongodump`](https://www.mongodb.com/docs/database-tools/mongodump/), e.g.,
 in the Docker Compose setup:
 

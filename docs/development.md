@@ -19,7 +19,8 @@ coverage report
 The unit tests need no database: they create the app from the base config
 (`trs_filer/config.yaml`) with an in-memory database
 ([mongomock](https://github.com/mongomock/mongomock)), see
-`tests/conftest.py`. Coverage is measured for `trs_filer` and `scripts`, and
+`tests/conftest.py`. Coverage is measured for `trs_filer`, `scripts` and the docs hooks
+(`docs/hooks.py`), and
 CI reports it to [Codecov](https://about.codecov.io/); add tests that fail
 without your change.
 

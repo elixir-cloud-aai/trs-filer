@@ -93,8 +93,8 @@ validation:
   unrecognized_links: warn
   anchors: warn
 
-# Add the notes of each release (`docs/releases/<version>.md`) to
-# "Changelog"; the build fails for notes missing here
+# Pages missing here fail the build; release notes, once there are any
+# (`docs/releases/<version>.md`), go under "Changelog"
 nav:
   - Home: index.md
   - Getting started: getting-started.md

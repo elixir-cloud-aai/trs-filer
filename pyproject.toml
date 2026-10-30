@@ -85,7 +85,7 @@ module = [
 ignore_errors = true
 
 [tool.coverage.run]
-source = ["trs_filer", "scripts"]
+source = ["trs_filer", "docs", "scripts"]
 
 [tool.coverage.report]
 exclude_also = ['if __name__ == "__main__":']

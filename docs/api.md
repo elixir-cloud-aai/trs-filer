@@ -29,7 +29,7 @@ The service info reports TRS version 2.0.1 (`type.version`).
 | `GET /tools/{id}/versions/{version_id}/{type}/descriptor` | Get the primary descriptor of a version, for descriptor type `type` (e.g., `CWL`, `WDL`, `NFL`, `GALAXY`). |
 | `GET /tools/{id}/versions/{version_id}/{type}/descriptor/{relative_path}` | Get another descriptor file of a version, by its path. |
 | `GET /tools/{id}/versions/{version_id}/{type}/tests` | List the test files of a version. |
-| `GET /tools/{id}/versions/{version_id}/{type}/files` | List the files of a version, or, with `format=zip`, get them as a ZIP archive. |
+| `GET /tools/{id}/versions/{version_id}/{type}/files` | List the files of a version for descriptor type `type` (descriptors, test files and other files, not container recipe files), or, with `format=zip`, get them as a ZIP archive. |
 | `GET /tools/{id}/versions/{version_id}/containerfile` | List the container recipe files (e.g., Dockerfiles) of a version. |
 | `GET /toolClasses` | List the tool classes. |
 
