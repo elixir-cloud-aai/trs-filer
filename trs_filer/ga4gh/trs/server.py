@@ -129,7 +129,7 @@ def toolsGet(
     description: str | None = None,
     author: str | None = None,
     checker: bool | None = None,
-    limit: int = 1000,  # default as per specs, also the maximum
+    limit: int = MAX_LIMIT,
     offset: str | None = None,
 ) -> tuple[list[dict[str, Any]], int, dict[str, Any]]:
     """List all tools.

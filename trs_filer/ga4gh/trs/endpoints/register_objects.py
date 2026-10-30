@@ -112,7 +112,7 @@ class RegisterTool:
         identifier, if any; their meta version, and those of their versions
         that replace stored versions, are incremented. Unless tool classes are
         validated, the tool class is created if it does not exist; existing
-        tool classes are not changed.
+        tool classes are not changed, and tools store a copy of them.
 
         Raises:
             BadRequest: Version identifiers are duplicated, the files of a
@@ -133,9 +133,13 @@ class RegisterTool:
         if tool_class_id is None:
             tool_class_id = generate_id(charset=self.id_charset, length=self.id_length)
             self.data["toolclass"]["id"] = tool_class_id
-        if self.tool_class_validation and (
-            self.db_coll_classes.find_one(filter={"id": tool_class_id}) is None
-        ):
+        # tools store a copy of their tool class: that of an existing one
+        stored_class = self.db_coll_classes.find_one(
+            filter={"id": tool_class_id}, projection={"_id": False}
+        )
+        if stored_class is not None:
+            self.data["toolclass"] = stored_class
+        elif self.tool_class_validation:
             logger.error("Tool class '%s' does not exist.", tool_class_id)
             raise BadRequest
 
@@ -174,8 +178,7 @@ class RegisterTool:
                     charset=self.id_charset, length=self.id_length
                 )
                 for version_proc in versions:
-                    version_proc.id = self.data["id"]
-                    version_proc.set_id(version_proc.data["id"])
+                    version_proc.set_tool_id(self.data["id"])
 
             # set self reference URL
             self.data["url"] = (
@@ -197,7 +200,7 @@ class RegisterTool:
         else:
             raise InternalServerError
 
-        if not self.tool_class_validation:
+        if stored_class is None:
             self._create_tool_class()
         logger.debug(
             "Entry in 'tools' collection: %s",
@@ -209,12 +212,9 @@ class RegisterTool:
 
         Existing tool classes are shared by tools and not changed.
         """
-        tool_class = {
-            key: value for key, value in self.data["toolclass"].items() if key != "id"
-        }
         result = self.db_coll_classes.update_one(
             filter={"id": self.data["toolclass"]["id"]},
-            update={"$setOnInsert": tool_class},
+            update={"$setOnInsert": dict(self.data["toolclass"])},
             upsert=True,
         )
         if result.upserted_id is not None:
@@ -352,6 +352,15 @@ class RegisterToolVersion:
             f"{self.api_path}/tools/{self.id}/versions/"
             f"{self.data['id']}"
         )
+
+    def set_tool_id(self, tool_id: str) -> None:
+        """Set the identifier of the tool, and the version's self reference URL.
+
+        Args:
+            tool_id: Tool identifier.
+        """
+        self.id = tool_id
+        self.set_id(self.data["id"])
 
     def process_files(self) -> None:
         """Process file (meta)data.

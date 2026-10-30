@@ -1041,6 +1041,12 @@ def test_tool_class_kept(
     response = client.put(f"{BASE_PATH}/tools/TOOL02", json=data)
     assert response.status_code == 200
     assert _stored(toolclasses, MOCK_TOOL_CLASS["id"]) == MOCK_TOOL_CLASS
+    response = client.get(f"{BASE_PATH}/tools/TOOL02")
+    assert response.get_json()["toolclass"] == MOCK_TOOL_CLASS
+    response = client.get(
+        f"{BASE_PATH}/tools", query_string={"toolClass": MOCK_TOOL_CLASS["name"]}
+    )
+    assert [tool["id"] for tool in response.get_json()] == [TOOL_ID, "TOOL02"]
     data["toolclass"]["id"] = "other"
     response = client.put(f"{BASE_PATH}/tools/TOOL03", json=data)
     assert response.status_code == 200
