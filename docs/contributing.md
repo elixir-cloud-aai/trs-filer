@@ -112,8 +112,9 @@ TRS-Filer is cited with the metadata in
 GitHub ("Cite this repository") and Zenodo use (see
 [Citation](index.md#citation)). Its authors are the people who committed at
 least 100 lines (lines added) to `main`, the release branch (to `dev` before
-the first release), not counting bots, vendored or generated files and the
-reformatting commits in `.git-blame-ignore-revs`. They are ordered by
+the first release), not counting merge commits, bots, vendored or generated
+files, the license text, binary files and the reformatting commits in
+`.git-blame-ignore-revs`. They are ordered by
 lines, then by commits; equal contributors are listed alphabetically by
 family name and marked with an asterisk (*). Affiliations come from public
 ORCID records only. To add or correct your entry (e.g., your name, [ORCID

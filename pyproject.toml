@@ -155,7 +155,8 @@ Issues = "https://github.com/elixir-cloud-aai/trs-filer/issues"
 Documentation = "https://trs-filer.readthedocs.io"
 
 [tool.setuptools_scm]
-# Version from Git tags (`vX.Y.Z`), the only place it is stored; builds
+# Version from Git tags (`vX.Y.Z`), its source (`CITATION.cff` repeats it
+# for releases, see "Versioning" in `docs/development.md`); builds
 # without Git metadata (e.g., Docker builds, which get no `.git`) report the
 # fallback unless `SETUPTOOLS_SCM_PRETEND_VERSION` is set
 fallback_version = "0.0.0.dev0"
