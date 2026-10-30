@@ -308,17 +308,23 @@ above); on re-runs, it replaces the notes of an existing release (also
 overwriting manual edits). Detailed upgrade steps belong on the
 [Upgrading](upgrading.md) page, linked from the intro.
 
-Maintainers: the workflows rely on these repository settings: environment
-`dev-images` limited to branch `dev`; environment `release` with a required
-reviewer; a tag ruleset for `v*` that restricts who may create them and
-prevents moving or deleting them; immutable releases; `main` protected
-against non-fast-forward pushes; and the Docker Hub secrets
-(`DOCKERHUB_LOGIN`, `DOCKERHUB_TOKEN`) only in the two environments, not as
-repository secrets. The Docker Hub organization is the repository variable
-`DOCKERHUB_ORG` (by default `elixircloud`; forks set it to the organization
-they publish to, with the Docker Hub secrets in an environment
-`dev-images`), so that the released chart's default image
-(`trs_filer.image`) is the published one. Forks without `DOCKERHUB_ORG`
+Maintainers: the workflows rely on these repository settings:
+
+- environment `dev-images`, limited to branch `dev`;
+- environment `release`, with a required reviewer;
+- the Docker Hub secrets (`DOCKERHUB_LOGIN`, `DOCKERHUB_TOKEN`) only in the
+  two environments, not as repository secrets;
+- a tag ruleset for `v*` that restricts who may create them and prevents
+  moving or deleting them;
+- immutable releases;
+- `main` protected against non-fast-forward pushes;
+- a ruleset for `dev` that requires the check `CI passed` (the gate of the
+  CI workflow) only.
+
+The Docker Hub organization is the repository variable `DOCKERHUB_ORG` (by
+default `elixircloud`; forks set it to the organization they publish to,
+with the Docker Hub secrets in an environment `dev-images`), so that the
+released chart's default image (`trs_filer.image`) is the published one. Forks without `DOCKERHUB_ORG`
 publish nothing: their CI runs the same checks and passes without the
 secrets. On Read the Docs, the default version is `stable` (the highest
 release) from the first release on, and the default branch is left empty, so
