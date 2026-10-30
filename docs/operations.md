@@ -44,5 +44,11 @@ docker compose exec -T mongodb mongodump --db trsStore --archive > trs-filer.arc
 docker compose exec -T mongodb mongorestore --archive < trs-filer.archive
 ```
 
+`mongodump` reads the collections one after the other, without a
+point-in-time snapshot, so a registration during the dump can leave the
+archive inconsistent: stop writes (e.g., stop the app with
+`docker compose stop trs-filer`) while dumping, or use a backup method of
+MongoDB that takes consistent snapshots.
+
 The base config creates unique indexes on the identifiers (`id`) of tools
 and tool classes on startup.
