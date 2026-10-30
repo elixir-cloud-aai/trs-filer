@@ -98,6 +98,8 @@ class TestRegisterToolClass:
 
     def test_register_metadata_duplicate_keys_repeated(self) -> None:
         """Test for creating a tool class; running out of unique identifiers."""
+        # `CUSTOM_CONFIG_ONE_ID` gives one identifier only to tools; tool
+        # classes need their own one-identifier config
         config = deepcopy(CUSTOM_CONFIG_ONE_ID)
         config["toolclass"] = {**TOOL_VERSION_CONFIG_ONE_ID, "validation": False}
         app = make_app(config)

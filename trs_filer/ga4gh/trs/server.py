@@ -26,7 +26,8 @@ from trs_filer.utils import get_collection, get_custom_config
 
 logger = logging.getLogger(__name__)
 
-# Maximum number of tools per page of `GET /tools` (the spec's default limit)
+# Default and maximum number of tools per page of `GET /tools` (the spec's
+# default limit)
 MAX_LIMIT = 1000
 
 
@@ -154,8 +155,11 @@ def toolsGet(
 
     Returns:
         List of all tools consistent with all filters, if specified, the
-        status code and the pagination headers (`next_page` only if there are
-        more tools).
+        status code and the pagination headers: `self_link`,
+        `current_offset`, `current_limit` (after reducing it to `MAX_LIMIT`),
+        `last_page` (the page in the sequence of pages from `offset` that has
+        the last tool; if `offset` is beyond the last tool, the last page of
+        the sequence from 0) and `next_page` (only if there are more tools).
 
     Raises:
         BadRequest: The offset is not a non-negative integer, or the limit is
@@ -225,8 +229,10 @@ def toolsGet(
                 if "files" in _version:
                     del _version["files"]
 
-    # links to pages; the last page starts at the last multiple of `limit`
-    last_offset = (total - 1) // limit * limit if total else 0
+    # links to pages; the last page is the one with the last tool, in steps
+    # of `limit` from the offset (as `next_page`), or else from 0
+    start = offset_int if offset_int < total else 0
+    last_offset = start + max(total - 1 - start, 0) // limit * limit
     headers: dict[str, Any] = {
         "last_page": f"{request.base_url}?offset={last_offset}&limit={limit}",
         "self_link": f"{request.url}",

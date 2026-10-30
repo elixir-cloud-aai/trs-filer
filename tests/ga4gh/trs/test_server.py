@@ -30,8 +30,9 @@ from tests.mock_data import (
 from trs_filer.app import create_app
 from trs_filer.custom_config import RemoteFilesConfig
 from trs_filer.errors.exceptions import RemoteFileError
+from trs_filer.ga4gh.trs import server
 from trs_filer.remote_files import RemoteFile
-from trs_filer.utils import get_custom_config
+from trs_filer.utils import DB, get_custom_config
 
 TOOL_ID = "TOOL01"
 VERSION_ID = MOCK_TOOL_VERSION_ID["versions"][0]["id"]
@@ -218,7 +219,8 @@ def test_toolsGet_pagination(
     """Pages of tools start at the offset and have at most `limit` tools.
 
     The link to the next page is set unless the page is the last one; the
-    link to the last page points to the last multiple of `limit`.
+    link to the last page points to the page with the last tool, in steps of
+    `limit` from the offset (or from 0 if the offset is beyond the last tool).
 
     Args:
         client: Test client.
@@ -246,6 +248,13 @@ def test_toolsGet_pagination(
     assert [tool["id"] for tool in response.get_json()] == [TOOL_ID, "TOOL02"]
     assert response.headers["next_page"] == f"{base_url}?offset=2&limit=2"
     assert response.headers["last_page"] == f"{base_url}?offset=2&limit=2"
+    response = client.get(f"{BASE_PATH}/tools?offset=1&limit=2")
+    assert [tool["id"] for tool in response.get_json()] == ["TOOL02", "TOOL03"]
+    assert "next_page" not in response.headers
+    assert response.headers["last_page"] == f"{base_url}?offset=1&limit=2"
+    response = client.get(f"{BASE_PATH}/tools?offset=5&limit=2")
+    assert response.get_json() == []
+    assert response.headers["last_page"] == f"{base_url}?offset=2&limit=2"
 
 
 def test_toolsGet_pagination_empty(client: FlaskClient) -> None:
@@ -264,17 +273,29 @@ def test_toolsGet_pagination_empty(client: FlaskClient) -> None:
 
 
 def test_toolsGet_pagination_max_limit(
-    client: FlaskClient, tool: dict[str, Any]
+    client: FlaskClient, tool: dict[str, Any], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Limits above the maximum are reduced to it.
+    """Limits above the maximum (1000) are reduced to it.
 
     Args:
         client: Test client.
         tool: Registered tool.
+        monkeypatch: Patch of the maximum, to page through two tools.
     """
     response = client.get(f"{BASE_PATH}/tools?limit=1001")
     assert response.status_code == 200
     assert response.headers["current_limit"] == "1000"
+    response = client.put(
+        f"{BASE_PATH}/tools/TOOL02", json=deepcopy(MOCK_TOOL_VERSION_ID)
+    )
+    assert response.status_code == 200
+    monkeypatch.setattr(server, "MAX_LIMIT", 1)
+    response = client.get(f"{BASE_PATH}/tools?limit=2")
+    assert [tool["id"] for tool in response.get_json()] == [TOOL_ID]
+    assert response.headers["current_limit"] == "1"
+    assert response.headers["next_page"] == (
+        f"http://localhost{BASE_PATH}/tools?offset=1&limit=1"
+    )
 
 
 @pytest.mark.parametrize("query", ["limit=-1", "limit=0", "offset=-1", "offset=a"])
@@ -959,6 +980,7 @@ def test_putTool_update(
     """
     data = deepcopy(MOCK_TOOL_VERSION_ID)
     data["name"] = "other"
+    data["versions"].append({**deepcopy(data["versions"][0]), "id": "v2"})
     response = client.put(f"{BASE_PATH}/tools/{TOOL_ID}", json=data)
     assert response.status_code == 200
     assert response.get_json() == TOOL_ID
@@ -966,7 +988,11 @@ def test_putTool_update(
     assert stored["name"] == "other"
     assert tools.count_documents({}) == 1
     assert stored["meta_version"] == "2"
-    assert stored["versions"][0]["meta_version"] == "2"
+    # replaced versions are incremented, new ones start at the initial value
+    assert [(v["id"], v["meta_version"]) for v in stored["versions"]] == [
+        (VERSION_ID, "2"),
+        ("v2", "1"),
+    ]
 
 
 @pytest.mark.parametrize("method", ["POST", "PUT"])
@@ -993,6 +1019,32 @@ def test_tool_identical(
     assert response.status_code == 200
     assert tools.count_documents({}) == (2 if method == "POST" else 1)
     assert toolclasses.count_documents({}) == 1
+    assert _stored(tools, response.get_json())["meta_version"] == (
+        "1" if method == "POST" else "2"
+    )
+
+
+def test_tool_class_kept(
+    client: FlaskClient,
+    tool: dict[str, Any],
+    toolclasses: Collection[dict[str, Any]],
+) -> None:
+    """Tools don't change existing tool classes, but create missing ones.
+
+    Args:
+        client: Test client.
+        tool: Registered tool.
+        toolclasses: Collection `toolclasses`.
+    """
+    data = deepcopy(MOCK_TOOL_VERSION_ID)
+    data["toolclass"]["name"] = "other"
+    response = client.put(f"{BASE_PATH}/tools/TOOL02", json=data)
+    assert response.status_code == 200
+    assert _stored(toolclasses, MOCK_TOOL_CLASS["id"]) == MOCK_TOOL_CLASS
+    data["toolclass"]["id"] = "other"
+    response = client.put(f"{BASE_PATH}/tools/TOOL03", json=data)
+    assert response.status_code == 200
+    assert _stored(toolclasses, "other") == {**data["toolclass"], "id": "other"}
 
 
 def test_tool_new_ids(
@@ -1018,6 +1070,9 @@ def test_tool_new_ids(
     assert response.status_code == 200
     assert response.get_json() == "TOOL02"
     assert tools.count_documents({}) == 2
+    stored = _stored(tools, "TOOL02")
+    assert stored["url"].endswith("/tools/TOOL02")
+    assert stored["versions"][0]["url"].endswith(f"/tools/TOOL02/versions/{VERSION_ID}")
 
 
 def test_tool_no_is_production(
@@ -1058,13 +1113,21 @@ def test_tool_class_validation(
     assert client.put(path, json=deepcopy(MOCK_TOOL_VERSION_ID)).status_code == 400
     response = client.put(
         f"{BASE_PATH}/toolClasses/{MOCK_TOOL_CLASS['id']}",
-        json={"name": "name", "description": "description"},
+        json={"name": "validated", "description": "Validated."},
     )
     assert response.status_code == 200
     for _ in range(2):
         assert client.put(path, json=deepcopy(MOCK_TOOL_VERSION_ID)).status_code == (
             200
         )
+    # the tool's tool class doesn't change the validated one
+    toolclasses = mongo_client[DB]["toolclasses"]
+    stored = toolclasses.find_one({"id": MOCK_TOOL_CLASS["id"]}, {"_id": False})
+    assert stored == {
+        "id": MOCK_TOOL_CLASS["id"],
+        "name": "validated",
+        "description": "Validated.",
+    }
     data = deepcopy(MOCK_TOOL_VERSION_ID)
     data["toolclass"]["id"] = "other"
     assert client.put(path, json=data).status_code == 400
