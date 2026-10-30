@@ -195,6 +195,7 @@ The tag must be annotated and signed (`git tag -s`), with a key that GitHub can
 verify (added to the tagger's GitHub account). The [release
 workflow](https://github.com/elixir-cloud-aai/trs-filer/blob/dev/.github/workflows/release.yml),
 triggered by the tag, checks that GitHub verified the signature, that the
+signed tag object has the name of the tag, that the
 tag's commit is on `main` and its `CITATION.cff` has the release version and
 a date that is not in the future (UTC), that the dependencies are releases
 (see below), and that the [CI

@@ -86,10 +86,14 @@ jobs:
               echo "::error::Tag '${TAG}' is not annotated (git tag -s)"
               exit 1
           fi
-          verified="$(gh api "repos/${REPOSITORY}/git/tags/$(git rev-parse "refs/tags/${TAG}")" \
-              --jq .verification.verified)"
-          if [[ "${verified}" != "true" ]]; then
+          tag_object="$(gh api "repos/${REPOSITORY}/git/tags/$(git rev-parse "refs/tags/${TAG}")")"
+          if [[ "$(jq -r .verification.verified <<< "${tag_object}")" != "true" ]]; then
               echo "::error::Tag '${TAG}' has no signature verified by GitHub (git tag -s)"
+              exit 1
+          fi
+          # The signed tag object names the release version, not just the ref
+          if [[ "$(jq -r .tag <<< "${tag_object}")" != "${TAG}" ]]; then
+              echo "::error::Tag '${TAG}' points to a tag object signed for another name"
               exit 1
           fi
           if ! git merge-base --is-ancestor HEAD origin/main; then

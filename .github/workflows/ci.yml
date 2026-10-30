@@ -448,13 +448,14 @@ jobs:
         with:
           username: ${{ secrets.DOCKERHUB_LOGIN }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-      # A single source is copied as is
+      # A single source is copied as is; `sha-<commit>` first, so that `dev`
+      # never moves to an image without its commit tag
       - name: Tag image
         if: steps.head.outputs.current == 'true'
         env:
           SHA: ${{ github.sha }}
         run: |
-          for tag in "${IMAGE_NAME}:dev" "${IMAGE_NAME}:sha-${SHA}"; do
+          for tag in "${IMAGE_NAME}:sha-${SHA}" "${IMAGE_NAME}:dev"; do
             docker buildx imagetools create --tag "${tag}" "${IMAGE_NAME}@${DIGEST}"
             actual="$(docker buildx imagetools inspect "${tag}" \
               --format '{{ json .Manifest }}' | jq -r .digest)"
