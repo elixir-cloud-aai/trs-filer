@@ -59,8 +59,10 @@ curl -X GET "http://localhost:8080/ga4gh/trs/v2/tools" -H "accept: application/j
 
 ## Contributing
 
-Contributions are welcome! See [`CONTRIBUTING.md`](CONTRIBUTING.md) and mind
-our [code of conduct](CODE_OF_CONDUCT.md).
+Contributions are welcome! See the organisation's [contributing
+guide][contributing], and mind our [code of conduct][code-of-conduct]. Install
+the pre-commit hooks with `pip install -e ".[dev]"` and `pre-commit install`;
+CI runs them with `pre-commit run --all-files`.
 
 [badge-build-status]: <https://github.com/elixir-cloud-aai/trs-filer/actions/workflows/ci.yml/badge.svg>
 [badge-coverage]: <https://codecov.io/gh/elixir-cloud-aai/trs-filer/branch/dev/graph/badge.svg?branch=dev>
@@ -70,7 +72,9 @@ our [code of conduct](CODE_OF_CONDUCT.md).
 [badge-url-coverage]: <https://codecov.io/gh/elixir-cloud-aai/trs-filer?branch=dev>
 [badge-url-github-tag]: <https://github.com/elixir-cloud-aai/trs-filer/releases>
 [badge-url-license]: <https://www.apache.org/licenses/LICENSE-2.0>
+[code-of-conduct]: <https://github.com/elixir-cloud-aai/.github/blob/main/CODE_OF_CONDUCT.md>
 [config]: trs_filer/config.yaml
+[contributing]: <https://github.com/elixir-cloud-aai/.github/blob/main/CONTRIBUTING.md>
 [deployment]: deployment/
 [logo]: docs/images/logo_elixir_on_cloud.png
 [org]: <https://elixir-on.cloud/>

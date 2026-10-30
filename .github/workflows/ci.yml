@@ -1,7 +1,8 @@
 # Everything that must pass on pull requests and pushes: lints, builds and
 # tests the project (also for release tags), checks the dependency pins of
-# release tags, and publishes the image for pushes of `dev`. The ruleset is
-# to require the gate `CI passed` only
+# release tags, and publishes the image for pushes of `dev` of the upstream
+# repository (forks have no Docker Hub secrets, so their CI publishes
+# nothing). The ruleset is to require the gate `CI passed` only
 
 name: CI
 on:
@@ -35,7 +36,7 @@ jobs:
       # All jobs use the Python version of the base image in the `Dockerfile`
       # (`requires-python` in `pyproject.toml`), the only one the app targets
       - name: Set up Python
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.13"
           cache: pip
@@ -79,7 +80,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Set up Python
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.13"
           cache: pip
@@ -92,15 +93,17 @@ jobs:
         run: |
           coverage run -m pytest -W ignore::DeprecationWarning
           coverage xml
-      # Upload errors fail the workflow only on branch pushes, because pull
-      # requests from forks and Dependabot get no access to the Codecov
-      # token, and so that release tags don't fail for Codecov outages
+      # Upload errors fail the workflow only on branch pushes to the upstream
+      # repository: pull requests from forks and Dependabot, and pushes in
+      # forks, have no access to its Codecov token (so failures are
+      # deliberately non-fatal there), and release tags shouldn't fail for
+      # Codecov outages
       - name: Submit Report to Codecov
         uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: ./coverage.xml
-          fail_ci_if_error: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/heads/') }}
+          fail_ci_if_error: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/heads/') && github.repository_owner == 'elixir-cloud-aai' }}
           verbose: true
       - name: Deploy app
         # Waits until the containers are healthy (see their health checks)
@@ -137,7 +140,7 @@ jobs:
     name: Release pins
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    # Same condition as `PINS_MAY_SKIP` of the gate
+    # Same condition as the `pins` skip allowed by the gate
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     steps:
       - name: Check out repository
@@ -146,23 +149,24 @@ jobs:
           persist-credentials: false
       # The script uses the standard library only
       - name: Set up Python
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.13"
       - name: Check that dependencies are releases
         run: python scripts/check_release_pins.py
 
   # TEMPORARY: replaced by the release and supply-chain workflows (#133,
-  # #134). Pushes of the default branch only: pull requests get no Docker
-  # Hub secrets (e.g., of Dependabot and forks), and the Compose build of
-  # `test` builds the image for them
+  # #134). Pushes of the default branch of the upstream repository only:
+  # pull requests (e.g., of Dependabot and forks) and pushes in forks get no
+  # Docker Hub secrets, and the Compose build of `test` builds the image for
+  # them
   publish:
     name: Publish image
     runs-on: ubuntu-latest
     timeout-minutes: 30
     needs: [lint, test]
-    # Same condition as `PUBLISH_MAY_SKIP` of the gate
-    if: github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    # Same condition as the `publish` skip allowed by the gate
+    if: github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && github.repository_owner == 'elixir-cloud-aai'
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -171,7 +175,7 @@ jobs:
           # Full history and tags, to derive the version
           fetch-depth: 0
       - name: Set up Python
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.13"
       # The Docker build gets no Git metadata, so the version (e.g.,
@@ -185,7 +189,7 @@ jobs:
       # Tags `latest` (pushed) and the date (local only), as before
       - name: Build & Publish image to DockerHub
         env:
-          DOCKERHUB_ORG: ${{ secrets.DOCKERHUB_ORG }}
+          DOCKERHUB_ORG: ${{ vars.DOCKERHUB_ORG || 'elixircloud' }}
           DOCKERHUB_LOGIN: ${{ secrets.DOCKERHUB_LOGIN }}
           DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
           REPO_NAME: ${{ github.event.repository.name }}
@@ -204,37 +208,23 @@ jobs:
   # Gate, the only check that the ruleset requires: fails if any other job
   # failed or was cancelled, or was skipped where it should have run. Only
   # `pins` (except for release tags) and `publish` (except for pushes of the
-  # default branch) may be skipped. Every other job goes into `needs` (see
-  # `tests/test_config.py`)
+  # default branch of the upstream repository) may be skipped. Every other
+  # job goes into `needs` (see `tests/test_config.py`)
   passed:
     name: CI passed
     runs-on: ubuntu-latest
     timeout-minutes: 5
     needs: [lint, test, pins, publish]
     if: always()
+    permissions: {}
     steps:
-      - name: Check job results
-        env:
-          LINT: ${{ needs.lint.result }}
-          TEST: ${{ needs.test.result }}
-          PINS: ${{ needs.pins.result }}
-          PUBLISH: ${{ needs.publish.result }}
-          # Negated `if` conditions of the jobs that may be skipped
-          PINS_MAY_SKIP: ${{ !(github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')) }}
-          PUBLISH_MAY_SKIP: ${{ !(github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)) }}
-        run: |
-          status=0
-          check() {
-            # <job> <result> <whether the job may be skipped>
-            if [ "$2" = success ] || { [ "$2" = skipped ] && [ "$3" = true ]; }; then
-              echo "$1: $2"
-            else
-              echo "::error::Job '$1' ended with '$2'"
-              status=1
-            fi
-          }
-          check lint "${LINT}" false
-          check test "${TEST}" false
-          check pins "${PINS}" "${PINS_MAY_SKIP}"
-          check publish "${PUBLISH}" "${PUBLISH_MAY_SKIP}"
-          exit "${status}"
+      - name: Check results of all jobs
+        uses: elixir-cloud-aai/.github/actions/gate@743e82d290a53768454999e413756a924e383259 # v1.0.0
+        with:
+          needs: ${{ toJSON(needs) }}
+          # Jobs that may be skipped: `pins` except on version tags, `publish`
+          # except on pushes to the default branch of the upstream repository
+          allow-skipped: >-
+            ${{ format('{0} {1}',
+              !(github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')) && 'pins' || '',
+              !(github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && github.repository_owner == 'elixir-cloud-aai') && 'publish' || '') }}
