@@ -734,14 +734,17 @@ def deleteToolVersion(
         Previous identifier of deleted tool version.
 
     Raises:
+        BadRequest: The version is the last one of the tool.
         InternalServerError: The tool version could not be deleted.
         NotFound: No tool with the given identifier and version exists.
     """
     db_coll_tools = get_collection("tools")
 
+    # tools keep at least one version
     filt = {
         "id": id,
         "versions.id": version_id,
+        "versions.1": {"$exists": True},
     }
     update = {
         "$pull": {
@@ -754,6 +757,9 @@ def deleteToolVersion(
     )
 
     if not del_ver_tools.matched_count:
+        if db_coll_tools.count_documents({"id": id, "versions.id": version_id}):
+            logger.error("Version '%s' is the last one of tool '%s'.", version_id, id)
+            raise BadRequest
         raise NotFound
     elif not del_ver_tools.modified_count:
         raise InternalServerError

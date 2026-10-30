@@ -1297,7 +1297,7 @@ def test_toolVersion_new_ids(
 def test_deleteToolVersion(
     client: FlaskClient, tool: dict[str, Any], tools: Collection[dict[str, Any]]
 ) -> None:
-    """Versions are deleted, also the last one of a tool.
+    """Versions are deleted, but not the last one of a tool.
 
     Args:
         client: Test client.
@@ -1305,9 +1305,19 @@ def test_deleteToolVersion(
         tools: Collection `tools`.
     """
     response = client.delete(VERSION_PATH)
+    assert response.status_code == 400
+    assert response.get_json() == BAD_REQUEST
+    assert len(_stored(tools, TOOL_ID)["versions"]) == 1
+    response = client.put(
+        f"{BASE_PATH}/tools/{TOOL_ID}/versions/other",
+        json=deepcopy(MOCK_VERSION_NO_ID),
+    )
+    assert response.status_code == 200
+    response = client.delete(VERSION_PATH)
     assert response.status_code == 200
     assert response.get_json() == VERSION_ID
-    assert _stored(tools, TOOL_ID)["versions"] == []
+    versions = _stored(tools, TOOL_ID)["versions"]
+    assert [version["id"] for version in versions] == ["other"]
 
 
 @UNKNOWN_VERSIONS
