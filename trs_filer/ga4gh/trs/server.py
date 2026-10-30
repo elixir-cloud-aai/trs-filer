@@ -26,6 +26,9 @@ from trs_filer.utils import get_collection, get_custom_config
 
 logger = logging.getLogger(__name__)
 
+# Maximum number of tools per page of `GET /tools` (the spec's default limit)
+MAX_LIMIT = 1000
+
 
 @log_traffic
 def toolsIdGet(id: str) -> dict[str, Any]:
@@ -125,7 +128,7 @@ def toolsGet(
     description: str | None = None,
     author: str | None = None,
     checker: bool | None = None,
-    limit: int = 1000,  # default as per specs
+    limit: int = 1000,  # default as per specs, also the maximum
     offset: str | None = None,
 ) -> tuple[list[dict[str, Any]], int, dict[str, Any]]:
     """List all tools.
@@ -145,101 +148,74 @@ def toolsGet(
         description: Return only entries with the given description.
         author: Return only entries from the given author.
         checker: Return only checker workflows.
-        limit: Number of records when paginating results.
+        limit: Number of records when paginating results; at most
+            `MAX_LIMIT`, larger limits are reduced to it.
         offset: Start index when paginating results.
 
     Returns:
         List of all tools consistent with all filters, if specified, the
-        status code and the pagination headers.
+        status code and the pagination headers (`next_page` only if there are
+        more tools).
+
+    Raises:
+        BadRequest: The offset is not a non-negative integer, or the limit is
+            below 1.
     """
-    # set filters
+    # set filters; those of versions apply to the same version, those of
+    # images to the same image of that version
     filt: dict[str, Any] = {}
     if id is not None:
         filt["id"] = id
     if alias is not None:
-        filt["aliases"] = {
-            "$in": [alias],
-        }
+        filt["aliases"] = alias
     if toolClass is not None:
         filt["toolclass.name"] = toolClass
-    if descriptorType:
-        filt["versions"] = {
-            "$elemMatch": {
-                "descriptor_type": {
-                    "$in": [descriptorType],
-                },
-            },
-        }
-    if registry is not None:
-        filt["versions"] = {
-            "$elemMatch": {
-                "images": {
-                    "$elemMatch": {
-                        "registry_host": registry,
-                    },
-                },
-            },
-        }
     if organization is not None:
         filt["organization"] = organization
-    if name is not None:
-        filt["versions"] = {
-            "$elemMatch": {
-                "images": {
-                    "$elemMatch": {
-                        "image_name": name,
-                    },
-                },
-            },
-        }
     if toolname is not None:
         filt["name"] = toolname
     if description is not None:
         filt["description"] = description
-    if author:
-        filt["versions"] = {
-            "$elemMatch": {
-                "author": {
-                    "$in": [author],
-                },
-            },
-        }
     if checker is not None:
         filt["has_checker"] = checker
+    image_filt: dict[str, Any] = {}
+    if registry is not None:
+        image_filt["registry_host"] = registry
+    if name is not None:
+        image_filt["image_name"] = name
+    version_filt: dict[str, Any] = {}
+    if descriptorType:
+        version_filt["descriptor_type"] = descriptorType
+    if author:
+        version_filt["author"] = author
+    if image_filt:
+        version_filt["images"] = {"$elemMatch": image_filt}
+    if version_filt:
+        filt["versions"] = {"$elemMatch": version_filt}
 
-    logger.info("offset %s limit %s ", offset, limit)
-    # offset validation
-    if offset is None:
-        offset_int = 0
-    elif int(offset) < 0:
-        return [], 422, {}
-    else:
-        offset_int = int(offset)
-
-    # limit validation
-    if int(limit) < 0:
-        return [], 422, {}
+    # validate pagination
+    try:
+        offset_int = 0 if offset is None else int(offset)
+    except ValueError as exc:
+        logger.error("Offset '%s' is not an integer.", offset)
+        raise BadRequest from exc
+    if offset_int < 0 or limit < 1:
+        logger.error("Invalid offset %s or limit %s.", offset_int, limit)
+        raise BadRequest
+    limit = min(limit, MAX_LIMIT)
 
     # fetch data
     db_coll_tools = get_collection("tools")
+    total = db_coll_tools.count_documents(filter=filt)
     cursor = (
         db_coll_tools.find(
             filter=filt,
             projection={"_id": False},
         )
-        .sort(
-            # Sort results by descending object ID (+/- oldest to newest)
-            "_id",
-            1,
-        )
-        .skip(
-            # Skip number of records by given offset
-            offset_int
-        )
-        .limit(
-            # Implement page size limit
-            limit
-        )
+        # Sort by object ID (+/- oldest to newest)
+        .sort("_id", 1)
+        .skip(offset_int)
+        .limit(limit)
     )
 
     records = list(cursor)
@@ -249,17 +225,18 @@ def toolsGet(
                 if "files" in _version:
                     del _version["files"]
 
-    previous_page_url = (
-        f"{request.base_url}?offset={max(offset_int - limit, 0)}&limit={limit}"
-    )
-    next_page_url = f"{request.base_url}?offset={offset_int + limit}&limit={limit}"
-
-    headers: dict[str, Any] = {}
-    headers["next_page"] = next_page_url
-    headers["last_page"] = previous_page_url
-    headers["self_link"] = f"{request.url}"
-    headers["current_offset"] = str(offset_int)
-    headers["current_limit"] = limit
+    # links to pages; the last page starts at the last multiple of `limit`
+    last_offset = (total - 1) // limit * limit if total else 0
+    headers: dict[str, Any] = {
+        "last_page": f"{request.base_url}?offset={last_offset}&limit={limit}",
+        "self_link": f"{request.url}",
+        "current_offset": str(offset_int),
+        "current_limit": limit,
+    }
+    if offset_int + limit < total:
+        headers["next_page"] = (
+            f"{request.base_url}?offset={offset_int + limit}&limit={limit}"
+        )
 
     return records, 200, headers
 
@@ -843,7 +820,8 @@ def deleteToolClass(
     db_coll_classes = get_collection("toolclasses")
 
     # do not allow deleting tool class associated with tool
-    if id in [t["toolclass"]["id"] for t in inspect.unwrap(toolsGet)()[0]]:
+    if get_collection("tools").find_one({"toolclass.id": id}) is not None:
+        logger.error("Tool class '%s' is used by tools.", id)
         raise BadRequest
 
     if db_coll_classes.delete_one({"id": id}).deleted_count:

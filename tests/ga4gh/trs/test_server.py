@@ -8,11 +8,13 @@ data change the stored tool directly.
 from collections.abc import Callable
 from copy import deepcopy
 from io import BytesIO
+from pathlib import Path
 from typing import Any, NoReturn
 from zipfile import ZipFile
 
 from connexion import App
 from flask.testing import FlaskClient
+from pymongo import MongoClient
 from pymongo.collection import Collection
 from pymongo.results import UpdateResult
 import pytest
@@ -25,6 +27,7 @@ from tests.mock_data import (
     MOCK_TOOL_VERSION_ID,
     MOCK_VERSION_NO_ID,
 )
+from trs_filer.app import create_app
 from trs_filer.custom_config import RemoteFilesConfig
 from trs_filer.errors.exceptions import RemoteFileError
 from trs_filer.remote_files import RemoteFile
@@ -202,7 +205,7 @@ def test_toolsGet(client: FlaskClient, tool: dict[str, Any]) -> None:
     assert response.status_code == 200
     assert response.get_json() == [_without_files(tool)]
     base_url = f"http://localhost{BASE_PATH}/tools"
-    assert response.headers["next_page"] == f"{base_url}?offset=1000&limit=1000"
+    assert "next_page" not in response.headers
     assert response.headers["last_page"] == f"{base_url}?offset=0&limit=1000"
     assert response.headers["self_link"] == base_url
     assert response.headers["current_offset"] == "0"
@@ -214,41 +217,80 @@ def test_toolsGet_pagination(
 ) -> None:
     """Pages of tools start at the offset and have at most `limit` tools.
 
+    The link to the next page is set unless the page is the last one; the
+    link to the last page points to the last multiple of `limit`.
+
     Args:
         client: Test client.
         tool: Registered tool.
         tools: Collection `tools`.
     """
-    data = deepcopy(MOCK_TOOL_VERSION_ID)
-    # Another tool class: registering one identical to a stored one fails
-    # (#148)
-    data["toolclass"]["id"] = "other"
-    response = client.put(f"{BASE_PATH}/tools/TOOL02", json=data)
-    assert response.status_code == 200
+    for tool_id in ["TOOL02", "TOOL03"]:
+        response = client.put(
+            f"{BASE_PATH}/tools/{tool_id}", json=deepcopy(MOCK_TOOL_VERSION_ID)
+        )
+        assert response.status_code == 200
+    base_url = f"http://localhost{BASE_PATH}/tools"
     response = client.get(f"{BASE_PATH}/tools?offset=1&limit=1")
     assert response.status_code == 200
     assert response.get_json() == [_without_files(_stored(tools, "TOOL02"))]
-    base_url = f"http://localhost{BASE_PATH}/tools"
     assert response.headers["next_page"] == f"{base_url}?offset=2&limit=1"
-    assert response.headers["last_page"] == f"{base_url}?offset=0&limit=1"
+    assert response.headers["last_page"] == f"{base_url}?offset=2&limit=1"
     assert response.headers["self_link"] == f"{base_url}?offset=1&limit=1"
     assert response.headers["current_offset"] == "1"
     assert response.headers["current_limit"] == "1"
+    response = client.get(f"{BASE_PATH}/tools?offset=2&limit=1")
+    assert [tool["id"] for tool in response.get_json()] == ["TOOL03"]
+    assert "next_page" not in response.headers
+    response = client.get(f"{BASE_PATH}/tools?offset=0&limit=2")
+    assert [tool["id"] for tool in response.get_json()] == [TOOL_ID, "TOOL02"]
+    assert response.headers["next_page"] == f"{base_url}?offset=2&limit=2"
+    assert response.headers["last_page"] == f"{base_url}?offset=2&limit=2"
 
 
-@pytest.mark.parametrize("query", ["limit=-1", "offset=-1"])
-def test_toolsGet_pagination_negative(
-    client: FlaskClient, tool: dict[str, Any], query: str
+def test_toolsGet_pagination_empty(client: FlaskClient) -> None:
+    """Without tools, the last page is the first one, and there is no next one.
+
+    Args:
+        client: Test client.
+    """
+    response = client.get(f"{BASE_PATH}/tools?offset=5")
+    assert response.status_code == 200
+    assert response.get_json() == []
+    assert "next_page" not in response.headers
+    assert response.headers["last_page"] == (
+        f"http://localhost{BASE_PATH}/tools?offset=0&limit=1000"
+    )
+
+
+def test_toolsGet_pagination_max_limit(
+    client: FlaskClient, tool: dict[str, Any]
 ) -> None:
-    """Negative offsets and limits are refused.
+    """Limits above the maximum are reduced to it.
 
     Args:
         client: Test client.
         tool: Registered tool.
-        query: Query string with a negative value.
+    """
+    response = client.get(f"{BASE_PATH}/tools?limit=1001")
+    assert response.status_code == 200
+    assert response.headers["current_limit"] == "1000"
+
+
+@pytest.mark.parametrize("query", ["limit=-1", "limit=0", "offset=-1", "offset=a"])
+def test_toolsGet_pagination_invalid(
+    client: FlaskClient, tool: dict[str, Any], query: str
+) -> None:
+    """Negative or non-integer offsets, and limits below 1, are refused.
+
+    Args:
+        client: Test client.
+        tool: Registered tool.
+        query: Query string with an invalid value.
     """
     response = client.get(f"{BASE_PATH}/tools?{query}")
-    assert response.status_code == 422
+    assert response.status_code == 400
+    assert response.get_json() == BAD_REQUEST
 
 
 def test_toolsGet_filters(client: FlaskClient, tool: dict[str, Any]) -> None:
@@ -308,6 +350,55 @@ def test_toolsGet_filters_no_match(
     """
     response = client.get(f"{BASE_PATH}/tools?{query}")
     assert response.status_code == 200
+    assert response.get_json() == []
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        "descriptorType=WDL&author=author",
+        "descriptorType=CWL&author=other",
+        "registry=other&name=image_name",
+        "registry=registry_host&name=other",
+        "descriptorType=WDL&registry=registry_host",
+        "author=other&name=image_name",
+    ],
+)
+def test_toolsGet_filters_combined(
+    client: FlaskClient, tool: dict[str, Any], query: str
+) -> None:
+    """Filters of versions and images all apply.
+
+    Args:
+        client: Test client.
+        tool: Registered tool.
+        query: Query string with filters, one of which the tool doesn't match.
+    """
+    response = client.get(f"{BASE_PATH}/tools?{query}")
+    assert response.status_code == 200
+    assert response.get_json() == []
+
+
+def test_toolsGet_filters_same_version(
+    client: FlaskClient, tool: dict[str, Any]
+) -> None:
+    """Filters of versions apply to the same version.
+
+    Args:
+        client: Test client.
+        tool: Registered tool.
+    """
+    version = deepcopy(MOCK_VERSION_NO_ID)
+    version["descriptor_type"] = ["WDL"]
+    version["author"] = ["other"]
+    for file in version["files"]:
+        if file["type"] == "CWL":
+            file["type"] = "WDL"
+    response = client.post(f"{BASE_PATH}/tools/{TOOL_ID}/versions", json=version)
+    assert response.status_code == 200
+    response = client.get(f"{BASE_PATH}/tools?descriptorType=WDL&author=other")
+    assert [tool["id"] for tool in response.get_json()] == [TOOL_ID]
+    response = client.get(f"{BASE_PATH}/tools?descriptorType=WDL&author=author")
     assert response.get_json() == []
 
 
@@ -871,8 +962,112 @@ def test_putTool_update(
     response = client.put(f"{BASE_PATH}/tools/{TOOL_ID}", json=data)
     assert response.status_code == 200
     assert response.get_json() == TOOL_ID
-    assert _stored(tools, TOOL_ID)["name"] == "other"
+    stored = _stored(tools, TOOL_ID)
+    assert stored["name"] == "other"
     assert tools.count_documents({}) == 1
+    assert stored["meta_version"] == "2"
+    assert stored["versions"][0]["meta_version"] == "2"
+
+
+@pytest.mark.parametrize("method", ["POST", "PUT"])
+def test_tool_identical(
+    client: FlaskClient,
+    tool: dict[str, Any],
+    tools: Collection[dict[str, Any]],
+    toolclasses: Collection[dict[str, Any]],
+    method: str,
+) -> None:
+    """Tools are registered with tool classes identical to stored ones.
+
+    Tools are also replaced with identical ones (but their meta versions).
+
+    Args:
+        client: Test client.
+        tool: Registered tool.
+        tools: Collection `tools`.
+        toolclasses: Collection `toolclasses`.
+        method: Method of the request.
+    """
+    path = f"{BASE_PATH}/tools" + ("" if method == "POST" else f"/{TOOL_ID}")
+    response = client.open(path, method=method, json=deepcopy(MOCK_TOOL_VERSION_ID))
+    assert response.status_code == 200
+    assert tools.count_documents({}) == (2 if method == "POST" else 1)
+    assert toolclasses.count_documents({}) == 1
+
+
+def test_tool_new_ids(
+    client: FlaskClient,
+    tool: dict[str, Any],
+    tools: Collection[dict[str, Any]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Tools get new identifiers until one is not taken.
+
+    Args:
+        client: Test client.
+        tool: Registered tool.
+        tools: Collection `tools`.
+        monkeypatch: Patches of the generation of identifiers.
+    """
+    ids = iter([TOOL_ID, "TOOL02"])
+    monkeypatch.setattr(
+        "trs_filer.ga4gh.trs.endpoints.register_objects.generate_id",
+        lambda **kwargs: next(ids),
+    )
+    response = client.post(f"{BASE_PATH}/tools", json=deepcopy(MOCK_TOOL_VERSION_ID))
+    assert response.status_code == 200
+    assert response.get_json() == "TOOL02"
+    assert tools.count_documents({}) == 2
+
+
+def test_tool_no_is_production(
+    client: FlaskClient, tools: Collection[dict[str, Any]]
+) -> None:
+    """Versions without `is_production` are not production versions.
+
+    Their files need no checksums.
+
+    Args:
+        client: Test client.
+        tools: Collection `tools`.
+    """
+    data = deepcopy(MOCK_TOOL_VERSION_ID)
+    version = data["versions"][0]
+    del version["is_production"]
+    for file in version["files"]:
+        del file["file_wrapper"]["checksum"]
+    response = client.put(f"{BASE_PATH}/tools/{TOOL_ID}", json=data)
+    assert response.status_code == 200
+    assert "is_production" not in _stored(tools, TOOL_ID)["versions"][0]
+
+
+def test_tool_class_validation(
+    mongo_client: MongoClient[dict[str, Any]], overlay: Path
+) -> None:
+    """With tool class validation, tools need existing tool classes.
+
+    Also when they replace a tool.
+
+    Args:
+        mongo_client: MongoDB client.
+        overlay: Config overlay.
+    """
+    overlay.write_text("custom:\n  toolclass:\n    validation: true\n")
+    client = create_app().app.test_client()
+    path = f"{BASE_PATH}/tools/{TOOL_ID}"
+    assert client.put(path, json=deepcopy(MOCK_TOOL_VERSION_ID)).status_code == 400
+    response = client.put(
+        f"{BASE_PATH}/toolClasses/{MOCK_TOOL_CLASS['id']}",
+        json={"name": "name", "description": "description"},
+    )
+    assert response.status_code == 200
+    for _ in range(2):
+        assert client.put(path, json=deepcopy(MOCK_TOOL_VERSION_ID)).status_code == (
+            200
+        )
+    data = deepcopy(MOCK_TOOL_VERSION_ID)
+    data["toolclass"]["id"] = "other"
+    assert client.put(path, json=data).status_code == 400
 
 
 # DELETE /tools/{id}
@@ -991,16 +1186,49 @@ def test_putToolVersion_update(
     assert response.status_code == 200
     assert response.get_json() == VERSION_ID
     versions = _stored(tools, TOOL_ID)["versions"]
-    assert [(version["id"], version["name"]) for version in versions] == [
-        (VERSION_ID, "other")
-    ]
+    assert [
+        (version["id"], version["name"], version["meta_version"])
+        for version in versions
+    ] == [(VERSION_ID, "other", "2")]
+    response = client.put(VERSION_PATH, json=data)
+    assert response.status_code == 200
+    assert _stored(tools, TOOL_ID)["versions"][0]["meta_version"] == "3"
+
+
+def test_toolVersion_new_ids(
+    client: FlaskClient,
+    tool: dict[str, Any],
+    tools: Collection[dict[str, Any]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Versions get new identifiers until one is not taken.
+
+    Args:
+        client: Test client.
+        tool: Registered tool.
+        tools: Collection `tools`.
+        monkeypatch: Patches of the generation of identifiers.
+    """
+    ids = iter([VERSION_ID, "other"])
+    monkeypatch.setattr(
+        "trs_filer.ga4gh.trs.endpoints.register_objects.generate_id",
+        lambda **kwargs: next(ids),
+    )
+    response = client.post(
+        f"{BASE_PATH}/tools/{TOOL_ID}/versions", json=deepcopy(MOCK_VERSION_NO_ID)
+    )
+    assert response.status_code == 200
+    assert response.get_json() == "other"
+    versions = _stored(tools, TOOL_ID)["versions"]
+    assert [version["id"] for version in versions] == [VERSION_ID, "other"]
+    assert versions[1]["url"] == f"{TOOL_URL}/versions/other"
 
 
 # DELETE /tools/{id}/versions/{version_id}
 def test_deleteToolVersion(
     client: FlaskClient, tool: dict[str, Any], tools: Collection[dict[str, Any]]
 ) -> None:
-    """Versions are deleted.
+    """Versions are deleted, also the last one of a tool.
 
     Args:
         client: Test client.
@@ -1085,11 +1313,13 @@ def test_putToolClass(
 ) -> None:
     """Tool classes are registered with the given identifiers, and replaced.
 
+    Also with identical ones.
+
     Args:
         client: Test client.
         toolclasses: Collection `toolclasses`.
     """
-    for description in ["A workflow.", "Another workflow."]:
+    for description in ["A workflow.", "Another workflow.", "Another workflow."]:
         data = {"name": "Workflow", "description": description}
         response = client.put(f"{BASE_PATH}/toolClasses/{MOCK_ID}", json=data)
         assert response.status_code == 200
@@ -1140,3 +1370,31 @@ def test_deleteToolClass_BadRequest(
     response = client.delete(f"{BASE_PATH}/toolClasses/{MOCK_TOOL_CLASS['id']}")
     assert response.status_code == 400
     assert toolclasses.count_documents({}) == 1
+
+
+def test_deleteToolClass_BadRequest_many_tools(
+    client: FlaskClient,
+    tool: dict[str, Any],
+    tools: Collection[dict[str, Any]],
+    toolclasses: Collection[dict[str, Any]],
+) -> None:
+    """Tool classes of tools are not deleted, however many tools there are.
+
+    Args:
+        client: Test client.
+        tool: Registered tool.
+        tools: Collection `tools`.
+        toolclasses: Collection `toolclasses`.
+    """
+    data = {"name": "Workflow", "description": "A workflow."}
+    response = client.put(f"{BASE_PATH}/toolClasses/{MOCK_ID}", json=data)
+    assert response.status_code == 200
+    stored = _stored(tools, TOOL_ID)
+    tools.delete_many({})
+    others = [
+        {**stored, "id": f"T{index:05}", "toolclass": {"id": "other"}}
+        for index in range(1000)
+    ]
+    tools.insert_many([*others, stored])
+    response = client.delete(f"{BASE_PATH}/toolClasses/{MOCK_TOOL_CLASS['id']}")
+    assert response.status_code == 400

@@ -232,11 +232,7 @@ class TestRegisterTool:
 
         data = deepcopy(MOCK_TOOL)
         with app.app_context(), pytest.raises(InternalServerError):
-            tool = RegisterTool(data=data)
-            tool.register_metadata()
-            tool = RegisterTool(data=data)
-            tool.register_metadata()
-            print(tool.data["id"])
+            RegisterTool(data=data).register_metadata()
 
 
 class TestRegisterToolVersion:
