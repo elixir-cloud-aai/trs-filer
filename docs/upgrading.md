@@ -66,6 +66,11 @@ e.g., into `trsStore`, or upgrade one major version at a time.
 
 ## Image
 
+- Image tags: `latest` is the highest stable release from the first release
+  with the new release process on, no longer the head of `dev`, which is
+  tagged `dev` (and `sha-<commit>` per commit); dated tags are no longer
+  published. Pin a release (`X.Y.Z`) in deployments (see [Versioning and
+  releases](development.md#versioning-and-releases)).
 - Gunicorn is configured by `trs_filer/gunicorn_config.py` and the
   environment variable `GUNICORN_CMD_ARGS` (e.g., `--workers 2`; see
   [Server](configuration.md#server)); `GUNICORN_PROCESSES`,

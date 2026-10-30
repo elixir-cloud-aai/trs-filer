@@ -51,7 +51,7 @@ is in vain.
 The project follows a variant of the GitHub flow: all changes reach the
 development branch `dev` through pull requests, which are reviewed and
 tested; `main` only holds releases: it only moves forward to released
-commits (see [Versioning](development.md#versioning)).
+commits (see [Versioning and releases](development.md#versioning-and-releases)).
 
 1. Create a feature branch from an up-to-date `dev`, named after the type and
    topic of the change, e.g., `fix/<topic>` or `docs/<topic>`.
@@ -121,9 +121,10 @@ ORCID records only. To add or correct your entry (e.g., your name, [ORCID
 iD](https://orcid.org/) or affiliation), open a pull request that changes
 only your entry; don't add e-mail addresses. CI validates the file
 (`cffconvert --validate`). Before each release, `python scripts/citation.py
-set X.Y.Z` sets its `version` and `date-released`, and `python
-scripts/citation.py check X.Y.Z` checks them on the release commit (see
-[Versioning](development.md#versioning)).
+set X.Y.Z` sets its `version` and `date-released`, and the release
+workflow fails if they don't match the release (`python scripts/citation.py
+check X.Y.Z`; see [Versioning and
+releases](development.md#versioning-and-releases)).
 
 ## Python guidelines
 

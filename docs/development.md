@@ -105,7 +105,7 @@ pages of the docs and to files of the repository adapted (tested in
 `https://trs-filer.readthedocs.io/en/latest/` and to files on branch `dev` on
 GitHub), as they must also work in the packaged chart.
 
-## Versioning
+## Versioning and releases
 
 The project adopts the [semantic versioning](https://semver.org/) scheme for
 versioning. Currently the service is in beta stage, so the API may change
@@ -114,27 +114,135 @@ without further notice.
 The version is stored in Git tags (`vX.Y.Z`, pre-releases `vX.Y.ZrcN`):
 the package version is derived from them (via
 [setuptools-scm](https://setuptools-scm.readthedocs.io/)), and the service
-info reports it. The citation metadata repeats it, set before each release
-(see below). Builds without Git metadata, such as local Docker builds
-(e.g., with Docker Compose), report `0.0.0.dev0`; pass the version to the
-image build as the build argument `SETUPTOOLS_SCM_PRETEND_VERSION`, as the
-CI workflow does.
+info reports it. Builds without Git metadata, such as local Docker builds
+(e.g., with Docker Compose), report `0.0.0.dev0`; the workflows pass the
+version to the image build (build argument `SETUPTOOLS_SCM_PRETEND_VERSION`).
+Images on Docker Hub (`elixircloud/trs-filer`) are tagged:
 
-Shortly before a release, set its version and date in the citation
-metadata, which Zenodo archives with each release, and merge the change into
-`dev`; each version, also each pre-release (e.g., `X.Y.Zrc1`), needs its own
-such change. Then check it on the commit to release:
+- `X.Y.Z`: release `X.Y.Z`; `latest`: the highest stable release (not an
+  alpha, beta or release candidate) on `main`;
+- `dev`: the latest commit on `dev`; `sha-<commit>`: commit `<commit>` on
+  `dev` (full SHA), to deploy a fixed commit. Only commits that are still the
+  head of `dev` when their CI run reaches the image job get images.
+
+The current release version is taken from one source, so that a release
+doesn't need to bump it in many places: the release tag and, on `dev`, the
+`version` in `CITATION.cff` (set before tagging, see below; from then on, the
+latest docs show the upcoming version, and before the first release, they
+show `X.Y.Z`). The docs and the chart's README (`deployment/README.md`) write
+it as a placeholder, `version` in double curly braces with a space inside
+each pair, and the chart version (e.g., `1.2.3-rc1` for `1.2.3rc1`, as in the
+names of the packaged charts) as `chart_version` in the same braces
+(`VARIABLE` and `CHART_VARIABLE` in `scripts/chart_readme.py`; this page
+can't show them, as they would be replaced), also in commands and links. The
+docs hooks (`docs/hooks.py`) replace them with the version of `CITATION.cff`,
+and `scripts/chart_readme.py` with the release version when the chart is
+packaged; files read on GitHub (e.g., `deployment/README.md`) show the
+placeholders, and sections of `README.md` included as snippets can't use
+them. Comments, templates and tests use placeholders (e.g., `1.2.3`) and
+refer to sections by anchor. `tests/test_version_mentions.py` fails if the
+current release version is mentioned as a release of the app (as a tag,
+image or chart, or as "release" or "version" in prose; not, e.g., as the
+version of a dependency) anywhere else than in `CITATION.cff`,
+`docs/releases/`, the tests of the release tooling, links to the notes and
+assets of a release, and migration headings (e.g., "From versions before
+X"), which are about that release itself.
+
+Features and fixes are merged into `dev`. Branch `main` only ever moves
+forward to commits on `dev` that are released. First, shortly before the
+release, set its version and date in the citation metadata, which Zenodo
+archives with each release, and merge the change into `dev`; each version,
+also each pre-release (e.g., `X.Y.Zrc1`), needs its own such change:
 
 ```bash
 python scripts/citation.py set X.Y.Z  # date: today (UTC), or --date YYYY-MM-DD
-python scripts/citation.py check X.Y.Z  # on the release commit
 ```
 
-CI runs the check for release tags (job "Release pins"), too.
-
 `scripts/citation.py` uses the standard library only and is tested in
-`tests/test_citation.py`; `check` fails unless `version` is `X.Y.Z` and
-`date-released` is a date that is not in the future (UTC).
+`tests/test_citation.py`; `check` (below) fails unless `version` is `X.Y.Z`
+and `date-released` is a date that is not in the future (UTC).
+
+Then, to release version `X.Y.Z` from commit `<sha>` on `dev` (with that
+change), after CI passed for it:
+
+```bash
+git switch --detach <sha>
+# The release workflow's checks that need no tag, as it runs them
+python scripts/release_version.py outputs vX.Y.Z
+python scripts/citation.py check X.Y.Z
+python scripts/check_release_pins.py
+! grep -n TODO docs/releases/X.Y.Z.md  # curated notes, if any
+[ ! -f docs/releases/X.Y.Z.md ] || python scripts/release_notes.py check docs/releases/X.Y.Z.md
+readme="$(mktemp -d)/README.md" && cp deployment/README.md "${readme}"
+python scripts/chart_readme.py "${readme}" vX.Y.Z  # links of the chart
+git push origin <sha>:main  # fails unless it is a fast-forward
+git tag -s vX.Y.Z <sha> -m "vX.Y.Z"
+git push origin vX.Y.Z
+```
+
+Tags can't be moved or deleted (see the repository settings below), and the
+release workflow checks the tagged commit, so a check that fails after the
+tag is pushed fails again on re-runs: the release then needs a new patch
+version, with its own citation metadata and notes. Run these checks before
+tagging, therefore. The CI job "Release readiness" runs the pin and the
+notes checks, too, for the version in `CITATION.cff` while it has no tag (or
+its tag is on the checked commit): on pull requests and in forks (which
+often lack upstream's later tags) as warnings, on pushes to `dev` as errors,
+which fail the CI run that the release workflow requires for the release
+commit.
+
+The tag must be annotated and signed (`git tag -s`), with a key that GitHub can
+verify (added to the tagger's GitHub account). The [release
+workflow](https://github.com/elixir-cloud-aai/trs-filer/blob/dev/.github/workflows/release.yml),
+triggered by the tag, checks that GitHub verified the signature, that the
+tag's commit is on `main` and its `CITATION.cff` has the release version and
+a date that is not in the future (UTC), that the dependencies are releases
+(see below), and that the [CI
+workflow](https://github.com/elixir-cloud-aai/trs-filer/blob/dev/.github/workflows/ci.yml)
+passed for it (a run for the push of the commit to `dev`; if CI hasn't
+finished, failed or was cancelled, e.g., the image job of a commit that a
+later one superseded, re-run CI, then the release workflow). It packages
+the Helm chart with the release version as `version` and `appVersion`, and
+the release image (`elixircloud/trs-filer:X.Y.Z`) as its default image
+(`trs_filer.image`; `latest` in the repository). In the packaged README,
+links to the latest docs and to files on branch `dev` point to the release
+(`/en/vX.Y.Z/`, `blob/vX.Y.Z/`); the release fails if any link to a version
+that moves is left (`scripts/chart_readme.py`). The chart in the repository
+is unchanged. After approval in the `release` environment, it builds the
+image, pushes it by digest (untagged) and checks that the app reports the
+release version. After a second approval in the `release` environment, it
+tags exactly that image `X.Y.Z` (and `latest`, if it is the highest stable
+release on `main`) and creates a GitHub release with the chart (`.tgz`) and
+the release notes (see below). Releases are immutable (see the repository
+settings below): once published, their assets can't be added, replaced or
+deleted. The workflow therefore creates the release as a draft, uploads the
+assets and publishes it last. A re-run finishes a draft left by an earlier
+attempt; if the release is already published (e.g., by hand), it uploads
+nothing and fails unless the release has exactly the assets that the run
+built. The error says what to do: a new patch version, or, if releases are
+not immutable, deleting the release and re-running. Add curated notes to the
+[changelog](changelog.md) in `mkdocs.yml` (`nav`; the docs build fails
+otherwise), and refer to pages of the docs by name rather than by relative
+links, which don't work in GitHub releases. No packages are published to
+PyPI. Tags of alpha, beta and release candidate versions (e.g., `vX.Y.Zrc1`,
+also `aN` and `bN`) get chart version `X.Y.Z-rc1` (or `-aN`, `-bN`) and never
+update the `latest` image. These and, until 1.0.0, all other releases are
+GitHub pre-releases (never marked as the latest release). Digests of failed
+runs stay on Docker Hub, untagged. Re-running all jobs of the release
+workflow builds and tags a new image digest (the image build is not
+reproducible); re-running only the failed jobs reuses the digest already
+pushed. Images of commits on `dev` are published by the CI workflow
+(environment `dev-images`): it pushes the image by digest and tags exactly
+that digest once all other jobs passed.
+
+The release workflow derives the version, the chart version, the kind of
+release (stable, GitHub pre-release), whether the image is tagged `latest`
+and the previous release (for the generated notes) from the tag with
+`scripts/release_version.py`, which is tested over a table of tags
+(`tests/test_release_version.py`) and checked like the app (ruff, mypy,
+coverage); change these rules there, not in the workflow. It finds the
+GitHub release of the tag, if any, and checks the assets of a published one
+with `scripts/release_assets.py` (tested in `tests/test_release_assets.py`).
 
 To test unreleased changes of FOCA, `pyproject.toml` may pin a FOCA commit
 (`foca @ git+https://github.com/elixir-cloud-aai/foca@<sha>`), with FOCA's
@@ -144,8 +252,80 @@ later commits of that day). The `Dockerfile` records the commit as
 `## FOCA commit: <sha>`, which the tests check (`tests/test_config.py`); the
 image build doesn't reinstall FOCA, but fails unless the base image has FOCA
 of that commit (`scripts/image_requirements.py`). Such pins are temporary:
-CI fails for release tags while a requirement is a direct reference or
-names a pre-release or a local version, or a FOCA image has no release tag
-(`scripts/check_release_pins.py`, tested in
-`tests/test_check_release_pins.py`), so replace them by the released versions
-before tagging.
+the release workflow fails while a requirement (also an optional one, a
+dependency group or a build requirement) is a direct reference or names a
+pre-release or a local version (e.g., `+g<commit>`), or a FOCA image has no
+release tag (`scripts/check_release_pins.py`, tested in
+`tests/test_check_release_pins.py`), so replace them by the released
+versions before tagging. This applies to pre-releases of the app, too: they
+are built on FOCA releases.
+
+Release notes follow the format agreed for all repositories of ELIXIR
+On-Cloud:
+
+1. An intro paragraph saying what the release brings, with a link to the
+   upgrade steps (e.g., on the [Upgrading](upgrading.md) page) if there are
+   any.
+2. Grouped sections, with empty ones left out, in this order:
+   `## Breaking changes`, `## Features`, `## Security`, `## Fixes`,
+   `## Documentation`, `## Maintenance`. They hold bullets only, and each
+   bullet ends with its issue and pull request numbers, e.g., `(#12, #34)`
+   (several pairs separated by semicolons, e.g., `(#12, #34; #56, #78)`).
+3. `## Commits`: GitHub's generated notes, verbatim (including "New
+   Contributors"), without their `## What's Changed` header, as they credit
+   the authors.
+4. Last, GitHub's generated `**Full Changelog**: ...` line (no compare link
+   of our own).
+
+The curated notes in `docs/releases/X.Y.Z.md` (for pre-releases, e.g.,
+`X.Y.Zrc1.md`) hold parts 1 and 2, without a title (the release's title is
+its tag); the release workflow adds parts 3 and 4 from GitHub's
+[generate-notes](https://docs.github.com/en/rest/releases/releases#generate-release-notes-content-for-a-release)
+API, for the changes since the previous published release in the history of
+the release commit (for stable releases the previous stable release, or the
+previous pre-release if there is no stable one, as the generated notes can't
+start before the first tag; for alpha, beta and release candidate versions
+the previous release of any kind). For the first release (no published
+release before it, even if older tags exist, such as `v0.3.0`), the API
+would start at an older tag of its choice, so the workflow lists all merged
+pull requests in the history of the release commit itself, in the API's
+format: `scripts/release_notes.py first` reads the closed pull requests
+(`gh api --paginate --slurp
+"repos/<owner>/<repo>/pulls?state=closed&per_page=100"`, for which the job
+has `pull-requests: read`) and the commits (`git rev-list HEAD` at the
+release commit); run these commands locally to preview the notes. Generated
+notes in an unexpected format (without the `**Full Changelog**` line) are
+kept as they are, with a warning, as the image is published by then.
+Without curated notes, the release gets GitHub's generated notes alone.
+Curated notes are published as written, so the release workflow fails if
+they contain `TODO`, are not in this format or link to versions that move
+(the latest docs, `/en/latest/`, or files on branch `dev`, `blob/dev/`; link
+the release's, e.g., `/en/vX.Y.Z/`, `blob/vX.Y.Z/`, as the published notes
+don't change) (`scripts/release_notes.py check`, tested in
+`tests/test_release_notes.py`, which also checks the notes in
+`docs/releases/`), and so does the CI job "Release readiness" on pushes (see
+above); on re-runs, it replaces the notes of an existing release (also
+overwriting manual edits). Detailed upgrade steps belong on the
+[Upgrading](upgrading.md) page, linked from the intro.
+
+Maintainers: the workflows rely on these repository settings: environment
+`dev-images` limited to branch `dev`; environment `release` with a required
+reviewer; a tag ruleset for `v*` that restricts who may create them and
+prevents moving or deleting them; immutable releases; `main` protected
+against non-fast-forward pushes; and the Docker Hub secrets
+(`DOCKERHUB_LOGIN`, `DOCKERHUB_TOKEN`) only in the two environments, not as
+repository secrets. The Docker Hub organization is the repository variable
+`DOCKERHUB_ORG` (by default `elixircloud`; forks set it to the organization
+they publish to, with the Docker Hub secrets in an environment
+`dev-images`), so that the released chart's default image
+(`trs_filer.image`) is the published one. Forks without `DOCKERHUB_ORG`
+publish nothing: their CI runs the same checks and passes without the
+secrets. On Read the Docs, the default version is `stable` (the highest
+release) from the first release on, and the default branch is left empty, so
+that `latest` follows the repository's default branch, `dev`; an automation
+rule activates the versions of tags (`v*`), so that the docs linked from
+packaged charts exist.
+
+The release workflow installs a fixed Helm version (`version:` of
+`azure/setup-helm` in `release.yml`). Dependabot updates the action, but not
+that version: bump it by hand.
