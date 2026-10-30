@@ -272,10 +272,11 @@ jobs:
   # The release workflow's checks of pins and curated notes, before the
   # immutable tag exists: for the version in `CITATION.cff` (set before a
   # release, see "Versioning and releases" in `docs/development.md`) while
-  # it has no tag, or its tag is on this commit. Not needed for publishing;
-  # on pull requests and in forks, findings are warnings (so that they don't
-  # fail the gate). On pushes to the upstream repository, findings fail the
-  # run, which the release workflow requires to pass for the release commit
+  # it has no tag, or its tag is on this commit. On pull requests and in
+  # forks, findings are warnings (so that they don't fail the gate). On
+  # pushes to the upstream repository, findings fail the run, which the
+  # release workflow requires to pass for the release commit; they also hold
+  # back the `dev` image (`publish` needs this job) until they are fixed
   readiness:
     name: Release readiness
     runs-on: ubuntu-latest

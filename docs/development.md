@@ -311,7 +311,8 @@ overwriting manual edits). Detailed upgrade steps belong on the
 Maintainers: the workflows rely on these repository settings:
 
 - environment `dev-images`, limited to branch `dev`;
-- environment `release`, with a required reviewer;
+- environment `release`, with a required reviewer, "Prevent self-review"
+  and a deployment policy that allows only tags `v*`;
 - the Docker Hub secrets (`DOCKERHUB_LOGIN`, `DOCKERHUB_TOKEN`) only in the
   two environments, not as repository secrets;
 - a tag ruleset for `v*` that restricts who may create them and prevents
@@ -320,6 +321,10 @@ Maintainers: the workflows rely on these repository settings:
 - `main` protected against non-fast-forward pushes;
 - a ruleset for `dev` that requires the check `CI passed` (the gate of the
   CI workflow) only.
+
+While `CITATION.cff` names a version that has no tag yet, findings of
+"Release readiness" (e.g., a pin to an unreleased commit) also stop the
+`dev` image from being published; fix them or push the tag.
 
 The Docker Hub organization is the repository variable `DOCKERHUB_ORG` (by
 default `elixircloud`; forks set it to the organization they publish to,
