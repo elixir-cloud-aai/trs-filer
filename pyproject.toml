@@ -75,6 +75,9 @@ source = ["trs_filer", "docs", "scripts"]
 
 [tool.coverage.report]
 exclude_also = ['if __name__ == "__main__":']
+# `coverage report` and `coverage xml` (CI) fail below 100%; Codecov's
+# targets are the same (`codecov.yml`)
+fail_under = 100
 
 [project]
 name = "trs-filer"

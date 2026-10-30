@@ -491,7 +491,7 @@ def toolsIdVersionsVersionIdTypeFilesGet(
                 for file_entry in selected_files:
                     path_in_zip = file_entry["tool_file"]["path"]
                     wrapper = file_entry.get("file_wrapper", {})
-                    content_bytes = None
+                    content_bytes: bytes
                     if "content" in wrapper and wrapper["content"] is not None:
                         content = wrapper["content"]
                         if isinstance(content, bytes):
@@ -511,10 +511,6 @@ def toolsIdVersionsVersionIdTypeFilesGet(
                             raise NotFound from exc
                     else:
                         # No content available
-                        raise NotFound
-
-                    # Ensure we have bytes to write
-                    if content_bytes is None:
                         raise NotFound
                     zf.writestr(path_in_zip, content_bytes)
             mem_zip.seek(0)
