@@ -111,11 +111,11 @@ The project adopts the [semantic versioning](https://semver.org/) scheme for
 versioning. Currently the service is in beta stage, so the API may change
 without further notice.
 
-The version is only stored in Git tags (`vX.Y.Z`), and, set before each
-release, in the citation metadata (see below): the package version is
-derived from the tags (via
+The version is stored in Git tags (`vX.Y.Z`, pre-releases `vX.Y.ZrcN`):
+the package version is derived from them (via
 [setuptools-scm](https://setuptools-scm.readthedocs.io/)), and the service
-info reports it. Builds without Git metadata, such as local Docker builds
+info reports it. The citation metadata repeats it, set before each release
+(see below). Builds without Git metadata, such as local Docker builds
 (e.g., with Docker Compose), report `0.0.0.dev0`; pass the version to the
 image build as the build argument `SETUPTOOLS_SCM_PRETEND_VERSION`, as the
 CI workflow does.
