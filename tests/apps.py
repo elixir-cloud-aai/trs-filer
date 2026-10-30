@@ -57,6 +57,8 @@ def _collections(app: Flask) -> dict[str, CollectionConfig]:
 def mock_collection(app: Flask, name: str) -> Collection[dict[str, Any]]:
     """Give a collection of the app's database a new in-memory client.
 
+    The collection has a unique index on `id`, as configured.
+
     Args:
         app: Flask app (cf. :py:func:`make_app`).
         name: Name of the collection.
@@ -65,6 +67,8 @@ def mock_collection(app: Flask, name: str) -> Collection[dict[str, Any]]:
         The client of the collection.
     """
     client: Collection[dict[str, Any]] = mongomock.MongoClient().db.collection
+    # The unique index of `config.yaml` (and of `tests/mock_data.py`)
+    client.create_index("id", unique=True)
     _collections(app)[name].client = client
     return client
 

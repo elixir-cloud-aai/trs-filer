@@ -73,31 +73,32 @@ class RegisterToolClass:
             InternalServerError: No unique identifier could be generated, or the
                 object could not be stored.
         """
+        generate_ids = self.data["id"] is None
+        if generate_ids:
+            self.replace = False
         # set unique ID, dependent values and register object
-        i = 0
-        while i < 10:
-            i += 1
+        for _ in range(10):
             # set random ID unless ID is provided
-            if self.data["id"] is None:
-                self.replace = False
+            if generate_ids:
                 self.data["id"] = generate_id(
                     charset=self.id_charset, length=self.id_length
                 )
 
             if self.replace:
-                # replace tool class in database
+                # replace tool class in database (a copy, see below)
                 result = self.db_coll_classes.replace_one(
                     filter={"id": self.data["id"]},
-                    replacement=self.data,
+                    replacement=dict(self.data),
                 )
-                # verify replacement
-                if result.modified_count:
+                # verify replacement (also of identical tool classes)
+                if result.matched_count:
                     logger.info("Replaced tool class with id '%s'.", self.data["id"])
                     break
 
-            # insert tool class into database
+            # insert tool class into database (a copy, as `insert_one()` adds
+            # `_id`)
             try:
-                self.db_coll_classes.insert_one(document=self.data)
+                self.db_coll_classes.insert_one(document=dict(self.data))
             except DuplicateKeyError:
                 continue
 

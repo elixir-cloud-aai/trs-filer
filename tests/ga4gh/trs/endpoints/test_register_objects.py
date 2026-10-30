@@ -44,6 +44,7 @@ from trs_filer.errors.exceptions import (
 from trs_filer.ga4gh.trs.endpoints.register_objects import (
     RegisterTool,
     RegisterToolVersion,
+    next_meta_version,
 )
 from trs_filer.remote_files import RemoteFile
 
@@ -58,6 +59,20 @@ def _raise(exception: Exception) -> NoReturn:
         Exception: Always, the given one.
     """
     raise exception
+
+
+@pytest.mark.parametrize(
+    ("previous", "expected"),
+    [("1", "3"), (4, "6"), (None, "1"), ("abc", "1")],
+)
+def test_next_meta_version(previous: object, expected: str) -> None:
+    """Meta versions are incremented; invalid ones restart at the initial one.
+
+    Args:
+        previous: Stored meta version.
+        expected: Next meta version.
+    """
+    assert next_meta_version(previous, init=1, increment=2) == expected
 
 
 class TestRegisterTool:
@@ -232,11 +247,7 @@ class TestRegisterTool:
 
         data = deepcopy(MOCK_TOOL)
         with app.app_context(), pytest.raises(InternalServerError):
-            tool = RegisterTool(data=data)
-            tool.register_metadata()
-            tool = RegisterTool(data=data)
-            tool.register_metadata()
-            print(tool.data["id"])
+            RegisterTool(data=data).register_metadata()
 
 
 class TestRegisterToolVersion:

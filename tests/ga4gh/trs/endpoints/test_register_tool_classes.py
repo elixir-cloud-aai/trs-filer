@@ -19,6 +19,7 @@ from tests.mock_data import (
     MOCK_ID,
     MOCK_ID_ONE_CHAR,
     MOCK_TOOL_CLASS,
+    TOOL_VERSION_CONFIG_ONE_ID,
 )
 from trs_filer.errors.exceptions import (
     InternalServerError,
@@ -97,7 +98,11 @@ class TestRegisterToolClass:
 
     def test_register_metadata_duplicate_keys_repeated(self) -> None:
         """Test for creating a tool class; running out of unique identifiers."""
-        app = make_app(CUSTOM_CONFIG_ONE_ID)
+        # `CUSTOM_CONFIG_ONE_ID` gives one identifier only to tools; tool
+        # classes need their own one-identifier config
+        config = deepcopy(CUSTOM_CONFIG_ONE_ID)
+        config["toolclass"] = {**TOOL_VERSION_CONFIG_ONE_ID, "validation": False}
+        app = make_app(config)
         mock_unset_collections(app)
         mock_resp = deepcopy(MOCK_TOOL_CLASS)
         mock_resp["id"] = MOCK_ID_ONE_CHAR
@@ -107,7 +112,4 @@ class TestRegisterToolClass:
         data = deepcopy(MOCK_TOOL_CLASS)
         del data["id"]
         with app.app_context(), pytest.raises(InternalServerError):
-            version = RegisterToolClass(data=data)
-            version.register_metadata()
-            version = RegisterToolClass(data=data)
-            version.register_metadata()
+            RegisterToolClass(data=data).register_metadata()

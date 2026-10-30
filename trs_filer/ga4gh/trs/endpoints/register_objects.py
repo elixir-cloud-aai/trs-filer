@@ -12,11 +12,28 @@ from trs_filer.errors.exceptions import (
     InternalServerError,
     NotFound,
 )
-from trs_filer.ga4gh.trs.endpoints.register_tool_classes import RegisterToolClass
 from trs_filer.remote_files import fetch_remote_file
 from trs_filer.utils import get_collection, get_custom_config
 
 logger = logging.getLogger(__name__)
+
+
+def next_meta_version(previous: object, init: int, increment: int) -> str:
+    """Get the meta version of a replaced object.
+
+    Args:
+        previous: Meta version of the stored object.
+        init: Initial meta version, for stored objects without a valid one.
+        increment: Increment of meta versions.
+
+    Returns:
+        The previous meta version plus the increment, as a string (as in the
+        TRS specification).
+    """
+    try:
+        return str(int(str(previous)) + increment)
+    except ValueError:
+        return str(init)
 
 
 class RegisterTool:
@@ -41,6 +58,13 @@ class RegisterTool:
                 identifiers.
             id_length: Length of generated object identifiers.
             meta_version_init: Initial value for tool meta version.
+            meta_version_increment: Increment of the tool meta version when
+                the tool is replaced (not when its versions are added,
+                replaced or deleted on their own).
+            version_meta_version_init: Initial value for version meta
+                versions.
+            version_meta_version_increment: Increment of the meta version of
+                a version when the tool replaces it.
             url_prefix: URL scheme of application. For constructing tool and
                 version `url` properties.
             host_name: Name of application host. For constructing tool and
@@ -52,7 +76,8 @@ class RegisterTool:
             tool_class_validation: Whether a tool is only allowed to be added
                 if it is associated with a pre-existing tool class; if `False`,
                 the tool class associated with the tool to be added is inserted
-                into the tool class database collection on the fly.
+                into the tool class database collection on the fly, unless
+                it exists (existing tool classes are not changed).
             db_coll_tools: Database collection for storing tool objects.
             db_coll_classes: Database collection for storing tool class
                 objects.
@@ -64,6 +89,9 @@ class RegisterTool:
         self.id_charset: str = conf.tool.id.charset
         self.id_length = int(conf.tool.id.length)
         self.meta_version_init = int(conf.tool.meta_version.init)
+        self.meta_version_increment = int(conf.tool.meta_version.increment)
+        self.version_meta_version_init = int(conf.version.meta_version.init)
+        self.version_meta_version_increment = int(conf.version.meta_version.increment)
         self.url_prefix = conf.service.url_prefix
         self.host_name = conf.service.external_host
         self.external_port = conf.service.external_port
@@ -80,6 +108,12 @@ class RegisterTool:
     def register_metadata(self) -> None:
         """Register tool.
 
+        Tools with a given identifier replace a stored tool with that
+        identifier, if any; their meta version, and those of their versions
+        that replace stored versions, are incremented. Unless tool classes are
+        validated, the tool class is created if it does not exist; existing
+        tool classes are not changed, and tools store a copy of them.
+
         Raises:
             BadRequest: Version identifiers are duplicated, the files of a
                 version are invalid, or the tool class does not exist while
@@ -90,16 +124,61 @@ class RegisterTool:
                 could not be retrieved from its URL.
         """
         self.process_metadata()
+        generate_ids = self.data["id"] is None
+        if generate_ids:
+            self.replace = False
+
+        # set tool class identifier if not present
+        tool_class_id = self.data["toolclass"].get("id", None)
+        if tool_class_id is None:
+            tool_class_id = generate_id(charset=self.id_charset, length=self.id_length)
+            self.data["toolclass"]["id"] = tool_class_id
+        # tools store a copy of their tool class: that of an existing one
+        stored_class = self.db_coll_classes.find_one(
+            filter={"id": tool_class_id}, projection={"_id": False}
+        )
+        if stored_class is not None:
+            self.data["toolclass"] = stored_class
+        elif self.tool_class_validation:
+            logger.error("Tool class '%s' does not exist.", tool_class_id)
+            raise BadRequest
+
+        version_list = [
+            v.get("id", None)
+            for v in self.data["versions"]
+            if v.get("id", None) is not None
+        ]
+        if len(version_list) != len(set(version_list)):
+            logger.error("Duplicate tool version IDs specified.")
+            raise BadRequest
+
+        # process versions once (their files included); retries below only
+        # change the identifier of the tool, and so the versions' URLs
+        if generate_ids:
+            self.data["id"] = generate_id(
+                charset=self.id_charset, length=self.id_length
+            )
+        versions = [
+            RegisterToolVersion(
+                id=self.data["id"],
+                version_id=version.get("id", None),
+                data=version,
+            )
+            for version in self.data["versions"]
+        ]
+        for version_proc in versions:
+            # Modifies the version's dict in place
+            version_proc.process_metadata()
+
         # keep trying to generate unique ID
-        i = 0
-        while i < 10:
-            i += 1
-            # set random ID unless ID is provided
-            if self.data["id"] is None:
-                self.replace = False
+        for attempt in range(10):
+            # set another random ID unless ID is provided
+            if generate_ids and attempt:
                 self.data["id"] = generate_id(
                     charset=self.id_charset, length=self.id_length
                 )
+                for version_proc in versions:
+                    version_proc.set_tool_id(self.data["id"])
 
             # set self reference URL
             self.data["url"] = (
@@ -107,76 +186,72 @@ class RegisterTool:
                 f"{self.api_path}/tools/{self.data['id']}"
             )
 
-            # set tool class identifier if not present
-            tool_class_id = self.data["toolclass"].get("id", None)
-            if tool_class_id is None:
-                tool_class_id = generate_id(
-                    charset=self.id_charset, length=self.id_length
-                )
-                self.data["toolclass"]["id"] = tool_class_id
+            if self.replace and self._replace():
+                logger.info("Replaced tool with id '%s'.", self.data["id"])
+                break
 
-            # process version information
-            version_list = [
-                v.get("id", None)
-                for v in self.data["versions"]
-                if v.get("id", None) is not None
-            ]
-            if len(version_list) != len(set(version_list)):
-                logger.error("Duplicate tool version IDs specified.")
-                raise BadRequest
-
-            for version in self.data["versions"]:
-                version_proc = RegisterToolVersion(
-                    id=self.data["id"],
-                    version_id=version.get("id", None),
-                    data=version,
-                )
-                # Modifies the `version` dict in place
-                version_proc.process_metadata()
-
-            if self.replace:
-                # replace tool in database
-                result_tools = self.db_coll_tools.replace_one(
-                    filter={"id": self.data["id"]},
-                    replacement=self.data,
-                )
-
-                # verify replacement
-                if result_tools.modified_count:
-                    logger.info("Replaced tool with id '%s'.", self.data["id"])
-                    break
-
-            # insert tool into database
+            # insert tool into database (a copy, as `insert_one()` adds `_id`)
             try:
-                self.db_coll_tools.insert_one(document=self.data)
+                self.db_coll_tools.insert_one(document=dict(self.data))
             except DuplicateKeyError:
                 continue
-
-            # TODO: handle failures & race conditions for adding files & tool
-            # classes
-
-            # insert tool class into database
-            if self.tool_class_validation:
-                data = self.db_coll_classes.find_one(
-                    filter={"id": self.data["toolclass"]["id"]},
-                    projection={"_id": False},
-                )
-                if data is None:
-                    raise BadRequest
-            tool_class = RegisterToolClass(
-                data=self.data["toolclass"],
-                id=self.data["toolclass"]["id"],
-            )
-            tool_class.register_metadata()
-
             logger.info("Added tool with id '%s'.", self.data["id"])
             break
         else:
             raise InternalServerError
+
+        if stored_class is None:
+            self._create_tool_class()
         logger.debug(
             "Entry in 'tools' collection: %s",
             self.db_coll_tools.find_one({"id": self.data["id"]}),
         )
+
+    def _create_tool_class(self) -> None:
+        """Create the tool class of the tool, unless it exists.
+
+        Existing tool classes are shared by tools and not changed.
+        """
+        result = self.db_coll_classes.update_one(
+            filter={"id": self.data["toolclass"]["id"]},
+            update={"$setOnInsert": dict(self.data["toolclass"])},
+            upsert=True,
+        )
+        if result.upserted_id is not None:
+            logger.info("Added tool class with id '%s'.", self.data["toolclass"]["id"])
+
+    def _replace(self) -> bool:
+        """Replace the stored tool with the same identifier, if any.
+
+        The meta versions of the tool, and of its versions that replace
+        stored versions, are those of the stored ones plus the increments.
+
+        Returns:
+            Whether a stored tool was replaced.
+        """
+        stored = self.db_coll_tools.find_one(filter={"id": self.data["id"]})
+        if stored is None:
+            return False
+        self.data["meta_version"] = next_meta_version(
+            stored.get("meta_version"),
+            init=self.meta_version_init,
+            increment=self.meta_version_increment,
+        )
+        stored_versions = {
+            version.get("id"): version for version in stored.get("versions", [])
+        }
+        for version in self.data["versions"]:
+            if version["id"] in stored_versions:
+                version["meta_version"] = next_meta_version(
+                    stored_versions[version["id"]].get("meta_version"),
+                    init=self.version_meta_version_init,
+                    increment=self.version_meta_version_increment,
+                )
+        result = self.db_coll_tools.replace_one(
+            filter={"id": self.data["id"]},
+            replacement=dict(self.data),
+        )
+        return bool(result.matched_count)
 
 
 class RegisterToolVersion:
@@ -217,6 +292,8 @@ class RegisterToolVersion:
                 identifiers.
             id_length: Length of generated version identifiers.
             meta_version_init: Initial value for version meta version.
+            meta_version_increment: Increment of the version meta version
+                when the version is replaced.
             url_prefix: URL scheme of application. For constructing tool and
                 version `url` properties.
             host_name: Name of application host. For constructing tool and
@@ -235,6 +312,7 @@ class RegisterToolVersion:
         self.id_charset: str = conf.version.id.charset
         self.id_length: int = int(conf.version.id.length)
         self.meta_version_init: int = int(conf.version.meta_version.init)
+        self.meta_version_increment: int = int(conf.version.meta_version.increment)
         self.url_prefix: str = conf.service.url_prefix
         self.host_name: str | None = conf.service.external_host
         self.external_port: int | None = conf.service.external_port
@@ -255,19 +333,34 @@ class RegisterToolVersion:
         # set random ID unless ID is provided
         if self.data["id"] is None:
             self.replace = False
-            self.data["id"] = generate_id(
-                charset=self.id_charset, length=self.id_length
-            )
+            self.set_id(generate_id(charset=self.id_charset, length=self.id_length))
+        else:
+            self.set_id(self.data["id"])
 
-        # set self reference url
+        # process files
+        self.process_files()
+
+    def set_id(self, version_id: str) -> None:
+        """Set the identifier of the version, and its self reference URL.
+
+        Args:
+            version_id: Version identifier.
+        """
+        self.data["id"] = version_id
         self.data["url"] = (
             f"{self.url_prefix}://{self.host_name}:{self.external_port}/"
             f"{self.api_path}/tools/{self.id}/versions/"
             f"{self.data['id']}"
         )
 
-        # process files
-        self.process_files()
+    def set_tool_id(self, tool_id: str) -> None:
+        """Set the identifier of the tool, and the version's self reference URL.
+
+        Args:
+            tool_id: Tool identifier.
+        """
+        self.id = tool_id
+        self.set_id(self.data["id"])
 
     def process_files(self) -> None:
         """Process file (meta)data.
@@ -328,7 +421,7 @@ class RegisterToolVersion:
                     "FileWrapper must contain at least one of `url` or `content`."
                 )
                 raise BadRequest
-            if self.data["is_production"] and (
+            if self.data.get("is_production", False) and (
                 "checksum" not in _file["file_wrapper"]
                 or not _file["file_wrapper"]["checksum"]
             ):
@@ -373,6 +466,9 @@ class RegisterToolVersion:
     def register_metadata(self) -> None:
         """Register version with tool.
 
+        Versions with a given identifier replace a stored version of the tool
+        with that identifier, if any; their meta version is incremented.
+
         Raises:
             BadRequest: The files of the version are invalid.
             InternalServerError: No unique identifier could be generated, or the
@@ -386,33 +482,20 @@ class RegisterToolVersion:
         if obj is None:
             raise NotFound
 
-        # keep trying to generate unique ID
-        i = 0
-        while i < 10:
-            i += 1
-            self.process_metadata()
-            if self.replace:
-                # replace tool version in database
-                result_tools = self.db_coll_tools.update_one(
-                    filter={
-                        "id": self.id,
-                        "versions.id": self.data["id"],
-                    },
-                    update={
-                        "$set": {
-                            "versions.$": self.data,
-                        },
-                    },
-                )
+        generate_ids = self.data["id"] is None
+        self.process_metadata()
 
-                # verify replacement
-                if result_tools.matched_count:
-                    logger.info(
-                        "Replaced version with id '%s' in tool '%s'.",
-                        self.data["id"],
-                        self.id,
-                    )
-                    break
+        # keep trying to generate unique ID
+        for attempt in range(10):
+            if generate_ids and attempt:
+                self.set_id(generate_id(charset=self.id_charset, length=self.id_length))
+            if self.replace and self._replace():
+                logger.info(
+                    "Replaced version with id '%s' in tool '%s'.",
+                    self.data["id"],
+                    self.id,
+                )
+                break
 
             # insert tool version into database
             result_tools = self.db_coll_tools.update_one(
@@ -439,5 +522,37 @@ class RegisterToolVersion:
             raise InternalServerError
         logger.debug(
             "Entry in 'tools' collection: %s",
-            self.db_coll_tools.find_one({"id": self.data["id"]}),
+            self.db_coll_tools.find_one({"id": self.id}),
         )
+
+    def _replace(self) -> bool:
+        """Replace the stored version of the tool with the same identifier.
+
+        The meta version is that of the stored version plus the increment.
+
+        Returns:
+            Whether a stored version was replaced.
+        """
+        stored = self.db_coll_tools.find_one(
+            filter={"id": self.id, "versions.id": self.data["id"]},
+            projection={"versions": {"$elemMatch": {"id": self.data["id"]}}},
+        )
+        if stored is None:
+            return False
+        self.data["meta_version"] = next_meta_version(
+            stored["versions"][0].get("meta_version"),
+            init=self.meta_version_init,
+            increment=self.meta_version_increment,
+        )
+        result = self.db_coll_tools.update_one(
+            filter={
+                "id": self.id,
+                "versions.id": self.data["id"],
+            },
+            update={
+                "$set": {
+                    "versions.$": self.data,
+                },
+            },
+        )
+        return bool(result.matched_count)
