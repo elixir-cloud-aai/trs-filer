@@ -56,6 +56,11 @@ jobs:
         run: |
           pre-commit run --all-files --show-diff-on-failure
           pre-commit run --all-files --hook-stage manual gitleaks-all
+      # In its own environment, as cffconvert pins an old jsonschema; its
+      # dependencies resolve within its own bounds. 2.0.0 is the latest stable
+      # release (not bumped by Dependabot; update manually)
+      - name: Validate citation metadata
+        run: pipx run --spec cffconvert==2.0.0 cffconvert --validate -i CITATION.cff
       - name: Build distributions
         run: python -m build
       - name: Check wheel contents
@@ -251,9 +256,10 @@ jobs:
 
   # Checks that release tags pin released versions of the dependencies only
   # (`scripts/check_release_pins.py`), e.g., no FOCA commit or development
-  # image, before a GitHub release is published from the tag. Release tags
-  # only, as `dev` may pin development versions. To be replaced by a step of
-  # the release workflow (#133)
+  # image, and that the citation metadata has the release version
+  # (`scripts/citation.py`), before a GitHub release is published from the
+  # tag. Release tags only, as `dev` may pin development versions. To be
+  # replaced by steps of the release workflow (#133)
   pins:
     name: Release pins
     runs-on: ubuntu-latest
@@ -272,6 +278,12 @@ jobs:
           python-version: "3.13"
       - name: Check that dependencies are releases
         run: python scripts/check_release_pins.py
+      # Zenodo archives a release with the citation metadata of the tagged
+      # commit, so they must have the release version
+      - name: Check citation metadata
+        env:
+          TAG: ${{ github.ref_name }}
+        run: python scripts/citation.py check "${TAG#v}"
 
   # TEMPORARY: replaced by the release and supply-chain workflows (#133,
   # #134). Pushes of the default branch of the upstream repository only:
