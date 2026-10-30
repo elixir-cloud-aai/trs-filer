@@ -4,8 +4,10 @@
 
 [![License][badge-license]][badge-url-license]
 [![Build_status][badge-build-status]][badge-url-build-status]
+[![Docs][badge-docs]][badge-url-docs]
 [![Coverage][badge-coverage]][badge-url-coverage]
 [![GitHub_tag][badge-github-tag]][badge-url-github-tag]
+[![Docker_image][badge-docker]][badge-url-docker]
 
 <!-- --8<-- [start:synopsis] -->
 A registry of tools and workflows for your project, network or
@@ -16,13 +18,14 @@ such as workflow engines and execution services can find tools and workflows,
 their versions and tool classes, and fetch their descriptors, test files,
 container image definitions and other files, one by one or as a ZIP archive.
 Additional endpoints register, update and delete tools, tool versions and
-tool classes, and set the service info, so that you can run TRS-Filer as the
-registry of your own tools or index tools that are published elsewhere. Run it
+tool classes, so that you can run TRS-Filer as the registry of your own tools
+or index tools that are published elsewhere. Run it
 with Docker Compose or deploy it to Kubernetes with its Helm chart.
 <!-- --8<-- [end:synopsis] -->
 
-See [`deployment/`][deployment] for the deployment with the Helm chart and
-[`trs_filer/config.yaml`][config] for the configuration.
+**Read the [documentation][docs]** for the architecture, the configuration,
+the API, access control, the deployment with the Helm chart in
+[`deployment/`][deployment], operations, upgrades and development.
 
 ## Known deployments
 
@@ -59,22 +62,26 @@ curl -X GET "http://localhost:8080/ga4gh/trs/v2/tools" -H "accept: application/j
 
 ## Contributing
 
-Contributions are welcome! See the organisation's [contributing
-guide][contributing], and mind our [code of conduct][code-of-conduct]. Install
-the pre-commit hooks with `pip install -e ".[dev]"` and `pre-commit install`;
-CI runs them with `pre-commit run --all-files`.
+Contributions are welcome! See [Contributing][docs-contributing] in the
+documentation and the organisation's [contributing guide][contributing], and
+mind our [code of conduct][code-of-conduct].
 
 [badge-build-status]: <https://github.com/elixir-cloud-aai/trs-filer/actions/workflows/ci.yml/badge.svg>
 [badge-coverage]: <https://codecov.io/gh/elixir-cloud-aai/trs-filer/branch/dev/graph/badge.svg?branch=dev>
+[badge-docker]: <https://img.shields.io/docker/v/elixircloud/trs-filer?sort=semver&label=image&color=C39BD3>
+[badge-docs]: <https://img.shields.io/readthedocs/trs-filer>
 [badge-github-tag]: <https://img.shields.io/github/v/tag/elixir-cloud-aai/trs-filer?color=C39BD3>
 [badge-license]: <https://img.shields.io/badge/license-Apache%202.0-blue.svg>
 [badge-url-build-status]: <https://github.com/elixir-cloud-aai/trs-filer/actions/workflows/ci.yml>
 [badge-url-coverage]: <https://codecov.io/gh/elixir-cloud-aai/trs-filer?branch=dev>
+[badge-url-docker]: <https://hub.docker.com/r/elixircloud/trs-filer/tags>
+[badge-url-docs]: <https://trs-filer.readthedocs.io/en/latest/>
 [badge-url-github-tag]: <https://github.com/elixir-cloud-aai/trs-filer/releases>
 [badge-url-license]: <https://www.apache.org/licenses/LICENSE-2.0>
 [code-of-conduct]: <https://github.com/elixir-cloud-aai/.github/blob/main/CODE_OF_CONDUCT.md>
-[config]: trs_filer/config.yaml
 [contributing]: <https://github.com/elixir-cloud-aai/.github/blob/main/CONTRIBUTING.md>
 [deployment]: deployment/
+[docs]: <https://trs-filer.readthedocs.io/en/latest/>
+[docs-contributing]: <https://trs-filer.readthedocs.io/en/latest/contributing/>
 [logo]: docs/images/logo_elixir_on_cloud.png
 [org]: <https://elixir-on.cloud/>
