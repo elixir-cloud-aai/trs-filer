@@ -68,13 +68,36 @@ jobs:
           grep -qx 'trs_filer/config.yaml' wheel-contents.txt
           grep -Eqx 'trs_filer-[^/]+\.dist-info/licenses/LICENSE' wheel-contents.txt
           grep -q '^trs_filer/api/.*\.yaml$' wheel-contents.txt
+  # The tests against mongomock (with coverage) and against MongoDB, the
+  # database of deployments (`MONGODB_TEST_URI`, see `tests/conftest.py`), in
+  # the version of `docker-compose.yaml` (MongoDB 8.0 refuses to start on some
+  # kernels, see there)
   test:
-    name: Test
+    name: Test (${{ matrix.database }})
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - database: mongomock
+            image: ""
+            uri: ""
+          - database: MongoDB 7.0
+            image: mongo:7.0
+            uri: mongodb://localhost:27017
+    services:
+      # Not started for an empty image (the `mongomock` entry)
+      mongodb:
+        image: ${{ matrix.image }}
+        ports: ["27017:27017"]
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.adminCommand({ping: 1}).ok'"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
     env:
-      # Passed to the image build by Docker Compose
-      SETUPTOOLS_SCM_PRETEND_VERSION: 0.0.0+compose
+      MONGODB_TEST_URI: ${{ matrix.uri }}
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -91,6 +114,7 @@ jobs:
           pip install --upgrade pip
           pip install -e ".[dev]"
       - name: Calculate unit test coverage
+        if: ${{ matrix.uri == '' }}
         run: |
           coverage run -m pytest -W ignore::DeprecationWarning
           coverage xml
@@ -100,17 +124,86 @@ jobs:
       # deliberately non-fatal there), and release tags shouldn't fail for
       # Codecov outages
       - name: Submit Report to Codecov
+        if: ${{ matrix.uri == '' }}
         uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: ./coverage.xml
           fail_ci_if_error: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/heads/') && github.repository_owner == 'elixir-cloud-aai' }}
           verbose: true
-      - name: Deploy app
+      # `tests/test_fixtures.py` checks that the tests use the MongoDB
+      - name: Run tests against MongoDB
+        if: ${{ matrix.uri != '' }}
+        run: pytest -W ignore::DeprecationWarning
+
+  # The app as deployed with Docker Compose (image, Gunicorn, MongoDB): starts
+  # it and checks the API (`test` covers the API in detail), the version and
+  # the license text in the image
+  smoke:
+    name: Smoke test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      API: http://localhost:8080/ga4gh/trs/v2
+      # Passed to the image build by Docker Compose
+      SETUPTOOLS_SCM_PRETEND_VERSION: 0.0.0+compose
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Start app
         # Waits until the containers are healthy (see their health checks)
         run: docker compose up -d --build --wait --wait-timeout 300
-      - name: Run integration tests
-        run: pytest tests/integration_tests.py
+      - name: Check API
+        run: |
+          body="${RUNNER_TEMP}/body.json"
+          # Request a path, with an optional JSON body; check the status and
+          # that the JSON response matches a jq filter
+          check() {
+            local method="$1" path="$2" status="$3" filter="$4" data="${5:-}" actual
+            local args=(--silent --show-error --output "${body}"
+              --write-out '%{http_code}' -X "${method}"
+              --header 'Accept: application/json')
+            if [ -n "${data}" ]; then
+              args+=(--header 'Content-Type: application/json' --data "${data}")
+            fi
+            actual="$(curl "${args[@]}" "${API}${path}")"
+            if [ "${actual}" != "${status}" ] \
+                || ! jq -e "${filter}" "${body}" > /dev/null; then
+              echo "::error::${method} ${path}: status ${actual}, expected ${status} and ${filter}"
+              cat "${body}"
+              return 1
+            fi
+          }
+          check GET /service-info 200 '.type.artifact == "trs"'
+          check GET /tools 200 '. == []'
+          tool='{
+            "name": "smoke",
+            "organization": "Example",
+            "toolclass": {"id": "smoke", "name": "Smoke", "description": "Smoke test"},
+            "versions": [{
+              "name": "v1",
+              "is_production": false,
+              "descriptor_type": ["CWL"],
+              "files": [{
+                "type": "CWL",
+                "tool_file": {"file_type": "PRIMARY_DESCRIPTOR", "path": "main.cwl"},
+                "file_wrapper": {"content": "cwlVersion: v1.2"}
+              }]
+            }]
+          }'
+          check POST /tools 200 'type == "string"' "${tool}"
+          id="$(jq -r . "${body}")"
+          check GET "/tools/${id}" 200 \
+            ".id == \"${id}\" and .name == \"smoke\" and (.versions | length) == 1"
+          version="$(jq -r '.versions[0].id' "${body}")"
+          check GET "/tools/${id}/versions/${version}/CWL/descriptor" 200 \
+            '.content == "cwlVersion: v1.2"'
+          check GET /tools 200 "map(.id) == [\"${id}\"]"
+          check GET /toolClasses 200 'map(.id) == ["smoke"]'
+          check DELETE "/tools/${id}" 200 ". == \"${id}\""
+          check GET "/tools/${id}" 404 '.status == 404'
       - name: Check app version
         run: |
           actual="$(docker compose exec -T trs-filer python -c \
@@ -130,7 +223,7 @@ jobs:
         run: docker compose logs
       - name: Tear down app
         if: always()
-        run: docker compose down
+        run: docker compose down --volumes
 
   docs:
     name: Docs
@@ -183,13 +276,13 @@ jobs:
   # TEMPORARY: replaced by the release and supply-chain workflows (#133,
   # #134). Pushes of the default branch of the upstream repository only:
   # pull requests (e.g., of Dependabot and forks) and pushes in forks get no
-  # Docker Hub secrets, and the Compose build of `test` builds the image for
+  # Docker Hub secrets, and the Compose build of `smoke` builds the image for
   # them
   publish:
     name: Publish image
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    needs: [lint, test]
+    needs: [lint, test, smoke]
     # Same condition as the `publish` skip allowed by the gate
     if: github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && github.repository_owner == 'elixir-cloud-aai'
     steps:
@@ -239,7 +332,7 @@ jobs:
     name: CI passed
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    needs: [lint, test, docs, pins, publish]
+    needs: [lint, test, docs, smoke, pins, publish]
     if: always()
     permissions: {}
     steps:

@@ -3,6 +3,8 @@
 from copy import deepcopy
 from typing import Any
 
+# Base path of the API
+BASE_PATH = "/ga4gh/trs/v2"
 MOCK_ID = "mock_id"
 MOCK_ID_2 = "mock_id2"
 MOCK_ID_ONE_CHAR = "A"

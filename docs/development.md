@@ -12,26 +12,31 @@ pip install -e ".[dev]"  # the app, with the dev dependencies
 pre-commit install  # run the checks on every commit
 pre-commit run --all-files  # ruff, mypy, semgrep, ast-grep, actionlint
 pre-commit run --all-files --hook-stage manual gitleaks-all  # secrets
-coverage run -m pytest --ignore tests/integration_tests.py  # unit tests
+coverage run -m pytest  # the tests, with coverage
 coverage report
 ```
 
-The unit tests need no database: they create the app from the base config
-(`trs_filer/config.yaml`) with an in-memory database
-([mongomock](https://github.com/mongomock/mongomock)), see
-`tests/conftest.py`. Coverage is measured for `trs_filer`, `scripts` and the docs hooks
-(`docs/hooks.py`), and
-CI reports it to [Codecov](https://about.codecov.io/); add tests that fail
-without your change.
-
-The integration tests (`tests/integration_tests.py`) send requests to the
-app running with Docker Compose, as CI does:
+The tests (`tests/`, mirroring the package) need no database: app tests
+create the app from the base config (`trs_filer/config.yaml`) and send
+requests through Flask's test client, with an in-memory database
+([mongomock](https://github.com/mongomock/mongomock)); they have no network
+access (see `tests/conftest.py`). CI also runs them against MongoDB 7.0; to
+do so locally, set `MONGODB_TEST_URI` to a single-node MongoDB without other
+data, one per test run (the tests drop the database `trsStore` before each
+test, and refuse to start if it exists), e.g.:
 
 ```bash
-docker compose up -d --build --wait
-pytest tests/integration_tests.py
-docker compose down --volumes
+docker run -d --rm --name mongodb-test -p 127.0.0.1:27017:27017 mongo:7.0
+until docker exec mongodb-test mongosh --quiet --eval 'db.adminCommand({ping: 1}).ok'; do sleep 1; done
+MONGODB_TEST_URI=mongodb://localhost:27017 pytest
+docker stop mongodb-test
 ```
+
+Coverage is measured for `trs_filer`, `scripts` and the docs hooks
+(`docs/hooks.py`), and CI reports it to
+[Codecov](https://about.codecov.io/); add tests that fail without your
+change. CI also runs the app with Docker Compose and sends requests to it
+(job "Smoke test" of `.github/workflows/ci.yml`).
 
 To try changes in the running app, rebuild it with
 `docker compose up --build -d`. `python -m trs_filer.app` runs the app with
