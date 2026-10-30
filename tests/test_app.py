@@ -229,7 +229,7 @@ def test_invalid_custom_config(
     assert re.search(reason, str(cause))
 
 
-@pytest.mark.parametrize("name", [None, "other"])
+@pytest.mark.parametrize("name", [None, f"{DB}Name"])
 def test_database_name(
     mongo_client: MongoClient[dict[str, Any]],
     overlay: Path,
@@ -251,6 +251,8 @@ def test_database_name(
         monkeypatch.delenv("MONGO_DBNAME", raising=False)
     else:
         monkeypatch.setenv("MONGO_DBNAME", name)
+    # Not to drop a database that existed before (with `MONGODB_TEST_URI`)
+    assert name not in mongo_client.list_database_names()
     try:
         app = create_app()
         with app.app.app_context():
@@ -366,6 +368,7 @@ def test_operations_resolve(app: App) -> None:
     """
     controllers = _spec_operations(app)
     served = _served(app)
+    # The 19 operations of TRS and its additions, and the service info
     assert len(controllers) == 20
     assert controllers.pop(("GET", "/service-info")) is getServiceInfo
     assert {controller.__module__ for controller in controllers.values()} == {

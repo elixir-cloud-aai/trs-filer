@@ -68,7 +68,9 @@ jobs:
           grep -Eqx 'trs_filer-[^/]+\.dist-info/licenses/LICENSE' wheel-contents.txt
           grep -q '^trs_filer/api/.*\.yaml$' wheel-contents.txt
   # The tests against mongomock (with coverage) and against MongoDB, the
-  # database of deployments (`MONGODB_TEST_URI`, see `tests/conftest.py`)
+  # database of deployments (`MONGODB_TEST_URI`, see `tests/conftest.py`), in
+  # the version of `docker-compose.yaml` (MongoDB 8.0 refuses to start on some
+  # kernels, see there)
   test:
     name: Test (${{ matrix.database }})
     runs-on: ubuntu-latest
@@ -128,12 +130,10 @@ jobs:
           files: ./coverage.xml
           fail_ci_if_error: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/heads/') && github.repository_owner == 'elixir-cloud-aai' }}
           verbose: true
-      # Fails instead of falling back to mongomock if the URI is missing
+      # `tests/test_fixtures.py` checks that the tests use the MongoDB
       - name: Run tests against MongoDB
         if: ${{ matrix.uri != '' }}
-        run: |
-          test -n "${MONGODB_TEST_URI}"
-          pytest -W ignore::DeprecationWarning
+        run: pytest -W ignore::DeprecationWarning
 
   # The app as deployed with Docker Compose (image, Gunicorn, MongoDB): starts
   # it and checks the API (`test` covers the API in detail), the version and
@@ -222,7 +222,7 @@ jobs:
         run: docker compose logs
       - name: Tear down app
         if: always()
-        run: docker compose down
+        run: docker compose down --volumes
 
   # Checks that release tags pin released versions of the dependencies only
   # (`scripts/check_release_pins.py`), e.g., no FOCA commit or development
@@ -251,7 +251,7 @@ jobs:
   # TEMPORARY: replaced by the release and supply-chain workflows (#133,
   # #134). Pushes of the default branch of the upstream repository only:
   # pull requests (e.g., of Dependabot and forks) and pushes in forks get no
-  # Docker Hub secrets, and the Compose build of `test` builds the image for
+  # Docker Hub secrets, and the Compose build of `smoke` builds the image for
   # them
   publish:
     name: Publish image

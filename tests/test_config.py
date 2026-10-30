@@ -344,6 +344,6 @@ def test_repository_generic() -> None:
         f"{name}:{number}: {line.strip()}"
         for name, number, line in _repository_lines()
         # This file names the values to find
-        if name != "tests/test_config.py" and IDP_SPECIFIC.search(line)
+        if ROOT / name != Path(__file__) and IDP_SPECIFIC.search(line)
     ]
     assert found == []

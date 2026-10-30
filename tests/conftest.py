@@ -13,7 +13,8 @@ dropped before each test, so use a single-node MongoDB (only the hosts of the
 URI may be connected to) without other data, one per test run. The tests
 refuse to start if the database exists already.
 
-Tests have no network access, except to the test database.
+Tests can't open network connections (`socket.socket.connect()`), except to
+the test database; `MONGO_DBNAME` is unset, so that apps use database `DB`.
 """
 
 from collections.abc import Iterator
@@ -85,13 +86,19 @@ def _no_network(sock: socket.socket, address: Any) -> None:
 
 
 @pytest.fixture(autouse=True)
-def _block_network(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Block network access in all tests, except to the test database.
+def _isolate(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Isolate all tests from the network and from deployments' databases.
+
+    Network connections are blocked, except to the test database, and
+    `MONGO_DBNAME` (which FOCA would use instead of `DB`, e.g., set as by the
+    Helm chart) is unset.
 
     Args:
-        monkeypatch: Patches of `socket.socket.connect()`.
+        monkeypatch: Patches of `socket.socket.connect()` and of the
+            environment.
     """
     monkeypatch.setattr(socket.socket, "connect", _no_network)
+    monkeypatch.delenv("MONGO_DBNAME", raising=False)
 
 
 def _check_no_db(client: MongoClient[dict[str, Any]]) -> None:
