@@ -1,8 +1,9 @@
 # Everything that must pass on pull requests and pushes: lints, builds and
-# tests the project (also for release tags), checks the dependency pins of
-# release tags, and publishes the image for pushes of `dev` of the upstream
-# repository (forks have no Docker Hub secrets, so their CI publishes
-# nothing). The ruleset is to require the gate `CI passed` only
+# tests the project and its documentation (also for release tags), checks
+# the dependency pins of release tags, and publishes the image for pushes
+# of `dev` of the upstream repository (forks have no Docker Hub secrets, so
+# their CI publishes nothing). The ruleset is to require the gate `CI
+# passed` only
 
 name: CI
 on:
@@ -224,6 +225,30 @@ jobs:
         if: always()
         run: docker compose down --volumes
 
+  docs:
+    name: Docs
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # Python version of Read the Docs (`.readthedocs.yaml`)
+      - name: Set up Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -e ".[docs]"
+      # Fails on warnings, e.g., of broken links, anchors and references
+      - name: Build documentation
+        run: mkdocs build --strict
+
   # Checks that release tags pin released versions of the dependencies only
   # (`scripts/check_release_pins.py`), e.g., no FOCA commit or development
   # image, before a GitHub release is published from the tag. Release tags
@@ -307,7 +332,7 @@ jobs:
     name: CI passed
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    needs: [lint, test, smoke, pins, publish]
+    needs: [lint, test, docs, smoke, pins, publish]
     if: always()
     permissions: {}
     steps:
