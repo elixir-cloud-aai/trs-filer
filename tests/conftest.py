@@ -13,8 +13,9 @@ dropped before each test, so use a single-node MongoDB (only the hosts of the
 URI may be connected to) without other data, one per test run. The tests
 refuse to start if the database exists already.
 
-Tests can't open network connections (`socket.socket.connect()`), except to
-the test database; `MONGO_DBNAME` is unset, so that apps use database `DB`.
+Tests can't open network connections (`socket.socket.connect()` and
+`connect_ex()`), except to the test database; `MONGO_DBNAME` is unset, so that
+apps use database `DB`.
 """
 
 from collections.abc import Iterator
@@ -85,19 +86,36 @@ def _no_network(sock: socket.socket, address: Any) -> None:
     raise OSError(f"Network access blocked in tests: {address}")
 
 
+def _no_network_ex(sock: socket.socket, address: Any) -> int:
+    """Replace `socket.socket.connect_ex()`, to block network access.
+
+    As `_no_network()`, but returns `0` for connections to the test database.
+
+    Args:
+        sock: Socket to connect.
+        address: Address to connect to.
+
+    Returns:
+        `0`, the error indicator of `connect_ex()` for success.
+    """
+    _no_network(sock, address)
+    return 0
+
+
 @pytest.fixture(autouse=True)
 def _isolate(monkeypatch: pytest.MonkeyPatch) -> None:
     """Isolate all tests from the network and from deployments' databases.
 
-    Network connections are blocked, except to the test database, and
+    Network connections (`connect()`, `connect_ex()`) are blocked, except
+    to the test database, and
     `MONGO_DBNAME` (which FOCA would use instead of `DB`, e.g., set as by the
     Helm chart) is unset.
 
     Args:
-        monkeypatch: Patches of `socket.socket.connect()` and of the
-            environment.
+        monkeypatch: Patches of `socket.socket` and of the environment.
     """
     monkeypatch.setattr(socket.socket, "connect", _no_network)
+    monkeypatch.setattr(socket.socket, "connect_ex", _no_network_ex)
     monkeypatch.delenv("MONGO_DBNAME", raising=False)
 
 
