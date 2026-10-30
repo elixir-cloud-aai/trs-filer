@@ -1,10 +1,11 @@
 """Check that a release only pins released versions of its dependencies.
 
-For releases, so that temporary pins to development versions (e.g., of
-FOCA, to use unreleased changes) can't be released by accident: run for
-release tags (the `pins` job of `.github/workflows/ci.yml`, until a release
-workflow runs it). Fails, with errors as GitHub annotations on standard
-error, if:
+Used by the release workflow (`.github/workflows/release.yml`), the CI
+job "Release readiness" (`.github/workflows/ci.yml`) and the
+tests of release checkouts (`tests/test_check_release_pins.py`), so that
+temporary pins to development versions (e.g., of FOCA, to test unreleased
+changes) can't be released by accident. Fails, with errors as GitHub
+annotations on standard error, if:
 
 - a requirement of `pyproject.toml` (`project.dependencies`,
   `project.optional-dependencies`, `dependency-groups` or

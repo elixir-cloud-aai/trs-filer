@@ -227,3 +227,84 @@ def test_deployment_page_includes_readme() -> None:
     """The deployment page includes the chart's README with the hook."""
     page = (ROOT / "docs/deployment.md").read_text(encoding="utf-8")
     assert hooks.INCLUDE in page.splitlines()
+
+
+def _version() -> str:
+    """Return the version that the docs show for the current release.
+
+    Returns:
+        The `version` of `CITATION.cff`, or `UNRELEASED` before the first
+        release.
+    """
+    version = hooks.citation.release_version(
+        (ROOT / "CITATION.cff").read_text(encoding="utf-8")
+    )
+    # The hooks are loaded from their file, so their types are unknown
+    assert version is None or isinstance(version, str)
+    return version or str(hooks.UNRELEASED)
+
+
+def test_on_page_markdown_version() -> None:
+    """The placeholder is the release version, also in code blocks."""
+    version = _version()
+    markdown = _render(
+        "Version {{ version }}.\n\n```bash\ndocker pull x:{{ version }}\n```\n"
+        "{{ json .SBOM }} {{version}}\n"
+    )
+    assert markdown == (
+        f"Version {version}.\n\n```bash\ndocker pull x:{version}\n```\n"
+        "{{ json .SBOM }} {{version}}\n"
+    )
+
+
+@pytest.mark.parametrize(
+    ("citation", "expected"),
+    [("cff-version: 1.2.0\n", "X.Y.Z"), ('version: "1.2.3rc1"\n', "1.2.3-rc1")],
+)
+def test_on_page_markdown_citation(
+    tmp_path: Path, citation: str, expected: str
+) -> None:
+    """The version is that of `CITATION.cff`; without one, `UNRELEASED`.
+
+    Args:
+        tmp_path: Directory of the docs settings and the citation file.
+        citation: Content of the citation file.
+        expected: Expected chart version.
+    """
+    (tmp_path / "CITATION.cff").write_text(citation, encoding="utf-8")
+    assert _render("{{ chart_version }}", tmp_path) == expected
+
+
+@pytest.mark.parametrize(
+    ("markdown", "version", "expected"),
+    [
+        ("a {{ version }} b {{ version }}", "1.2.3", "a 1.2.3 b 1.2.3"),
+        ("{{ version }} {{ chart_version }}", "1.2.3rc1", "1.2.3rc1 1.2.3-rc1"),
+        ("only {{ chart_version }}", "1.2.3b1", "only 1.2.3-b1"),
+        ("no placeholder", None, "no placeholder"),
+        # Before the first release, the placeholders become `UNRELEASED`
+        ("{{ version }} {{ chart_version }}", None, "X.Y.Z X.Y.Z"),
+    ],
+)
+def test_substitute_version(markdown: str, version: str | None, expected: str) -> None:
+    """The placeholder is replaced; without it, no version is needed.
+
+    Args:
+        markdown: Markdown of a page.
+        version: Release version.
+        expected: Expected Markdown.
+    """
+    assert hooks.substitute_version(markdown, version) == expected
+
+
+def test_load_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A script that can't be loaded raises `ImportError`.
+
+    Args:
+        monkeypatch: Fixture to make the module spec unavailable.
+    """
+    monkeypatch.setattr(
+        hooks.importlib.util, "spec_from_file_location", lambda *_: None
+    )
+    with pytest.raises(ImportError, match="can't be loaded"):
+        hooks._load("citation")

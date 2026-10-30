@@ -259,14 +259,14 @@ def test_ci_gate() -> None:
 def test_ci_gate_conditions() -> None:
     """The gate may skip a job exactly where the job's condition is false.
 
-    Only `pins` and `publish` may be skipped; `allow-skipped` names each of
+    Only `push` and `publish` may be skipped; `allow-skipped` names each of
     them under the negated `if:` of the job, so that a job skipped where it
     should run fails the gate.
     """
     jobs, step = _ci_gate()
     allowed = " ".join(step["with"]["allow-skipped"].split())
     named = re.findall(r"&& '([a-z-]+)' \|\| ''", allowed)
-    assert sorted(named) == ["pins", "publish"]
+    assert sorted(named) == ["publish", "push"]
     conditions = [
         f"!({' '.join(jobs[job]['if'].split())}) && '{job}' || ''" for job in named
     ]
