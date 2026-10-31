@@ -53,7 +53,11 @@ drop it if you like.
   1000). `next_page` is omitted on the last page, and `last_page` is counted
   in steps of `limit` from the requested offset. Filters of versions and
   images apply to the same version and image (they overwrote each other).
-  See [Listing tools](api.md#listing-tools).
+  The links `next_page` and `last_page` keep the filters of the request
+  (they had only `offset` and `limit`). An empty `author` matches only empty
+  authors (it matched all tools), and the unsupported filter `tags` gives
+  `400 Bad Request` (it was ignored). See [Listing
+  tools](api.md#listing-tools).
 - Registering or replacing a tool no longer changes an existing tool class:
   the tool stores a copy of the stored tool class instead of the one it was
   sent with. With `custom.toolclass.validation: true`, a tool with an
