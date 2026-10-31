@@ -183,7 +183,7 @@ def test_publish_after_scan() -> None:
         assert names.index("Sign image") < names.index("Tag image")
 
 
-def test_release_chart_signed() -> None:
+def test_release_chart_checked() -> None:
     """The release workflow checks the chart before attesting and signing it.
 
     `publish` downloads the chart artifact, which any job of the run could
@@ -229,14 +229,21 @@ def test_release_chart_signed() -> None:
     [
         pytest.param(None, None, False, False, CHART, None, True, id="good"),
         pytest.param(None, None, True, False, CHART, None, False, id="wrong-hash"),
+        # Sorts before the chart
         pytest.param("other.tgz", None, False, False, CHART, None, False, id="extra"),
+        # Sorts after the chart, so only the count rejects it
+        pytest.param("zzz", None, False, False, CHART, None, False, id="extra-after"),
         pytest.param(".hidden", None, False, False, CHART, None, False, id="hidden"),
         pytest.param(
             None, "trs-filer-9.9.9.tgz", False, False, CHART, None, False, id="renamed"
         ),
         pytest.param(None, None, False, True, CHART, None, False, id="empty"),
         pytest.param(None, None, False, False, "../x.tgz", None, False, id="bad-name"),
+        pytest.param(
+            None, None, False, False, "trs-filer-1.tar", None, False, id="not-tgz"
+        ),
         pytest.param(None, None, False, False, CHART, "abc", False, id="bad-hash"),
+        pytest.param(None, None, False, False, CHART, "A" * 64, False, id="upper-hash"),
     ],
 )
 def test_release_chart_check_runs(
