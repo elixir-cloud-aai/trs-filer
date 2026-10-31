@@ -1,0 +1,59 @@
+# Scan the image of the latest release (`latest`) weekly for known
+# vulnerabilities with Trivy, as the `scan` job of `ci.yml` scans the
+# images of pull requests and pushes, so that vulnerabilities found after a
+# release are reported: the findings that have a fix are uploaded to code
+# scanning, a full report (findings without a fix included) is uploaded as the
+# workflow artifact `trivy-report-release-image` (JSON and table), and the
+# workflow fails on critical and high vulnerabilities that have a fix (fixed
+# by a new release). Accepted findings are listed in `.trivyignore.yaml`.
+# Scheduled runs use this workflow (with its pin of the shared action
+# `elixir-cloud-aai/.github/actions/scan-image`) and `.trivyignore.yaml` as
+# on the default branch (`dev`), and file their findings under it, so
+# findings accepted on `dev` after a release apply to the released image
+# too. The image is public, so no Docker Hub secrets are needed; its
+# organization is the repository variable `DOCKERHUB_ORG` (by default
+# `elixircloud`, as in `ci.yml` and `release.yml`; forks set it to the
+# organization they publish to, and forks without it scan nothing).
+
+name: Scan
+
+on:
+  schedule:
+    # Mondays, 05:17 UTC
+    - cron: "17 5 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One scan at a time, so that an older scan's results don't replace those of
+# a newer one in code scanning
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+env:
+  IMAGE_NAME: docker.io/${{ vars.DOCKERHUB_ORG || 'elixircloud' }}/trs-filer
+
+jobs:
+  scan:
+    name: Scheduled scan
+    # This repository, or forks that publish their own images
+    if: github.repository_owner == 'elixir-cloud-aai' || vars.DOCKERHUB_ORG != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      security-events: write # upload SARIF to code scanning
+    steps:
+      # For `.trivyignore.yaml`
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Scan image
+        uses: elixir-cloud-aai/.github/actions/scan-image@743e82d290a53768454999e413756a924e383259 # v1.0.0
+        with:
+          image: ${{ env.IMAGE_NAME }}:latest
+          category: release-image
+          report: "true"
