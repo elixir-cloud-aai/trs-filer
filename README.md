@@ -1,4 +1,11 @@
-[![ELIXIR On-Cloud][logo]][org]
+<!-- markdownlint-disable MD033 MD041 -- logo first; <picture> for dark mode -->
+<a href="https://elixir-on.cloud/">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/images/logo_elixir_on_cloud_night.png">
+    <img src="docs/images/logo_elixir_on_cloud.png" alt="ELIXIR On-Cloud">
+  </picture>
+</a>
+<!-- markdownlint-enable MD033 MD041 -->
 
 # TRS-Filer
 
@@ -92,5 +99,3 @@ mind our [code of conduct][code-of-conduct].
 [deployment]: deployment/
 [docs]: <https://trs-filer.readthedocs.io/en/latest/>
 [docs-contributing]: <https://trs-filer.readthedocs.io/en/latest/contributing/>
-[logo]: docs/images/logo_elixir_on_cloud.png
-[org]: <https://elixir-on.cloud/>

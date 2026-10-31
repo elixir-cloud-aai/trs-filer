@@ -5,6 +5,7 @@ import logging
 from typing import Any, ClassVar
 
 from foca.utils.misc import generate_id
+from pymongo.collection import Collection
 from pymongo.errors import DuplicateKeyError
 
 from trs_filer.errors.exceptions import (
@@ -36,6 +37,41 @@ def next_meta_version(previous: object, init: int, increment: int) -> str:
         return str(init)
 
 
+def tool_meta_version_change(
+    db_coll_tools: Collection[dict[str, Any]], tool_id: str
+) -> dict[str, str]:
+    """Get the change of a tool's meta version when one of its versions changes.
+
+    The next meta version is computed from the stored one, not atomically
+    with the update that sets it: concurrent changes of the tool may give it
+    the same or an earlier meta version (see `docs/configuration.md`).
+
+    Args:
+        db_coll_tools: Database collection for storing tool objects.
+        tool_id: Tool identifier.
+
+    Returns:
+        The tool's next meta version (field `meta_version`), to be set with
+        the change of the version, or nothing if the tool doesn't exist or
+        `custom.tool.meta_version.on_version_change` is `false`.
+    """
+    conf = get_custom_config().tool.meta_version
+    if not conf.on_version_change:
+        return {}
+    stored = db_coll_tools.find_one(
+        filter={"id": tool_id}, projection={"meta_version": True}
+    )
+    if stored is None:
+        return {}
+    return {
+        "meta_version": next_meta_version(
+            stored.get("meta_version"),
+            init=int(conf.init),
+            increment=int(conf.increment),
+        )
+    }
+
+
 class RegisterTool:
     """Class to register tools with the service."""
 
@@ -59,8 +95,9 @@ class RegisterTool:
             id_length: Length of generated object identifiers.
             meta_version_init: Initial value for tool meta version.
             meta_version_increment: Increment of the tool meta version when
-                the tool is replaced (not when its versions are added,
-                replaced or deleted on their own).
+                the tool is replaced, and, with
+                `custom.tool.meta_version.on_version_change`, when its
+                versions are added, replaced or deleted on their own.
             version_meta_version_init: Initial value for version meta
                 versions.
             version_meta_version_increment: Increment of the meta version of
@@ -493,7 +530,9 @@ class RegisterToolVersion:
         """Register version with tool.
 
         Versions with a given identifier replace a stored version of the tool
-        with that identifier, if any; their meta version is incremented.
+        with that identifier, if any; their meta version is incremented. The
+        meta version of the tool is incremented, too, unless
+        `custom.tool.meta_version.on_version_change` is `false`.
 
         Raises:
             BadRequest: The files of the version are invalid.
@@ -524,16 +563,16 @@ class RegisterToolVersion:
                 break
 
             # insert tool version into database
+            update: dict[str, Any] = {"$push": {"versions": self.data}}
+            tool_change = tool_meta_version_change(self.db_coll_tools, self.id)
+            if tool_change:
+                update["$set"] = tool_change
             result_tools = self.db_coll_tools.update_one(
                 filter={
                     "id": self.id,
                     "versions.id": {"$ne": self.data["id"]},
                 },
-                update={
-                    "$push": {
-                        "versions": self.data,
-                    },
-                },
+                update=update,
             )
 
             # verify insertion
@@ -554,7 +593,8 @@ class RegisterToolVersion:
     def _replace(self) -> bool:
         """Replace the stored version of the tool with the same identifier.
 
-        The meta version is that of the stored version plus the increment.
+        The meta version is that of the stored version plus the increment;
+        that of the tool is incremented, too (see `register_metadata()`).
 
         Returns:
             Whether a stored version was replaced.
@@ -576,7 +616,10 @@ class RegisterToolVersion:
                 "versions.id": self.data["id"],
             },
             update={
+                # the tool's meta version first: mongomock ignores fields
+                # after a positional one (`versions.$`)
                 "$set": {
+                    **tool_meta_version_change(self.db_coll_tools, self.id),
                     "versions.$": self.data,
                 },
             },

@@ -141,6 +141,9 @@ custom:
         meta_version:
             init: 1
             increment: 1
+            # Whether adding, replacing or deleting a version of a tool
+            # increments the tool's meta version, too
+            on_version_change: True
     version:
         id:
             charset: abcdefghijklmnopqrstuvwxyz0123456789
