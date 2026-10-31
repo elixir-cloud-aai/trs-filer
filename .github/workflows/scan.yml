@@ -26,6 +26,12 @@ on:
 permissions:
   contents: read
 
+# One scan at a time, so that an older scan's results don't replace those of
+# a newer one in code scanning
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
 env:
   IMAGE_NAME: docker.io/${{ vars.DOCKERHUB_ORG || 'elixircloud' }}/trs-filer
 

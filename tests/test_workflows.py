@@ -145,6 +145,16 @@ def test_publish_after_scan() -> None:
     for name in ("ci.yml", "release.yml"):
         jobs = _load(WORKFLOWS / name)["jobs"]
         assert "push" in jobs["scan"]["needs"], name
+        (scan,) = _steps(jobs["scan"], SCAN_ACTION)
+        image = scan["with"]["image"]
+        if name == "release.yml":
+            assert image == "${{ env.IMAGE_NAME }}@${{ needs.push.outputs.digest }}"
+        else:
+            # The pushed digest where `push` runs (see "Determine image")
+            assert image == "${{ steps.image.outputs.image }}"
+            (determine,) = (s for s in jobs["scan"]["steps"] if s.get("id") == "image")
+            assert determine["env"]["DIGEST"] == "${{ needs.push.outputs.digest }}"
+            assert 'echo "image=${IMAGE_NAME}@${DIGEST}"' in determine["run"]
         assert "scan" in jobs["publish"]["needs"], name
         (build,) = _steps(jobs["push"], "docker/build-push-action")
         assert build["with"]["sbom"] is True, name

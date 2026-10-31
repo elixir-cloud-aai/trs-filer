@@ -243,8 +243,10 @@ links, which don't work in GitHub releases. No packages are published to
 PyPI. Tags of alpha, beta and release candidate versions (e.g., `vX.Y.Zrc1`,
 also `aN` and `bN`) get chart version `X.Y.Z-rc1` (or `-aN`, `-bN`) and never
 update the `latest` image. These and, until 1.0.0, all other releases are
-GitHub pre-releases (never marked as the latest release). Digests of failed
-runs (also of failed scans) stay on Docker Hub, untagged and unsigned.
+GitHub pre-releases (never marked as the latest release). Digests of runs
+that fail before `publish` (also in the scan) stay on Docker Hub, untagged
+and unsigned; if `publish` fails after signing, the digest stays signed
+(and possibly tagged), and a re-run of the failed jobs finishes it.
 Re-running all jobs of the release workflow builds, scans, signs and tags a
 new image digest (the image build is not reproducible); an earlier digest
 that was published stays signed. Re-running only the failed jobs reuses the
