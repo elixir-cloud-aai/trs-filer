@@ -22,7 +22,7 @@ The service info reports TRS version 2.0.1 (`type.version`).
 | Endpoint | Description |
 | --- | --- |
 | `GET /service-info` | The service info of the deployment (see [Service info](configuration.md#service-info)). |
-| `GET /tools` | List tools, without the files of their versions, optionally filtered (e.g., by `toolClass`, `descriptorType`, `organization`, `toolname`), one page at a time (`limit`, `offset`; links to other pages in the response headers). |
+| `GET /tools` | List tools, without the files of their versions, optionally filtered (e.g., by `toolClass`, `descriptorType`, `organization`, `toolname`), one page at a time (see [Listing tools](#listing-tools)). |
 | `GET /tools/{id}` | Get a tool. |
 | `GET /tools/{id}/versions` | List the versions of a tool. |
 | `GET /tools/{id}/versions/{version_id}` | Get a version of a tool. |
@@ -32,6 +32,30 @@ The service info reports TRS version 2.0.1 (`type.version`).
 | `GET /tools/{id}/versions/{version_id}/{type}/files` | List the files of a version for descriptor type `type` (descriptors, test files and other files, not container recipe files), or, with `format=zip`, get them as a ZIP archive. |
 | `GET /tools/{id}/versions/{version_id}/containerfile` | List the container recipe files (e.g., Dockerfiles) of a version. |
 | `GET /toolClasses` | List the tool classes. |
+
+## Listing tools
+
+`GET /tools` returns the tools that match all given filters. Filters of
+versions (`descriptorType`, `author`) must match the same version of a tool,
+and filters of images (`registry`, `name`) the same image of that version.
+
+Tools are listed in the order they were added, one page at a time:
+
+- `offset` (default 0) is the index of the first tool of the page, and
+  `limit` (default 1000) the number of tools per page. Limits above 1000 are
+  reduced to 1000.
+- An `offset` that is not a non-negative integer, or a `limit` below 1 (also
+  `limit=0`), gives `400 Bad Request`.
+- The response headers link to pages, with the limit actually used:
+  `self_link` (this page), `next_page` (the next one; omitted on the last
+  page) and `last_page` (the page with the last tool, in steps of `limit`
+  from the requested `offset`, so that following `next_page` ends on it;
+  for offsets beyond the last tool, in steps of `limit` from 0), and
+  `current_offset` and `current_limit`.
+
+For example, with 25 tools, `GET /tools?offset=5&limit=10` returns the tools
+at indices 5 to 14 (counting from 0), with `next_page` and `last_page` both
+at offset 15 (indices 15 to 24).
 
 ## Registering tools
 
@@ -45,7 +69,7 @@ These endpoints are TRS-Filer's own, in
 | `DELETE /tools/{id}` | Delete a tool, with its versions. |
 | `POST /tools/{id}/versions` | Add a version to a tool; returns the new identifier of the version. |
 | `PUT /tools/{id}/versions/{version_id}` | Add a version with the given identifier to a tool, or replace the version with that identifier. |
-| `DELETE /tools/{id}/versions/{version_id}` | Delete a version of a tool. |
+| `DELETE /tools/{id}/versions/{version_id}` | Delete a version of a tool; the last version of a tool can't be deleted (`400 Bad Request`; delete the tool instead). |
 | `POST /toolClasses` | Register a tool class; returns its new identifier. |
 | `PUT /toolClasses/{id}` | Register a tool class with the given identifier, or replace the tool class with that identifier. |
 | `DELETE /toolClasses/{id}` | Delete a tool class; tool classes that tools use can't be deleted (`400 Bad Request`). |
@@ -64,6 +88,15 @@ files](configuration.md#remote-files)), and optionally its checksums
 `ToolVersionRegister`, `FilesRegister`, `ToolClassRegister`) are in the
 specification and the Swagger UI; [Getting started](getting-started.md#usage)
 has an example.
+
+Registering an object with the identifier of a stored one (`PUT`) replaces
+it, also with identical content. Tools store a copy of their tool class: of
+the stored tool class, if one with the identifier of `toolclass.id` exists
+(the tool class is not changed), or else of the one sent, which is then
+created, unless tool classes are validated (see [Tool
+classes](configuration.md#tool-classes)). Replacing tools and versions
+increments their `meta_version` (see [Meta
+versions](configuration.md#meta-versions)).
 
 Anybody who can reach the API can use these endpoints (see [Access
 control](access-control.md)).

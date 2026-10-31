@@ -33,10 +33,17 @@ docker stop mongodb-test
 ```
 
 Coverage is measured for `trs_filer`, `scripts` and the docs hooks
-(`docs/hooks.py`), and CI reports it to
-[Codecov](https://about.codecov.io/); add tests that fail without your
-change. CI also runs the app with Docker Compose and sends requests to it
-(job "Smoke test" of `.github/workflows/ci.yml`).
+(`docs/hooks.py`), and must stay at 100%: `coverage report` and
+`coverage xml` fail below it (`fail_under` in `pyproject.toml`), and so do
+Codecov's checks of the whole code and of each pull request's changes
+(`codecov.yml`; CI reports coverage to [Codecov](https://about.codecov.io/),
+see the badge in the README). New code, also new scripts, needs tests that
+cover it completely; add tests that fail without your change, and exclude
+unreachable code only with a reason (`# pragma: no cover`). CI also runs
+the app with Docker Compose and sends requests to it (job "Smoke test" of
+`.github/workflows/ci.yml`); this test runs in CI only, with no local
+equivalent other than `docker compose up --build --wait` and requests by
+hand.
 
 To try changes in the running app, rebuild it with
 `docker compose up --build -d`. `python -m trs_filer.app` runs the app with
