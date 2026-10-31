@@ -59,6 +59,7 @@ jobs:
       version: ${{ steps.version.outputs.version }}
       prerelease: ${{ steps.version.outputs.prerelease }}
       sha: ${{ steps.version.outputs.sha }}
+      chart_file: ${{ steps.chart.outputs.file }}
       chart_sha256: ${{ steps.chart.outputs.sha256 }}
     steps:
       - name: Check out repository
@@ -185,6 +186,7 @@ jobs:
           [[ "$(tar -xzOf "${package}" trs-filer/values.yaml | yq .trs_filer.image)" \
               == "${image}" ]]
           # For `publish` to check the downloaded chart against
+          echo "file=${package#dist/}" >> "${GITHUB_OUTPUT}"
           echo "sha256=$(sha256sum "${package}" | cut -d ' ' -f 1)" >> "${GITHUB_OUTPUT}"
       - name: Upload chart
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -365,18 +367,24 @@ jobs:
       # The artifact is the chart that `prepare` packaged, not one that
       # replaced it between `prepare` and `publish` (any job of the run can
       # overwrite artifacts with the run's token), before it is attested,
-      # signed and released: a single file, with the checksum of `prepare`
+      # signed and released: a single file, with the name and checksum of
+      # `prepare`
       - name: Check chart
         env:
+          FILE: ${{ needs.prepare.outputs.chart_file }}
           SHA256: ${{ needs.prepare.outputs.chart_sha256 }}
         run: |
+          if [[ ! "${FILE}" =~ ^trs-filer-[0-9A-Za-z.+-]+\.tgz$ ]]; then
+              echo "::error::Invalid chart file name '${FILE}'"
+              exit 1
+          fi
           if [[ ! "${SHA256}" =~ ^[0-9a-f]{64}$ ]]; then
               echo "::error::Invalid chart checksum '${SHA256}'"
               exit 1
           fi
           shopt -s nullglob
           files=(dist/*)
-          if [[ "${#files[@]}" -ne 1 || "${files[0]}" != dist/trs-filer-*.tgz ]]; then
+          if [[ "${#files[@]}" -ne 1 || "${files[0]}" != "dist/${FILE}" ]]; then
               echo "::error::Expected one chart in dist/, found: ${files[*]}"
               exit 1
           fi
