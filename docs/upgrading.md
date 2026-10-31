@@ -97,7 +97,9 @@ e.g., into `trsStore`, or upgrade one major version at a time.
   with the new release process on, no longer the head of `dev`, which is
   tagged `dev` (and `sha-<commit>` per commit); dated tags are no longer
   published. Pin a release (`X.Y.Z`) in deployments (see [Versioning and
-  releases](development.md#versioning-and-releases)).
+  releases](development.md#versioning-and-releases)). Images published by
+  the new workflows are scanned, attested and signed (see [Verifying images
+  and charts](operations.md#verifying-images-and-charts)).
 - Gunicorn is configured by `trs_filer/gunicorn_config.py` and the
   environment variable `GUNICORN_CMD_ARGS` (e.g., `--workers 2`; see
   [Server](configuration.md#server)); `GUNICORN_PROCESSES`,

@@ -382,9 +382,9 @@ scan jobs, which have no secrets, know the image name too, and the released
 chart's default image (`trs_filer.image`) is the published one. Forks
 without `DOCKERHUB_ORG` publish nothing: their CI runs the same checks (the
 scan of a local build included, without the upload to code scanning) and
-passes without the secrets, and their weekly scan is skipped. On Read the Docs, the default version is `stable` (the highest
-release) from the first release on, and the default branch is left empty, so
-that `latest` follows the repository's default branch, `dev`; an automation
+passes without the secrets, and their weekly scan is skipped. On Read the
+Docs, the default version is `stable` (the highest release) from the first
+release on, and the default branch is left empty, so that `latest` follows the repository's default branch, `dev`; an automation
 rule activates the versions of tags (`v*`), so that the docs linked from
 packaged charts exist.
 

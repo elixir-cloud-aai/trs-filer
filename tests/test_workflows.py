@@ -152,12 +152,18 @@ def test_publish_after_scan() -> None:
         publish = jobs["publish"]
         assert publish["permissions"]["id-token"] == "write", name
         assert publish["permissions"]["attestations"] == "write", name
-        steps = [step["name"] for step in publish["steps"]]
-        (attest, *_) = _steps(publish, "actions/attest-build-provenance")
+        steps = {step["name"]: step for step in publish["steps"]}
+        attest = steps["Attest build provenance"]
+        assert attest["uses"].startswith("actions/attest-build-provenance@")
         assert attest["with"]["subject-digest"] == "${{ env.DIGEST }}", name
         assert attest["with"]["push-to-registry"] is True, name
-        assert steps.index("Attest build provenance") < steps.index("Tag image")
-        assert steps.index("Sign image") < steps.index("Tag image")
+        sign = steps["Sign image"]
+        assert sign["run"] == 'cosign sign --yes "${IMAGE_NAME}@${DIGEST}"', name
+        # Steps of `ci.yml` run only for the head of the branch, as the tags
+        assert attest.get("if") == sign.get("if") == steps["Tag image"].get("if")
+        names = list(steps)
+        assert names.index("Attest build provenance") < names.index("Tag image")
+        assert names.index("Sign image") < names.index("Tag image")
 
 
 def test_release_chart_signed() -> None:
@@ -169,9 +175,34 @@ def test_release_chart_signed() -> None:
     publish = _load(WORKFLOWS / "release.yml")["jobs"]["publish"]
     steps = {step["name"]: step for step in publish["steps"]}
     assert steps["Attest chart provenance"]["with"]["subject-path"] == "dist/*.tgz"
-    assert '--bundle "${chart}.sigstore.json"' in steps["Sign chart"]["run"]
+    sign = steps["Sign chart"]["run"]
+    assert "for chart in dist/*.tgz; do" in sign
+    assert 'cosign sign-blob --yes --bundle "${chart}.sigstore.json" "${chart}"' in sign
     names = list(steps)
+    assert names.index("Attest chart provenance") < names.index("Create release")
     assert names.index("Sign chart") < names.index("Create release")
+    assert 'gh release upload "${TAG}" dist/*' in steps["Create release"]["run"]
+
+
+def test_verification_commands() -> None:
+    """The verification commands name the workflows that sign the images.
+
+    `docs/operations.md` verifies release images and charts with the
+    identity of `release.yml` at the release tag (`gh attestation verify`
+    and `cosign verify` of the image, both of the chart), and `dev` images
+    with that of `ci.yml` at `refs/heads/dev`, so renaming a workflow must
+    update them.
+    """
+    text = " ".join((ROOT / "docs" / "operations.md").read_text().split())
+    workflows = re.findall(r"trs-filer/\.github/workflows/([a-z-]+\.yml)", text)
+    assert sorted(set(workflows)) == ["ci.yml", "release.yml"]
+    assert all((WORKFLOWS / workflow).is_file() for workflow in workflows)
+    release = "trs-filer/.github/workflows/release.yml"
+    assert text.count(f"{release}@refs/tags/v{{{{ version }}}}") == 2
+    assert text.count(f"--signer-workflow elixir-cloud-aai/{release}") == 2
+    assert text.count("--source-ref refs/tags/v{{ version }}") == 2
+    assert "trs-filer/.github/workflows/ci.yml@refs/heads/dev" in text
+    assert "--source-ref refs/heads/dev" in text
 
 
 def test_shared_actions_pinned() -> None:
