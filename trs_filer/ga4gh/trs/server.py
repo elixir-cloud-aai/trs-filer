@@ -4,7 +4,7 @@ import inspect
 from io import BytesIO
 import logging
 from typing import Any
-from urllib.parse import unquote
+from urllib.parse import unquote, urlencode
 from zipfile import ZIP_DEFLATED, ZipFile
 
 from flask import Response, request, send_file
@@ -122,6 +122,7 @@ def toolsGet(
     alias: str | None = None,
     toolClass: str | None = None,
     descriptorType: str | None = None,
+    tags: list[str] | None = None,
     registry: str | None = None,
     organization: str | None = None,
     name: str | None = None,
@@ -142,6 +143,8 @@ def toolsGet(
         alias: Return only entries with the given alias.
         toolClass: Return only entries with the given subclass name.
         descriptorType: Return only entries with the given descriptor type.
+        tags: Filter by registry-specific tags of the specification; not
+            supported, as tools have no tags.
         registry: Return only entries from the given registry.
         organization: Return only entries from the given organization.
         name: Return only entries with the given image name.
@@ -160,11 +163,17 @@ def toolsGet(
         `last_page` (the page in the sequence of pages from `offset` that has
         the last tool; if `offset` is beyond the last tool, the last page of
         the sequence from 0) and `next_page` (only if there are more tools).
+        The links to pages keep the other query parameters of the request.
 
     Raises:
-        BadRequest: The offset is not a non-negative integer, or the limit is
-            below 1.
+        BadRequest: The offset is not a non-negative integer, the limit is
+            below 1, or `tags` are given.
     """
+    # deliberately refused (not ignored): tools have no tags to filter by
+    if tags is not None:
+        logger.error("Filtering tools by tags is not supported.")
+        raise BadRequest
+
     # set filters; those of versions apply to the same version, those of
     # images to the same image of that version
     filt: dict[str, Any] = {}
@@ -188,9 +197,9 @@ def toolsGet(
     if name is not None:
         image_filt["image_name"] = name
     version_filt: dict[str, Any] = {}
-    if descriptorType:
+    if descriptorType is not None:
         version_filt["descriptor_type"] = descriptorType
-    if author:
+    if author is not None:
         version_filt["author"] = author
     if image_filt:
         version_filt["images"] = {"$elemMatch": image_filt}
@@ -216,7 +225,8 @@ def toolsGet(
             filter=filt,
             projection={"_id": False},
         )
-        # Sort by object ID (+/- oldest to newest)
+        # Sort by object ID: roughly the order in which tools were added
+        # (see `docs/api.md`); stable, so that pages don't overlap
         .sort("_id", 1)
         .skip(offset_int)
         .limit(limit)
@@ -229,20 +239,37 @@ def toolsGet(
                 if "files" in _version:
                     del _version["files"]
 
-    # links to pages; the last page is the one with the last tool, in steps
-    # of `limit` from the offset (as `next_page`), or else from 0
+    # links to pages, with the other query parameters of the request; the
+    # last page is the one with the last tool, in steps of `limit` from the
+    # offset (as `next_page`), or else from 0
+    query = [
+        (key, value)
+        for key, value in request.args.items(multi=True)
+        if key not in ("offset", "limit")
+    ]
+
+    def page_link(page_offset: int) -> str:
+        """Get the link to the page from an offset.
+
+        Args:
+            page_offset: Offset of the page.
+
+        Returns:
+            URL of the page.
+        """
+        params = urlencode([*query, ("offset", page_offset), ("limit", limit)])
+        return f"{request.base_url}?{params}"
+
     start = offset_int if offset_int < total else 0
     last_offset = start + max(total - 1 - start, 0) // limit * limit
     headers: dict[str, Any] = {
-        "last_page": f"{request.base_url}?offset={last_offset}&limit={limit}",
+        "last_page": page_link(last_offset),
         "self_link": f"{request.url}",
         "current_offset": str(offset_int),
         "current_limit": limit,
     }
     if offset_int + limit < total:
-        headers["next_page"] = (
-            f"{request.base_url}?offset={offset_int + limit}&limit={limit}"
-        )
+        headers["next_page"] = page_link(offset_int + limit)
 
     return records, 200, headers
 

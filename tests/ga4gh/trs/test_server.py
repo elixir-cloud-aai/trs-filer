@@ -16,6 +16,7 @@ from connexion import App
 from flask.testing import FlaskClient
 from pymongo import MongoClient
 from pymongo.collection import Collection
+from pymongo.errors import DuplicateKeyError
 from pymongo.results import UpdateResult
 import pytest
 
@@ -31,6 +32,7 @@ from trs_filer.app import create_app
 from trs_filer.custom_config import RemoteFilesConfig
 from trs_filer.errors.exceptions import RemoteFileError
 from trs_filer.ga4gh.trs import server
+from trs_filer.ga4gh.trs.endpoints.register_objects import RegisterTool
 from trs_filer.remote_files import RemoteFile
 from trs_filer.utils import DB, get_custom_config
 
@@ -421,6 +423,120 @@ def test_toolsGet_filters_same_version(
     assert [tool["id"] for tool in response.get_json()] == [TOOL_ID]
     response = client.get(f"{BASE_PATH}/tools?descriptorType=WDL&author=author")
     assert response.get_json() == []
+
+
+def test_toolsGet_pagination_filters(
+    client: FlaskClient, tool: dict[str, Any], tools: Collection[dict[str, Any]]
+) -> None:
+    """Links to pages keep the filters of the request.
+
+    Args:
+        client: Test client.
+        tool: Registered tool.
+        tools: Collection `tools`.
+    """
+    for tool_id, name in [("TOOL02", "other"), ("TOOL03", tool["name"])]:
+        data = deepcopy(MOCK_TOOL_VERSION_ID)
+        data["name"] = name
+        response = client.put(f"{BASE_PATH}/tools/{tool_id}", json=data)
+        assert response.status_code == 200
+    base_url = f"http://localhost{BASE_PATH}/tools"
+    response = client.get(
+        f"{BASE_PATH}/tools",
+        query_string={"toolname": tool["name"], "checker": "true", "limit": 1},
+    )
+    assert [item["id"] for item in response.get_json()] == [TOOL_ID]
+    query = f"toolname={tool['name']}&checker=true"
+    assert response.headers["next_page"] == f"{base_url}?{query}&offset=1&limit=1"
+    assert response.headers["last_page"] == f"{base_url}?{query}&offset=1&limit=1"
+    response = client.get(response.headers["next_page"])
+    assert [item["id"] for item in response.get_json()] == ["TOOL03"]
+    assert "next_page" not in response.headers
+    # replaced tools keep their place
+    response = client.put(
+        f"{BASE_PATH}/tools/{TOOL_ID}", json=deepcopy(MOCK_TOOL_VERSION_ID)
+    )
+    assert response.status_code == 200
+    response = client.get(f"{BASE_PATH}/tools")
+    assert [item["id"] for item in response.get_json()] == [
+        TOOL_ID,
+        "TOOL02",
+        "TOOL03",
+    ]
+
+
+def test_toolsGet_pagination_filters_encoded(
+    client: FlaskClient, tool: dict[str, Any]
+) -> None:
+    """Filter values in links to pages are percent-encoded.
+
+    Args:
+        client: Test client.
+        tool: Registered tool.
+    """
+    response = client.get(
+        f"{BASE_PATH}/tools", query_string={"description": "a&b=c d", "offset": 3}
+    )
+    assert response.status_code == 200
+    assert response.headers["last_page"] == (
+        f"http://localhost{BASE_PATH}/tools?description=a%26b%3Dc+d&offset=0&limit=1000"
+    )
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        "id=",
+        "alias=",
+        "toolClass=",
+        "registry=",
+        "organization=",
+        "name=",
+        "toolname=",
+        "description=",
+        "author=",
+    ],
+)
+def test_toolsGet_filters_empty(
+    client: FlaskClient, tool: dict[str, Any], query: str
+) -> None:
+    """Empty filter values match only empty values, as other values do.
+
+    Args:
+        client: Test client.
+        tool: Registered tool.
+        query: Query string with an empty filter value.
+    """
+    response = client.get(f"{BASE_PATH}/tools?{query}")
+    assert response.status_code == 200
+    assert response.get_json() == []
+
+
+def test_toolsGet_filters_empty_descriptor_type(
+    client: FlaskClient, tool: dict[str, Any]
+) -> None:
+    """An empty descriptor type is not a valid descriptor type.
+
+    Args:
+        client: Test client.
+        tool: Registered tool.
+    """
+    response = client.get(f"{BASE_PATH}/tools?descriptorType=")
+    assert response.status_code == 400
+
+
+@pytest.mark.parametrize("query", ["tags=a", "tags=a,b", "tags=a&tags=b", "tags="])
+def test_toolsGet_tags(client: FlaskClient, tool: dict[str, Any], query: str) -> None:
+    """The filter `tags` is not supported and refused.
+
+    Args:
+        client: Test client.
+        tool: Registered tool.
+        query: Query string with tags.
+    """
+    response = client.get(f"{BASE_PATH}/tools?{query}")
+    assert response.status_code == 400
+    assert response.get_json() == BAD_REQUEST
 
 
 # GET /tools/{id}
@@ -1051,6 +1167,138 @@ def test_tool_class_kept(
     response = client.put(f"{BASE_PATH}/tools/TOOL03", json=data)
     assert response.status_code == 200
     assert _stored(toolclasses, "other") == {**data["toolclass"], "id": "other"}
+
+
+@pytest.mark.parametrize("name", ["concurrent", MOCK_TOOL_CLASS["name"]])
+def test_tool_class_created_concurrently(
+    client: FlaskClient,
+    tools: Collection[dict[str, Any]],
+    toolclasses: Collection[dict[str, Any]],
+    monkeypatch: pytest.MonkeyPatch,
+    name: str,
+) -> None:
+    """Tools store the tool class that was created, also if another one was.
+
+    Another registration creates the tool class after the tool checked that
+    it doesn't exist, and before the tool creates it.
+
+    Args:
+        client: Test client.
+        tools: Collection `tools`.
+        toolclasses: Collection `toolclasses`.
+        monkeypatch: Patch of the creation of tool classes.
+        name: Name of the other tool class (other than that of the tool, or
+            the same).
+    """
+    concurrent = {**MOCK_TOOL_CLASS, "name": name}
+    create = RegisterTool._create_tool_class
+
+    def _create(self: RegisterTool) -> None:
+        """Create another tool class with the same identifier first.
+
+        Args:
+            self: Registration of the tool.
+        """
+        toolclasses.insert_one(dict(concurrent))
+        create(self)
+
+    monkeypatch.setattr(RegisterTool, "_create_tool_class", _create)
+    response = client.put(
+        f"{BASE_PATH}/tools/{TOOL_ID}", json=deepcopy(MOCK_TOOL_VERSION_ID)
+    )
+    assert response.status_code == 200
+    assert _stored(toolclasses, MOCK_TOOL_CLASS["id"]) == concurrent
+    assert _stored(tools, TOOL_ID)["toolclass"] == concurrent
+
+
+def test_tool_class_created_concurrently_duplicate_key(
+    client: FlaskClient,
+    tools: Collection[dict[str, Any]],
+    toolclasses: Collection[dict[str, Any]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Tools store the tool class of a concurrent upsert that won.
+
+    The upsert of the tool class fails with a duplicate key, as another
+    upsert of the same identifier inserted it at the same time.
+
+    Args:
+        client: Test client.
+        tools: Collection `tools`.
+        toolclasses: Collection `toolclasses`.
+        monkeypatch: Patch of the creation of tool classes.
+    """
+    concurrent = {**MOCK_TOOL_CLASS, "name": "concurrent"}
+    create = RegisterTool._create_tool_class
+
+    def _update_one(*args: Any, **kwargs: Any) -> NoReturn:
+        """Fail as a concurrent upsert of the same identifier.
+
+        Args:
+            *args: Positional arguments of `update_one()`.
+            **kwargs: Keyword arguments of `update_one()`.
+
+        Raises:
+            DuplicateKeyError: Always.
+        """
+        raise DuplicateKeyError("E11000 duplicate key error")
+
+    def _create(self: RegisterTool) -> None:
+        """Create another tool class, and fail to upsert the tool's one.
+
+        Args:
+            self: Registration of the tool.
+        """
+        toolclasses.insert_one(dict(concurrent))
+        monkeypatch.setattr(self.db_coll_classes, "update_one", _update_one)
+        create(self)
+
+    monkeypatch.setattr(RegisterTool, "_create_tool_class", _create)
+    response = client.put(
+        f"{BASE_PATH}/tools/{TOOL_ID}", json=deepcopy(MOCK_TOOL_VERSION_ID)
+    )
+    assert response.status_code == 200
+    assert _stored(tools, TOOL_ID)["toolclass"] == concurrent
+
+
+def test_tool_class_created_concurrently_replaced(
+    client: FlaskClient,
+    tools: Collection[dict[str, Any]],
+    toolclasses: Collection[dict[str, Any]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Tools replaced in the meantime keep the tool class they were sent with.
+
+    Another registration creates the tool class after the tool checked that
+    it doesn't exist, and another one replaces the tool, with another tool
+    class, before the tool creates its tool class.
+
+    Args:
+        client: Test client.
+        tools: Collection `tools`.
+        toolclasses: Collection `toolclasses`.
+        monkeypatch: Patch of the creation of tool classes.
+    """
+    concurrent = {**MOCK_TOOL_CLASS, "name": "concurrent"}
+    replaced = {**MOCK_TOOL_CLASS, "id": "other"}
+    create = RegisterTool._create_tool_class
+
+    def _create(self: RegisterTool) -> None:
+        """Create another tool class and replace the tool's one first.
+
+        Args:
+            self: Registration of the tool.
+        """
+        toolclasses.insert_one(dict(concurrent))
+        tools.update_one({"id": TOOL_ID}, {"$set": {"toolclass": replaced}})
+        create(self)
+
+    monkeypatch.setattr(RegisterTool, "_create_tool_class", _create)
+    response = client.put(
+        f"{BASE_PATH}/tools/{TOOL_ID}", json=deepcopy(MOCK_TOOL_VERSION_ID)
+    )
+    assert response.status_code == 200
+    assert _stored(tools, TOOL_ID)["toolclass"] == replaced
 
 
 def test_tool_new_ids(
