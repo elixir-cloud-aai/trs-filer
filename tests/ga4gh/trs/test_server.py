@@ -1541,55 +1541,177 @@ def test_toolVersion_new_ids(
     assert versions[1]["url"] == f"{TOOL_URL}/versions/other"
 
 
-@pytest.mark.parametrize("enabled", [True, False])
-def test_tool_meta_version_on_version_change(
-    mongo_client: MongoClient[dict[str, Any]], overlay: Path, enabled: bool
-) -> None:
-    """Adding, replacing and deleting versions increments the tool's meta version.
+def _meta_version_client(
+    overlay: Path, enabled: bool, increment: int = 1
+) -> FlaskClient:
+    """Get a test client with a tool, and the tool meta version option set.
 
-    Unless `custom.tool.meta_version.on_version_change` is `false`; requests
-    that fail don't change it.
+    Args:
+        overlay: Config overlay.
+        enabled: Value of `custom.tool.meta_version.on_version_change`.
+        increment: Value of `custom.tool.meta_version.increment`.
+
+    Returns:
+        Test client of an app with the tool `TOOL_ID` (meta version 1, one
+        version).
+    """
+    overlay.write_text(
+        "custom:\n  tool:\n    meta_version:\n"
+        f"      increment: {increment}\n"
+        f"      on_version_change: {str(enabled).lower()}\n"
+    )
+    client = create_app().app.test_client()
+    assert get_custom_config().tool.meta_version.on_version_change is enabled
+    response = client.put(
+        f"{BASE_PATH}/tools/{TOOL_ID}", json=deepcopy(MOCK_TOOL_VERSION_ID)
+    )
+    assert response.status_code == 200
+    return client
+
+
+def _tool_meta_version(mongo_client: MongoClient[dict[str, Any]]) -> str:
+    """Get the stored meta version of the tool `TOOL_ID`.
+
+    Args:
+        mongo_client: MongoDB client.
+
+    Returns:
+        The meta version.
+    """
+    return _stored(mongo_client[DB]["tools"], TOOL_ID)["meta_version"]
+
+
+def test_tool_meta_version_on_version_change_default(client: FlaskClient) -> None:
+    """Version changes increment the tool's meta version by default.
+
+    Args:
+        client: Test client (of an app with the default config).
+    """
+    assert get_custom_config().tool.meta_version.on_version_change is True
+
+
+@pytest.mark.parametrize(("enabled", "expected"), [(True, "2"), (False, "1")])
+@pytest.mark.parametrize("version_id", [None, "other"])
+def test_tool_meta_version_version_added(
+    mongo_client: MongoClient[dict[str, Any]],
+    overlay: Path,
+    enabled: bool,
+    expected: str,
+    version_id: str | None,
+) -> None:
+    """Adding a version increments the tool's meta version, if enabled.
 
     Args:
         mongo_client: MongoDB client.
         overlay: Config overlay.
         enabled: Whether the option is on.
+        expected: Expected meta version of the tool.
+        version_id: Identifier of the version (`PUT`), or `None` (`POST`).
     """
-    if not enabled:
-        overlay.write_text(
-            "custom:\n  tool:\n    meta_version:\n      on_version_change: false\n"
-        )
-    client = create_app().app.test_client()
-    assert get_custom_config().tool.meta_version.on_version_change is enabled
-    tools = mongo_client[DB]["tools"]
-    versions_path = f"{BASE_PATH}/tools/{TOOL_ID}/versions"
-    response = client.put(
-        f"{BASE_PATH}/tools/{TOOL_ID}", json=deepcopy(MOCK_TOOL_VERSION_ID)
-    )
-    assert response.status_code == 200
-    meta_versions = []
-    requests = [
-        ("post", versions_path, MOCK_VERSION_NO_ID, 200),
-        ("put", f"{versions_path}/other", MOCK_VERSION_NO_ID, 200),
-        ("put", VERSION_PATH, MOCK_VERSION_NO_ID, 200),
-        ("delete", f"{versions_path}/other", None, 200),
-        ("delete", f"{versions_path}/{UNKNOWN}", None, 404),
-        ("put", f"{BASE_PATH}/tools/{UNKNOWN}/versions/other", MOCK_VERSION_NO_ID, 404),
-    ]
-    for method, path, data, status in requests:
-        kwargs = {} if data is None else {"json": deepcopy(data)}
-        response = getattr(client, method)(path, **kwargs)
-        assert response.status_code == status
-        meta_versions.append(_stored(tools, TOOL_ID)["meta_version"])
-    if enabled:
-        assert meta_versions == ["2", "3", "4", "5", "5", "5"]
+    client = _meta_version_client(overlay, enabled)
+    path = f"{BASE_PATH}/tools/{TOOL_ID}/versions"
+    if version_id is None:
+        response = client.post(path, json=deepcopy(MOCK_VERSION_NO_ID))
     else:
-        assert meta_versions == ["1"] * 6
-    # replacing the tool increments it as before
-    response = client.put(
-        f"{BASE_PATH}/tools/{TOOL_ID}", json=deepcopy(MOCK_TOOL_VERSION_ID)
+        response = client.put(f"{path}/{version_id}", json=deepcopy(MOCK_VERSION_NO_ID))
+    assert response.status_code == 200
+    assert _tool_meta_version(mongo_client) == expected
+
+
+@pytest.mark.parametrize(("enabled", "expected"), [(True, "2"), (False, "1")])
+def test_tool_meta_version_version_replaced(
+    mongo_client: MongoClient[dict[str, Any]],
+    overlay: Path,
+    enabled: bool,
+    expected: str,
+) -> None:
+    """Replacing a version increments the tool's meta version, if enabled.
+
+    Args:
+        mongo_client: MongoDB client.
+        overlay: Config overlay.
+        enabled: Whether the option is on.
+        expected: Expected meta version of the tool.
+    """
+    client = _meta_version_client(overlay, enabled)
+    response = client.put(VERSION_PATH, json=deepcopy(MOCK_VERSION_NO_ID))
+    assert response.status_code == 200
+    assert _tool_meta_version(mongo_client) == expected
+    assert (
+        _stored(mongo_client[DB]["tools"], TOOL_ID)["versions"][0]["meta_version"]
+        == "2"
     )
-    assert _stored(tools, TOOL_ID)["meta_version"] == ("6" if enabled else "2")
+
+
+@pytest.mark.parametrize(("enabled", "expected"), [(True, "3"), (False, "1")])
+def test_tool_meta_version_version_deleted(
+    mongo_client: MongoClient[dict[str, Any]],
+    overlay: Path,
+    enabled: bool,
+    expected: str,
+) -> None:
+    """Deleting a version increments the tool's meta version, if enabled.
+
+    Args:
+        mongo_client: MongoDB client.
+        overlay: Config overlay.
+        enabled: Whether the option is on.
+        expected: Expected meta version of the tool (after adding a version
+            and deleting it).
+    """
+    client = _meta_version_client(overlay, enabled)
+    path = f"{BASE_PATH}/tools/{TOOL_ID}/versions/other"
+    response = client.put(path, json=deepcopy(MOCK_VERSION_NO_ID))
+    assert response.status_code == 200
+    response = client.delete(path)
+    assert response.status_code == 200
+    assert _tool_meta_version(mongo_client) == expected
+
+
+def test_tool_meta_version_failed_requests(
+    mongo_client: MongoClient[dict[str, Any]], overlay: Path
+) -> None:
+    """Version changes that fail don't change the tool's meta version.
+
+    Args:
+        mongo_client: MongoDB client.
+        overlay: Config overlay.
+    """
+    client = _meta_version_client(overlay, enabled=True)
+    path = f"{BASE_PATH}/tools/{TOOL_ID}/versions"
+    requests = [
+        ("DELETE", VERSION_PATH, None, 400),
+        ("DELETE", f"{path}/{UNKNOWN}", None, 404),
+        ("POST", path, {"files": "none"}, 400),
+        ("PUT", VERSION_PATH, {"files": "none"}, 400),
+    ]
+    for method, request_path, data, status in requests:
+        response = client.open(request_path, method=method, json=data)
+        assert response.status_code == status
+        assert _tool_meta_version(mongo_client) == "1"
+
+
+def test_tool_meta_version_increment(
+    mongo_client: MongoClient[dict[str, Any]], overlay: Path
+) -> None:
+    """Version changes add the configured increment to the tool's meta version.
+
+    Stored meta versions that are not integers restart at the initial value.
+
+    Args:
+        mongo_client: MongoDB client.
+        overlay: Config overlay.
+    """
+    client = _meta_version_client(overlay, enabled=True, increment=5)
+    response = client.put(VERSION_PATH, json=deepcopy(MOCK_VERSION_NO_ID))
+    assert response.status_code == 200
+    assert _tool_meta_version(mongo_client) == "6"
+    mongo_client[DB]["tools"].update_one(
+        {"id": TOOL_ID}, {"$set": {"meta_version": "invalid"}}
+    )
+    response = client.put(VERSION_PATH, json=deepcopy(MOCK_VERSION_NO_ID))
+    assert response.status_code == 200
+    assert _tool_meta_version(mongo_client) == "1"
 
 
 # DELETE /tools/{id}/versions/{version_id}

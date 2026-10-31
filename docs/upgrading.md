@@ -69,13 +69,12 @@ drop it if you like.
 - Replacing tools and versions increments their `meta_version` (it stayed
   at the initial value), as configured in
   `custom.tool.meta_version.increment` and
-  `custom.version.meta_version.increment`; see [Meta
-  versions](configuration.md#meta-versions).
-- Adding, replacing or deleting a version also increments the
-  `meta_version` of its tool (it changed only when the tool was replaced),
-  so clients see that the tool changed. Set
+  `custom.version.meta_version.increment`. Adding, replacing or deleting a
+  version also increments the `meta_version` of its tool, so clients see
+  that the tool changed; set
   `custom.tool.meta_version.on_version_change: false` to keep the tool's
-  meta version unchanged on version changes.
+  meta version unchanged on version changes. See [Meta
+  versions](configuration.md#meta-versions).
 - Deleting the last version of a tool gives `400 Bad Request`; delete the
   tool instead.
 - Versions without `is_production` are registered as non-production

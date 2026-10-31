@@ -42,6 +42,10 @@ def tool_meta_version_change(
 ) -> dict[str, str]:
     """Get the change of a tool's meta version when one of its versions changes.
 
+    The next meta version is computed from the stored one, not atomically
+    with the update that sets it: concurrent changes of the tool may give it
+    the same or an earlier meta version (see `docs/configuration.md`).
+
     Args:
         db_coll_tools: Database collection for storing tool objects.
         tool_id: Tool identifier.
