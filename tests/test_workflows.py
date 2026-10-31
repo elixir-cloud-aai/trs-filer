@@ -24,9 +24,9 @@ def _load(path: Path) -> dict[str, Any]:
 
 
 def test_workflow_files() -> None:
-    """The workflows are `ci.yml` and `release.yml`."""
+    """The workflows are `ci.yml`, `release.yml` and `scan.yml`."""
     names = {path.name: _load(path)["name"] for path in WORKFLOWS.iterdir()}
-    assert names == {"ci.yml": "CI", "release.yml": "Release"}
+    assert names == {"ci.yml": "CI", "release.yml": "Release", "scan.yml": "Scan"}
 
 
 def test_job_names_unique() -> None:
@@ -87,7 +87,110 @@ def test_secrets_in_environments() -> None:
 
 
 def test_image_name() -> None:
-    """Both workflows publish the same image, of `DOCKERHUB_ORG`."""
+    """The workflows publish and scan the same image, of `DOCKERHUB_ORG`."""
     expected = "docker.io/${{ vars.DOCKERHUB_ORG || 'elixircloud' }}/trs-filer"
-    for name in ("ci.yml", "release.yml"):
+    for name in ("ci.yml", "release.yml", "scan.yml"):
         assert _load(WORKFLOWS / name)["env"]["IMAGE_NAME"] == expected
+
+
+def _steps(job: dict[str, Any], action: str) -> list[dict[str, Any]]:
+    """Get the steps of a job that use an action.
+
+    Args:
+        job: The job.
+        action: The action, without its ref (e.g., `actions/checkout`).
+
+    Returns:
+        The steps that use the action.
+    """
+    return [
+        step
+        for step in job.get("steps", [])
+        if step.get("uses", "").startswith(f"{action}@")
+    ]
+
+
+SCAN_ACTION = "elixir-cloud-aai/.github/actions/scan-image"
+
+
+def test_scan_jobs() -> None:
+    """Images are scanned in jobs without credentials or signing identity.
+
+    The Trivy action resolves the Trivy binary at run time, so the jobs that
+    run it have no environment (and so no Docker Hub secrets), no secrets
+    and no permissions beyond reading the repository and uploading to code
+    scanning. Each workflow has exactly one such job, `scan`.
+    """
+    for path in sorted(WORKFLOWS.glob("*.yml")):
+        jobs = _load(path)["jobs"]
+        scanning = [name for name, job in jobs.items() if _steps(job, SCAN_ACTION)]
+        assert scanning == ["scan"], path.name
+        job = jobs["scan"]
+        assert "environment" not in job, path.name
+        assert "secrets." not in yaml.safe_dump(job), path.name
+        assert set(job["permissions"].items()) <= {
+            ("contents", "read"),
+            ("security-events", "write"),
+        }, path.name
+
+
+def test_publish_after_scan() -> None:
+    """Images are attested, signed and tagged only after the scan passed.
+
+    `push` pushes the image by digest with SBOM and provenance attestations;
+    `publish` needs `scan` (which scans that digest), attests the digest's
+    build provenance and signs it (keyless, with the job's OIDC token)
+    before it tags it.
+    """
+    for name in ("ci.yml", "release.yml"):
+        jobs = _load(WORKFLOWS / name)["jobs"]
+        assert "push" in jobs["scan"]["needs"], name
+        assert "scan" in jobs["publish"]["needs"], name
+        (build,) = _steps(jobs["push"], "docker/build-push-action")
+        assert build["with"]["sbom"] is True, name
+        assert build["with"]["provenance"] == "mode=max", name
+        publish = jobs["publish"]
+        assert publish["permissions"]["id-token"] == "write", name
+        assert publish["permissions"]["attestations"] == "write", name
+        steps = [step["name"] for step in publish["steps"]]
+        (attest, *_) = _steps(publish, "actions/attest-build-provenance")
+        assert attest["with"]["subject-digest"] == "${{ env.DIGEST }}", name
+        assert attest["with"]["push-to-registry"] is True, name
+        assert steps.index("Attest build provenance") < steps.index("Tag image")
+        assert steps.index("Sign image") < steps.index("Tag image")
+
+
+def test_release_chart_signed() -> None:
+    """The release workflow attests and signs the chart before the release.
+
+    The Sigstore bundles (`<chart>.tgz.sigstore.json`) are written to
+    `dist/`, so that they are uploaded with the chart.
+    """
+    publish = _load(WORKFLOWS / "release.yml")["jobs"]["publish"]
+    steps = {step["name"]: step for step in publish["steps"]}
+    assert steps["Attest chart provenance"]["with"]["subject-path"] == "dist/*.tgz"
+    assert '--bundle "${chart}.sigstore.json"' in steps["Sign chart"]["run"]
+    names = list(steps)
+    assert names.index("Sign chart") < names.index("Create release")
+
+
+def test_shared_actions_pinned() -> None:
+    """The shared actions of `elixir-cloud-aai/.github` are pinned alike.
+
+    All pins name the same full commit SHA and, in a comment, its release
+    (`@<sha> # vX.Y.Z`), so that Dependabot bumps them together. Whether the
+    commit is the release's commit isn't checked here (no network in the
+    tests).
+    """
+    pin = re.compile(
+        r"uses: elixir-cloud-aai/\.github/actions/[a-z-]+"
+        r"@([0-9a-f]{40}) # (v\d+\.\d+\.\d+)$"
+    )
+    pins: set[tuple[str, str]] = set()
+    for path in sorted(WORKFLOWS.glob("*.yml")):
+        for line in path.read_text(encoding="utf-8").splitlines():
+            if "uses: elixir-cloud-aai/.github/" in line:
+                match = pin.search(line)
+                assert match, (path.name, line.strip())
+                pins.add((match[1], match[2]))
+    assert len(pins) == 1, pins
