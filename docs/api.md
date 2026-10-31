@@ -38,8 +38,11 @@ The service info reports TRS version 2.0.1 (`type.version`).
 `GET /tools` returns the tools that match all given filters. Filters of
 versions (`descriptorType`, `author`) must match the same version of a tool,
 and filters of images (`registry`, `name`) the same image of that version.
+Empty values of `descriptorType` and `author` are ignored, and so is the
+filter `tags` of the specification, which TRS-Filer doesn't support.
 
-Tools are listed in the order they were added, one page at a time:
+Tools are listed in the order of their database identifiers (roughly the
+order they were added), one page at a time:
 
 - `offset` (default 0) is the index of the first tool of the page, and
   `limit` (default 1000) the number of tools per page. Limits above 1000 are
@@ -56,6 +59,13 @@ Tools are listed in the order they were added, one page at a time:
 For example, with 25 tools, `GET /tools?offset=5&limit=10` returns the tools
 at indices 5 to 14 (counting from 0), with `next_page` and `last_page` both
 at offset 15 (indices 15 to 24).
+
+!!! note
+    Known issues: the links of `next_page` and `last_page` have only `offset`
+    and `limit`, not the filters of the request: add them again when you
+    follow the links. See the [issue
+    tracker](https://github.com/elixir-cloud-aai/trs-filer/issues/179) for
+    these and the issues above.
 
 ## Registering tools
 

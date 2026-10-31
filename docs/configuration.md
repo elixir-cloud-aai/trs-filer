@@ -109,6 +109,13 @@ updated when a tool class is replaced (`PUT /toolClasses/{id}`); register
 the tools again to update them. The `toolClass` filter of `GET /tools` uses
 the copies.
 
+!!! note
+    Known issue: if tools with the same new tool class identifier but
+    different tool classes are registered at the same time, the tool class
+    of the first one is created, and the others keep the tool class they
+    were sent with (see the [issue
+    tracker](https://github.com/elixir-cloud-aai/trs-filer/issues/179)).
+
 ## Remote files
 
 Files of tool versions are registered with their content (`content`) or a
