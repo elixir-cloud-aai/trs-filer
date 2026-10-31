@@ -93,7 +93,8 @@ clients that an object changed), set in `custom.tool.meta_version` and
 Replacements with identical content increment the meta versions, too.
 Concurrent changes of the same object may give it the same meta version,
 or, for tools whose versions change at the same time, set it back to an
-earlier value. Tool classes have none (`custom.toolclass.meta_version` is unused).
+earlier value. Tool classes have none (`custom.toolclass.meta_version` is
+unused).
 
 ## Tool classes
 

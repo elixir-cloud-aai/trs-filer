@@ -1581,13 +1581,22 @@ def _tool_meta_version(mongo_client: MongoClient[dict[str, Any]]) -> str:
     return _stored(mongo_client[DB]["tools"], TOOL_ID)["meta_version"]
 
 
-def test_tool_meta_version_on_version_change_default(client: FlaskClient) -> None:
+def test_tool_meta_version_on_version_change_default(
+    client: FlaskClient, tool: dict[str, Any], tools: Collection[dict[str, Any]]
+) -> None:
     """Version changes increment the tool's meta version by default.
 
     Args:
         client: Test client (of an app with the default config).
+        tool: Registered tool.
+        tools: Collection `tools`.
     """
     assert get_custom_config().tool.meta_version.on_version_change is True
+    response = client.post(
+        f"{BASE_PATH}/tools/{TOOL_ID}/versions", json=deepcopy(MOCK_VERSION_NO_ID)
+    )
+    assert response.status_code == 200
+    assert _stored(tools, TOOL_ID)["meta_version"] == "2"
 
 
 @pytest.mark.parametrize(("enabled", "expected"), [(True, "2"), (False, "1")])
@@ -1626,6 +1635,8 @@ def test_tool_meta_version_version_replaced(
     expected: str,
 ) -> None:
     """Replacing a version increments the tool's meta version, if enabled.
+
+    The version's own meta version is incremented in either case.
 
     Args:
         mongo_client: MongoDB client.
@@ -1679,11 +1690,18 @@ def test_tool_meta_version_failed_requests(
     """
     client = _meta_version_client(overlay, enabled=True)
     path = f"{BASE_PATH}/tools/{TOOL_ID}/versions"
+    # valid by the schema, but refused by the controller: production
+    # versions need checksums
+    invalid = deepcopy(MOCK_VERSION_NO_ID)
+    invalid["is_production"] = True
+    for file in invalid["files"]:
+        file["file_wrapper"].pop("checksum", None)
     requests = [
         ("DELETE", VERSION_PATH, None, 400),
         ("DELETE", f"{path}/{UNKNOWN}", None, 404),
-        ("POST", path, {"files": "none"}, 400),
-        ("PUT", VERSION_PATH, {"files": "none"}, 400),
+        ("POST", path, invalid, 400),
+        ("PUT", VERSION_PATH, invalid, 400),
+        ("PUT", f"{path}/other", invalid, 400),
     ]
     for method, request_path, data, status in requests:
         response = client.open(request_path, method=method, json=data)
