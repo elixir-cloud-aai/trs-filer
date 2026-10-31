@@ -182,6 +182,8 @@ def test_release_chart_signed() -> None:
     # The downloaded chart is the one of `prepare`, checked before signing
     check = steps["Check chart"]
     assert check["env"]["SHA256"] == "${{ needs.prepare.outputs.chart_sha256 }}"
+    assert '[[ ! "${SHA256}" =~ ^[0-9a-f]{64}$ ]]' in check["run"]
+    assert '"${#files[@]}" -ne 1' in check["run"]
     assert "sha256sum --check --strict" in check["run"]
     assert names.index("Download chart") < names.index("Check chart")
     assert names.index("Check chart") < names.index("Attest chart provenance")

@@ -362,8 +362,9 @@ jobs:
         with:
           name: chart
           path: dist/
-      # The artifact is the chart that `prepare` packaged (and not one that
-      # replaced it in the same run, e.g., from `scan`) before it is attested,
+      # The artifact is the chart that `prepare` packaged, not one that
+      # replaced it between `prepare` and `publish` (any job of the run can
+      # overwrite artifacts with the run's token), before it is attested,
       # signed and released: a single file, with the checksum of `prepare`
       - name: Check chart
         env:
