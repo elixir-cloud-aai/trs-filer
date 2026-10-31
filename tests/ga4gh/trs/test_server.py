@@ -444,13 +444,24 @@ def test_toolsGet_pagination_filters(
         f"{BASE_PATH}/tools",
         query_string={"toolname": tool["name"], "checker": "true", "limit": 1},
     )
-    assert [tool["id"] for tool in response.get_json()] == [TOOL_ID]
+    assert [item["id"] for item in response.get_json()] == [TOOL_ID]
     query = f"toolname={tool['name']}&checker=true"
     assert response.headers["next_page"] == f"{base_url}?{query}&offset=1&limit=1"
     assert response.headers["last_page"] == f"{base_url}?{query}&offset=1&limit=1"
     response = client.get(response.headers["next_page"])
-    assert [tool["id"] for tool in response.get_json()] == ["TOOL03"]
+    assert [item["id"] for item in response.get_json()] == ["TOOL03"]
     assert "next_page" not in response.headers
+    # replaced tools keep their place
+    response = client.put(
+        f"{BASE_PATH}/tools/{TOOL_ID}", json=deepcopy(MOCK_TOOL_VERSION_ID)
+    )
+    assert response.status_code == 200
+    response = client.get(f"{BASE_PATH}/tools")
+    assert [item["id"] for item in response.get_json()] == [
+        TOOL_ID,
+        "TOOL02",
+        "TOOL03",
+    ]
 
 
 def test_toolsGet_pagination_filters_encoded(
@@ -513,7 +524,7 @@ def test_toolsGet_filters_empty_descriptor_type(
     assert response.status_code == 400
 
 
-@pytest.mark.parametrize("query", ["tags=a", "tags=a,b"])
+@pytest.mark.parametrize("query", ["tags=a", "tags=a,b", "tags=a&tags=b", "tags="])
 def test_toolsGet_tags(client: FlaskClient, tool: dict[str, Any], query: str) -> None:
     """The filter `tags` is not supported and refused.
 
@@ -1197,6 +1208,46 @@ def test_tool_class_created_concurrently(
     assert response.status_code == 200
     assert _stored(toolclasses, MOCK_TOOL_CLASS["id"]) == concurrent
     assert _stored(tools, TOOL_ID)["toolclass"] == concurrent
+
+
+def test_tool_class_created_concurrently_replaced(
+    client: FlaskClient,
+    tools: Collection[dict[str, Any]],
+    toolclasses: Collection[dict[str, Any]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Tools replaced in the meantime keep the tool class they were sent with.
+
+    Another registration creates the tool class after the tool checked that
+    it doesn't exist, and another one replaces the tool, with another tool
+    class, before the tool creates its tool class.
+
+    Args:
+        client: Test client.
+        tools: Collection `tools`.
+        toolclasses: Collection `toolclasses`.
+        monkeypatch: Patch of the creation of tool classes.
+    """
+    concurrent = {**MOCK_TOOL_CLASS, "name": "concurrent"}
+    replaced = {**MOCK_TOOL_CLASS, "id": "other"}
+    create = RegisterTool._create_tool_class
+
+    def _create(self: RegisterTool) -> None:
+        """Create another tool class and replace the tool's one first.
+
+        Args:
+            self: Registration of the tool.
+        """
+        toolclasses.insert_one(dict(concurrent))
+        tools.update_one({"id": TOOL_ID}, {"$set": {"toolclass": replaced}})
+        create(self)
+
+    monkeypatch.setattr(RegisterTool, "_create_tool_class", _create)
+    response = client.put(
+        f"{BASE_PATH}/tools/{TOOL_ID}", json=deepcopy(MOCK_TOOL_VERSION_ID)
+    )
+    assert response.status_code == 200
+    assert _stored(tools, TOOL_ID)["toolclass"] == replaced
 
 
 def test_tool_new_ids(

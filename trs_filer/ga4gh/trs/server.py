@@ -169,6 +169,7 @@ def toolsGet(
         BadRequest: The offset is not a non-negative integer, the limit is
             below 1, or `tags` are given.
     """
+    # deliberately refused (not ignored): tools have no tags to filter by
     if tags is not None:
         logger.error("Filtering tools by tags is not supported.")
         raise BadRequest
