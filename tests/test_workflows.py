@@ -179,6 +179,12 @@ def test_release_chart_signed() -> None:
     assert "for chart in dist/*.tgz; do" in sign
     assert 'cosign sign-blob --yes --bundle "${chart}.sigstore.json" "${chart}"' in sign
     names = list(steps)
+    # The downloaded chart is the one of `prepare`, checked before signing
+    check = steps["Check chart"]
+    assert check["env"]["SHA256"] == "${{ needs.prepare.outputs.chart_sha256 }}"
+    assert "sha256sum --check --strict" in check["run"]
+    assert names.index("Download chart") < names.index("Check chart")
+    assert names.index("Check chart") < names.index("Attest chart provenance")
     assert names.index("Attest chart provenance") < names.index("Create release")
     assert names.index("Sign chart") < names.index("Create release")
     assert 'gh release upload "${TAG}" dist/*' in steps["Create release"]["run"]

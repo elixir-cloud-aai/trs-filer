@@ -59,6 +59,7 @@ jobs:
       version: ${{ steps.version.outputs.version }}
       prerelease: ${{ steps.version.outputs.prerelease }}
       sha: ${{ steps.version.outputs.sha }}
+      chart_sha256: ${{ steps.chart.outputs.sha256 }}
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -164,6 +165,7 @@ jobs:
       # `scripts/chart_readme.py`; fails if any link to a version that moves
       # is left)
       - name: Package chart
+        id: chart
         env:
           VERSION: ${{ steps.version.outputs.version }}
           CHART_VERSION: ${{ steps.version.outputs.chart_version }}
@@ -182,6 +184,8 @@ jobs:
           tar -xzOf "${package}" trs-filer/README.md | cmp - "${chart}/README.md"
           [[ "$(tar -xzOf "${package}" trs-filer/values.yaml | yq .trs_filer.image)" \
               == "${image}" ]]
+          # For `publish` to check the downloaded chart against
+          echo "sha256=$(sha256sum "${package}" | cut -d ' ' -f 1)" >> "${GITHUB_OUTPUT}"
       - name: Upload chart
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -358,6 +362,24 @@ jobs:
         with:
           name: chart
           path: dist/
+      # The artifact is the chart that `prepare` packaged (and not one that
+      # replaced it in the same run, e.g., from `scan`) before it is attested,
+      # signed and released: a single file, with the checksum of `prepare`
+      - name: Check chart
+        env:
+          SHA256: ${{ needs.prepare.outputs.chart_sha256 }}
+        run: |
+          if [[ ! "${SHA256}" =~ ^[0-9a-f]{64}$ ]]; then
+              echo "::error::Invalid chart checksum '${SHA256}'"
+              exit 1
+          fi
+          shopt -s nullglob
+          files=(dist/*)
+          if [[ "${#files[@]}" -ne 1 || "${files[0]}" != dist/trs-filer-*.tgz ]]; then
+              echo "::error::Expected one chart in dist/, found: ${files[*]}"
+              exit 1
+          fi
+          echo "${SHA256}  ${files[0]}" | sha256sum --check --strict
       # Decided last, from freshly fetched tags (the repository is public, so
       # no credentials are needed), so that neither a re-run of an older
       # release nor a concurrent release moves `latest` back
