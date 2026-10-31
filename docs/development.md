@@ -196,7 +196,9 @@ notes checks, too, for the version in `CITATION.cff` while it has no tag (or
 its tag is on the checked commit): on pull requests and in forks (which
 often lack upstream's later tags) as warnings, on pushes to `dev` as errors,
 which fail the CI run that the release workflow requires for the release
-commit.
+commit. The image scan of the release workflow can still fail after the
+tag, e.g., on a vulnerability published since CI last scanned the image;
+the remedy is the same.
 
 The tag must be annotated and signed (`git tag -s`), with a key that GitHub can
 verify (added to the tagger's GitHub account). The [release
@@ -217,17 +219,23 @@ links to the latest docs and to files on branch `dev` point to the release
 (`/en/vX.Y.Z/`, `blob/vX.Y.Z/`); the release fails if any link to a version
 that moves is left (`scripts/chart_readme.py`). The chart in the repository
 is unchanged. After approval in the `release` environment, it builds the
-image, pushes it by digest (untagged) and checks that the app reports the
-release version. After a second approval in the `release` environment, it
+image, pushes it by digest (untagged, with SBOM and provenance attestations)
+and checks that the app reports the release version; it then scans exactly
+that digest for vulnerabilities, in a job without credentials. After a
+second approval in the `release` environment (once the scan passed), it
+attests the build provenance of the scanned digest and signs it (see
+[Verifying images and charts](operations.md#verifying-images-and-charts)),
 tags exactly that image `X.Y.Z` (and `latest`, if it is the highest stable
-release on `main`) and creates a GitHub release with the chart (`.tgz`) and
-the release notes (see below). Releases are immutable (see the repository
+release on `main`), attests and signs the chart, and creates a GitHub
+release with the chart (`.tgz`), its Sigstore bundle (`.tgz.sigstore.json`)
+and the release notes (see below). Releases are immutable (see the repository
 settings below): once published, their assets can't be added, replaced or
 deleted. The workflow therefore creates the release as a draft, uploads the
 assets and publishes it last. A re-run finishes a draft left by an earlier
 attempt; if the release is already published (e.g., by hand), it uploads
 nothing and fails unless the release has exactly the assets that the run
-built. The error says what to do: a new patch version, or, if releases are
+built (only the Sigstore bundles may differ, as every attempt signs anew).
+The error says what to do: a new patch version, or, if releases are
 not immutable, deleting the release and re-running. Add curated notes to the
 [changelog](changelog.md) in `mkdocs.yml` (`nav`; the docs build fails
 otherwise), and refer to pages of the docs by name rather than by relative
@@ -236,12 +244,45 @@ PyPI. Tags of alpha, beta and release candidate versions (e.g., `vX.Y.Zrc1`,
 also `aN` and `bN`) get chart version `X.Y.Z-rc1` (or `-aN`, `-bN`) and never
 update the `latest` image. These and, until 1.0.0, all other releases are
 GitHub pre-releases (never marked as the latest release). Digests of failed
-runs stay on Docker Hub, untagged. Re-running all jobs of the release
-workflow builds and tags a new image digest (the image build is not
-reproducible); re-running only the failed jobs reuses the digest already
-pushed. Images of commits on `dev` are published by the CI workflow
-(environment `dev-images`): it pushes the image by digest and tags exactly
-that digest once all other jobs passed.
+runs (also of failed scans) stay on Docker Hub, untagged and unsigned.
+Re-running all jobs of the release workflow builds, scans, signs and tags a
+new image digest (the image build is not reproducible); an earlier digest
+that was published stays signed. Re-running only the failed jobs reuses the
+digest already pushed (and scans it again if the scan failed). Images of
+commits on `dev` are published by the CI workflow (environment
+`dev-images`): it pushes the image by digest, scans it, and attests, signs
+and tags exactly that digest once all other jobs passed.
+
+The CI workflow builds the image of every pull request and scans it with
+[Trivy](https://trivy.dev/) (the shared action
+[`scan-image`](https://github.com/elixir-cloud-aai/.github/tree/main/actions/scan-image)
+of the organisation, pinned to the commit of a release), and a weekly
+workflow (`scan.yml`) scans `latest`. For pushes to `dev` and for releases,
+the workflows push the image by digest, untagged, scan exactly that digest
+in a job without credentials or signing identity, and only if the scan
+passes attest, sign and tag it, so that the published images are the
+scanned ones. The scans fail on critical and high vulnerabilities that have
+a fix, and upload the findings that have a fix (all severities) to code
+scanning (Security tab; only in this repository, not for pull requests from
+forks, nor in the release workflow); findings without a fix appear there
+once a fix is released. The weekly scan also uploads a full report,
+findings without a fix included, as the workflow artifact
+`trivy-report-release-image` of each run (`trivy-report.json` and
+`trivy-report.txt`, a table; Actions tab, workflow "Scan"); it is not
+uploaded to code scanning. Accepted findings are left out of all results.
+To accept a finding (e.g., if it doesn't affect the app), add it to
+`.trivyignore.yaml` with the affected package versions (`purls`), the
+reason (`statement`) and an expiry date (`expired_at`), after which the
+scans fail again. Trivy also scans for secrets (critical and high ones fail
+the scans too); accept those under `secrets:` in the same file. Dependabot
+updates the actions, including the pins of the shared actions
+(`@<commit> # vX.Y.Z`, all on the same release, see
+`tests/test_workflows.py`), to new releases of `elixir-cloud-aai/.github`;
+the Trivy version is the default of the shared action's `trivy-version`
+input, which Dependabot doesn't bump here: change it in the shared action,
+whose release then reaches this repository as a Dependabot update of the
+pins. Signing needs no secrets beyond the Docker Hub ones: it uses the
+workflows' OIDC tokens (permission `id-token: write`).
 
 The release workflow derives the version, the chart version, the kind of
 release (stable, GitHub pre-release), whether the image is tagged `latest`
@@ -337,9 +378,11 @@ While `CITATION.cff` names a version that has no tag yet, findings of
 The Docker Hub organization is the repository variable `DOCKERHUB_ORG` (by
 default `elixircloud`; forks set it to the organization they publish to,
 with the Docker Hub secrets in an environment `dev-images`), so that the
-released chart's default image (`trs_filer.image`) is the published one. Forks without `DOCKERHUB_ORG`
-publish nothing: their CI runs the same checks and passes without the
-secrets. On Read the Docs, the default version is `stable` (the highest
+scan jobs, which have no secrets, know the image name too, and the released
+chart's default image (`trs_filer.image`) is the published one. Forks
+without `DOCKERHUB_ORG` publish nothing: their CI runs the same checks (the
+scan of a local build included, without the upload to code scanning) and
+passes without the secrets, and their weekly scan is skipped. On Read the Docs, the default version is `stable` (the highest
 release) from the first release on, and the default branch is left empty, so
 that `latest` follows the repository's default branch, `dev`; an automation
 rule activates the versions of tags (`v*`), so that the docs linked from
