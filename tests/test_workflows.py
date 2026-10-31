@@ -1,13 +1,20 @@
-"""Tests for the names and the publishing conditions of the workflows."""
+"""Tests for the names, publishing conditions and checks of the workflows."""
 
+import hashlib
+import os
 from pathlib import Path
 import re
+import shutil
+import subprocess
 from typing import Any
 
+import pytest
 import yaml
 
 ROOT = Path(__file__).parents[1]
 WORKFLOWS = ROOT / ".github" / "workflows"
+# A chart file name as the release workflow packages it
+CHART = "trs-filer-1.2.3.tgz"
 
 
 def _load(path: Path) -> dict[str, Any]:
@@ -177,31 +184,113 @@ def test_publish_after_scan() -> None:
 
 
 def test_release_chart_signed() -> None:
-    """The release workflow attests and signs the chart before the release.
+    """The release workflow checks the chart before attesting and signing it.
 
-    The Sigstore bundles (`<chart>.tgz.sigstore.json`) are written to
-    `dist/`, so that they are uploaded with the chart.
+    `publish` downloads the chart artifact, which any job of the run could
+    replace, so it checks that `dist/` holds exactly the file that `prepare`
+    packaged (its name and SHA-256, as outputs of `prepare`) before anything,
+    the image included, is attested or signed. Only that file is attested and
+    signed; the Sigstore bundle (`<chart>.tgz.sigstore.json`) is written to
+    `dist/`, so that it is uploaded with the chart. The wiring and order of
+    the steps are checked here, the script itself by
+    `test_release_chart_check_runs`.
     """
-    publish = _load(WORKFLOWS / "release.yml")["jobs"]["publish"]
-    steps = {step["name"]: step for step in publish["steps"]}
-    assert steps["Attest chart provenance"]["with"]["subject-path"] == "dist/*.tgz"
-    sign = steps["Sign chart"]["run"]
-    assert "for chart in dist/*.tgz; do" in sign
-    assert 'cosign sign-blob --yes --bundle "${chart}.sigstore.json" "${chart}"' in sign
-    names = list(steps)
-    # The downloaded chart is the one of `prepare`, checked before signing
+    release = _load(WORKFLOWS / "release.yml")["jobs"]
+    prepare = release["prepare"]
+    assert prepare["outputs"]["chart_file"] == "${{ steps.chart.outputs.file }}"
+    assert prepare["outputs"]["chart_sha256"] == "${{ steps.chart.outputs.sha256 }}"
+    packaging = {step["name"]: step for step in prepare["steps"]}
+    assert packaging["Package chart"]["id"] == "chart"
+    # Re-runs of all jobs replace the chart, so its checksum is the new one
+    assert packaging["Upload chart"]["with"]["overwrite"] is True
+    steps = {step["name"]: step for step in release["publish"]["steps"]}
     check = steps["Check chart"]
     assert check["env"]["FILE"] == "${{ needs.prepare.outputs.chart_file }}"
     assert check["env"]["SHA256"] == "${{ needs.prepare.outputs.chart_sha256 }}"
-    assert '"${files[0]}" != "dist/${FILE}"' in check["run"]
-    assert '[[ ! "${SHA256}" =~ ^[0-9a-f]{64}$ ]]' in check["run"]
-    assert '"${#files[@]}" -ne 1' in check["run"]
-    assert "sha256sum --check --strict" in check["run"]
+    chart = "dist/${{ needs.prepare.outputs.chart_file }}"
+    assert steps["Attest chart provenance"]["with"]["subject-path"] == chart
+    assert steps["Sign chart"]["env"]["CHART"] == chart
+    sign = steps["Sign chart"]["run"]
+    assert sign == 'cosign sign-blob --yes --bundle "${CHART}.sigstore.json" "${CHART}"'
+    names = list(steps)
     assert names.index("Download chart") < names.index("Check chart")
+    # A rejected chart leaves the image unattested and unsigned too
+    assert names.index("Check chart") < names.index("Attest build provenance")
+    assert names.index("Check chart") < names.index("Sign image")
     assert names.index("Check chart") < names.index("Attest chart provenance")
+    assert names.index("Check chart") < names.index("Sign chart")
     assert names.index("Attest chart provenance") < names.index("Create release")
     assert names.index("Sign chart") < names.index("Create release")
     assert 'gh release upload "${TAG}" dist/*' in steps["Create release"]["run"]
+
+
+@pytest.mark.parametrize(
+    ("extra", "rename", "tamper", "empty", "file", "sha256", "passes"),
+    [
+        pytest.param(None, None, False, False, CHART, None, True, id="good"),
+        pytest.param(None, None, True, False, CHART, None, False, id="wrong-hash"),
+        pytest.param("other.tgz", None, False, False, CHART, None, False, id="extra"),
+        pytest.param(".hidden", None, False, False, CHART, None, False, id="hidden"),
+        pytest.param(
+            None, "trs-filer-9.9.9.tgz", False, False, CHART, None, False, id="renamed"
+        ),
+        pytest.param(None, None, False, True, CHART, None, False, id="empty"),
+        pytest.param(None, None, False, False, "../x.tgz", None, False, id="bad-name"),
+        pytest.param(None, None, False, False, CHART, "abc", False, id="bad-hash"),
+    ],
+)
+def test_release_chart_check_runs(
+    tmp_path: Path,
+    extra: str | None,
+    rename: str | None,
+    tamper: bool,
+    empty: bool,
+    file: str,
+    sha256: str | None,
+    passes: bool,
+) -> None:
+    """The chart check of `publish` passes only for the chart of `prepare`.
+
+    The step's script runs as GitHub runs it (`bash -e -o pipefail`) in a
+    directory whose `dist/` holds the downloaded artifact. It needs `bash`
+    and GNU `sha256sum`, as on the GitHub runners.
+
+    Args:
+        tmp_path: The working directory of the step.
+        extra: A file added to the artifact, if any.
+        rename: The name the chart is renamed to in the artifact, if any.
+        tamper: Whether the chart's content is changed after packaging.
+        empty: Whether the artifact holds no file at all.
+        file: The chart file name output by `prepare`.
+        sha256: The checksum output by `prepare` (that of the chart if None).
+        passes: Whether the check passes.
+    """
+    bash = shutil.which("bash")
+    assert bash
+    steps = _load(WORKFLOWS / "release.yml")["jobs"]["publish"]["steps"]
+    script = {step["name"]: step for step in steps}["Check chart"]["run"]
+    dist = tmp_path / "dist"
+    dist.mkdir()
+    chart = dist / CHART
+    chart.write_bytes(b"chart")
+    digest = hashlib.sha256(chart.read_bytes()).hexdigest()
+    if tamper:
+        chart.write_bytes(b"other chart")
+    if rename:
+        chart.rename(dist / rename)
+    if extra:
+        (dist / extra).write_bytes(b"extra")
+    if empty:
+        chart.unlink()
+    result = subprocess.run(  # noqa: S603 (fixed arguments, no shell)
+        [bash, "--noprofile", "--norc", "-e", "-o", "pipefail", "-c", script],
+        capture_output=True,
+        text=True,
+        cwd=tmp_path,
+        env={**os.environ, "FILE": file, "SHA256": sha256 or digest},
+        check=False,
+    )
+    assert (result.returncode == 0) == passes, result.stdout + result.stderr
 
 
 def test_verification_commands() -> None:
