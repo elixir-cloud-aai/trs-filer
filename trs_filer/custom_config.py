@@ -112,6 +112,27 @@ class MetaVersionConfig(FOCABaseConfig):
     increment: int = 1
 
 
+class ToolMetaVersionConfig(MetaVersionConfig):
+    """Model for the meta version configuration of tools.
+
+    Args:
+        init: Start index for the versioning. Defaults to `1`.
+        increment: Incremental delta for the next version. Defaults to `1`.
+        on_version_change: Whether adding, replacing or deleting a version of
+            a tool increments the tool's meta version, too. Defaults to
+            `True`.
+
+    Attributes:
+        init: Start index for the versioning. Defaults to `1`.
+        increment: Incremental delta for the next version. Defaults to `1`.
+        on_version_change: Whether adding, replacing or deleting a version of
+            a tool increments the tool's meta version, too. Defaults to
+            `True`.
+    """
+
+    on_version_change: bool = True
+
+
 class ToolConfig(FOCABaseConfig):
     """Model for tool config parameters.
 
@@ -129,17 +150,19 @@ class ToolConfig(FOCABaseConfig):
         ...         length=6,
         ...         charset='abcdefghijklmnopqrstuvwxyz0123456789'
         ...     ),
-        ...     meta_version=MetaVersionConfig(
+        ...     meta_version=ToolMetaVersionConfig(
         ...         init=1,
-        ...         increment=1
+        ...         increment=1,
+        ...         on_version_change=True
         ...     )
         ... )
         ToolConfig(id=IdConfig(charset='abcdefghijklmnopqrstuvwxyz0123456789',
-         length=6), meta_version=MetaVersionConfig(init=1, increment=1))
+         length=6), meta_version=ToolMetaVersionConfig(init=1, increment=1,
+         on_version_change=True))
     """
 
     id: IdConfig = Field(default_factory=IdConfig)
-    meta_version: MetaVersionConfig = Field(default_factory=MetaVersionConfig)
+    meta_version: ToolMetaVersionConfig = Field(default_factory=ToolMetaVersionConfig)
 
 
 class VersionConfig(FOCABaseConfig):

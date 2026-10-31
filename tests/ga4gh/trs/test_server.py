@@ -1541,6 +1541,57 @@ def test_toolVersion_new_ids(
     assert versions[1]["url"] == f"{TOOL_URL}/versions/other"
 
 
+@pytest.mark.parametrize("enabled", [True, False])
+def test_tool_meta_version_on_version_change(
+    mongo_client: MongoClient[dict[str, Any]], overlay: Path, enabled: bool
+) -> None:
+    """Adding, replacing and deleting versions increments the tool's meta version.
+
+    Unless `custom.tool.meta_version.on_version_change` is `false`; requests
+    that fail don't change it.
+
+    Args:
+        mongo_client: MongoDB client.
+        overlay: Config overlay.
+        enabled: Whether the option is on.
+    """
+    if not enabled:
+        overlay.write_text(
+            "custom:\n  tool:\n    meta_version:\n      on_version_change: false\n"
+        )
+    client = create_app().app.test_client()
+    assert get_custom_config().tool.meta_version.on_version_change is enabled
+    tools = mongo_client[DB]["tools"]
+    versions_path = f"{BASE_PATH}/tools/{TOOL_ID}/versions"
+    response = client.put(
+        f"{BASE_PATH}/tools/{TOOL_ID}", json=deepcopy(MOCK_TOOL_VERSION_ID)
+    )
+    assert response.status_code == 200
+    meta_versions = []
+    requests = [
+        ("post", versions_path, MOCK_VERSION_NO_ID, 200),
+        ("put", f"{versions_path}/other", MOCK_VERSION_NO_ID, 200),
+        ("put", VERSION_PATH, MOCK_VERSION_NO_ID, 200),
+        ("delete", f"{versions_path}/other", None, 200),
+        ("delete", f"{versions_path}/{UNKNOWN}", None, 404),
+        ("put", f"{BASE_PATH}/tools/{UNKNOWN}/versions/other", MOCK_VERSION_NO_ID, 404),
+    ]
+    for method, path, data, status in requests:
+        kwargs = {} if data is None else {"json": deepcopy(data)}
+        response = getattr(client, method)(path, **kwargs)
+        assert response.status_code == status
+        meta_versions.append(_stored(tools, TOOL_ID)["meta_version"])
+    if enabled:
+        assert meta_versions == ["2", "3", "4", "5", "5", "5"]
+    else:
+        assert meta_versions == ["1"] * 6
+    # replacing the tool increments it as before
+    response = client.put(
+        f"{BASE_PATH}/tools/{TOOL_ID}", json=deepcopy(MOCK_TOOL_VERSION_ID)
+    )
+    assert _stored(tools, TOOL_ID)["meta_version"] == ("6" if enabled else "2")
+
+
 # DELETE /tools/{id}/versions/{version_id}
 def test_deleteToolVersion(
     client: FlaskClient, tool: dict[str, Any], tools: Collection[dict[str, Any]]
