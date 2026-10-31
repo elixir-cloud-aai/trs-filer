@@ -45,6 +45,33 @@ service info is configured in `service_info.service` (FOCA's section, see
 rejected on startup. The collection stays in existing databases, unused;
 drop it if you like.
 
+## API
+
+- `GET /tools`: `limit=0` gave all tools; it now gives `400 Bad Request`,
+  as do other limits below 1. Invalid `offset` and `limit` values give `400`
+  instead of `422`. `limit` is at most 1000 (larger values are reduced to
+  1000). `next_page` is omitted on the last page, and `last_page` is counted
+  in steps of `limit` from the requested offset. Filters of versions and
+  images apply to the same version and image (they overwrote each other).
+  See [Listing tools](api.md#listing-tools).
+- Registering or replacing a tool no longer changes an existing tool class:
+  the tool stores a copy of the stored tool class instead of the one it was
+  sent with. With `custom.toolclass.validation: true`, a tool with an
+  unknown tool class is no longer stored (before, it was stored although the
+  request failed with `400`). See [Tool
+  classes](configuration.md#tool-classes).
+- Replacing a tool, version or tool class with an identical one succeeds
+  (it failed with `500`).
+- Replacing tools and versions increments their `meta_version` (it stayed
+  at the initial value), as configured in
+  `custom.tool.meta_version.increment` and
+  `custom.version.meta_version.increment`; see [Meta
+  versions](configuration.md#meta-versions).
+- Deleting the last version of a tool gives `400 Bad Request`; delete the
+  tool instead.
+- Versions without `is_production` are registered as non-production
+  versions (they failed with `500`).
+
 ## Errors
 
 Errors are problem details (`title`, `status`, `detail`), sent as
