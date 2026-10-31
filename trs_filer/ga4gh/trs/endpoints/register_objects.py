@@ -210,15 +210,35 @@ class RegisterTool:
     def _create_tool_class(self) -> None:
         """Create the tool class of the tool, unless it exists.
 
-        Existing tool classes are shared by tools and not changed.
+        Existing tool classes are shared by tools and not changed. If another
+        registration created the tool class in the meantime (with other
+        content), the tool stores a copy of that one instead, unless the tool
+        was replaced in the meantime, too.
         """
+        tool_class = dict(self.data["toolclass"])
         result = self.db_coll_classes.update_one(
-            filter={"id": self.data["toolclass"]["id"]},
-            update={"$setOnInsert": dict(self.data["toolclass"])},
+            filter={"id": tool_class["id"]},
+            update={"$setOnInsert": tool_class},
             upsert=True,
         )
         if result.upserted_id is not None:
-            logger.info("Added tool class with id '%s'.", self.data["toolclass"]["id"])
+            logger.info("Added tool class with id '%s'.", tool_class["id"])
+            return
+        stored = self.db_coll_classes.find_one(
+            filter={"id": tool_class["id"]}, projection={"_id": False}
+        )
+        if stored is None or stored == tool_class:
+            return
+        self.data["toolclass"] = stored
+        self.db_coll_tools.update_one(
+            filter={"id": self.data["id"], "toolclass": tool_class},
+            update={"$set": {"toolclass": stored}},
+        )
+        logger.info(
+            "Tool '%s' stores tool class '%s' as created concurrently.",
+            self.data["id"],
+            tool_class["id"],
+        )
 
     def _replace(self) -> bool:
         """Replace the stored tool with the same identifier, if any.
