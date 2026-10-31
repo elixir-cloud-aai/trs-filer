@@ -19,6 +19,7 @@ from trs_filer.errors.exceptions import (
 from trs_filer.ga4gh.trs.endpoints.register_objects import (
     RegisterTool,
     RegisterToolVersion,
+    tool_meta_version_change,
 )
 from trs_filer.ga4gh.trs.endpoints.register_tool_classes import RegisterToolClass
 from trs_filer.remote_files import fetch_remote_file
@@ -758,7 +759,9 @@ def deleteToolVersion(
         version_id: Identifier of tool version to be deleted.
 
     Returns:
-        Previous identifier of deleted tool version.
+        Previous identifier of deleted tool version. The meta version of the
+        tool is incremented, unless `custom.tool.meta_version.on_version_change`
+        is `false`.
 
     Raises:
         BadRequest: The version is the last one of the tool.
@@ -773,11 +776,14 @@ def deleteToolVersion(
         "versions.id": version_id,
         "versions.1": {"$exists": True},
     }
-    update = {
+    update: dict[str, Any] = {
         "$pull": {
             "versions": {"id": version_id},
         },
     }
+    tool_change = tool_meta_version_change(db_coll_tools, id)
+    if tool_change:
+        update["$set"] = tool_change
     del_ver_tools = db_coll_tools.update_one(
         filter=filt,
         update=update,

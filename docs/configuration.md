@@ -80,14 +80,21 @@ clients that an object changed), set in `custom.tool.meta_version` and
   versions are new and get the `init` value.
 - Replacing a version (`PUT /tools/{id}/versions/{version_id}`) adds
   `custom.version.meta_version.increment` to the version's meta version.
-- The tool's meta version changes only when the tool itself is replaced,
-  not when versions are added, replaced or deleted with the version
-  endpoints.
+- Adding, replacing or deleting a version with the version endpoints
+  (`POST /tools/{id}/versions`, `PUT` and `DELETE
+  /tools/{id}/versions/{version_id}`) also adds
+  `custom.tool.meta_version.increment` to the tool's meta version, as the
+  tool as served (its `versions`) changes. Set
+  `custom.tool.meta_version.on_version_change: false` to change the tool's
+  meta version only when the tool itself is replaced. Requests that fail
+  change no meta version.
 - Stored meta versions that are not integers restart at the `init` value.
 
 Replacements with identical content increment the meta versions, too.
-Concurrent replacements of the same object may give it the same meta
-version. Tool classes have none (`custom.toolclass.meta_version` is unused).
+Concurrent changes of the same object may give it the same meta version,
+or, for tools whose versions change at the same time, set it back to an
+earlier value. Tool classes have none (`custom.toolclass.meta_version` is
+unused).
 
 ## Tool classes
 
