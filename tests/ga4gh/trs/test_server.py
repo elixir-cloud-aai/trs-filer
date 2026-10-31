@@ -16,6 +16,7 @@ from connexion import App
 from flask.testing import FlaskClient
 from pymongo import MongoClient
 from pymongo.collection import Collection
+from pymongo.errors import DuplicateKeyError
 from pymongo.results import UpdateResult
 import pytest
 
@@ -1207,6 +1208,56 @@ def test_tool_class_created_concurrently(
     )
     assert response.status_code == 200
     assert _stored(toolclasses, MOCK_TOOL_CLASS["id"]) == concurrent
+    assert _stored(tools, TOOL_ID)["toolclass"] == concurrent
+
+
+def test_tool_class_created_concurrently_duplicate_key(
+    client: FlaskClient,
+    tools: Collection[dict[str, Any]],
+    toolclasses: Collection[dict[str, Any]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Tools store the tool class of a concurrent upsert that won.
+
+    The upsert of the tool class fails with a duplicate key, as another
+    upsert of the same identifier inserted it at the same time.
+
+    Args:
+        client: Test client.
+        tools: Collection `tools`.
+        toolclasses: Collection `toolclasses`.
+        monkeypatch: Patch of the creation of tool classes.
+    """
+    concurrent = {**MOCK_TOOL_CLASS, "name": "concurrent"}
+    create = RegisterTool._create_tool_class
+
+    def _update_one(*args: Any, **kwargs: Any) -> NoReturn:
+        """Fail as a concurrent upsert of the same identifier.
+
+        Args:
+            *args: Positional arguments of `update_one()`.
+            **kwargs: Keyword arguments of `update_one()`.
+
+        Raises:
+            DuplicateKeyError: Always.
+        """
+        raise DuplicateKeyError("E11000 duplicate key error")
+
+    def _create(self: RegisterTool) -> None:
+        """Create another tool class, and fail to upsert the tool's one.
+
+        Args:
+            self: Registration of the tool.
+        """
+        toolclasses.insert_one(dict(concurrent))
+        monkeypatch.setattr(self.db_coll_classes, "update_one", _update_one)
+        create(self)
+
+    monkeypatch.setattr(RegisterTool, "_create_tool_class", _create)
+    response = client.put(
+        f"{BASE_PATH}/tools/{TOOL_ID}", json=deepcopy(MOCK_TOOL_VERSION_ID)
+    )
+    assert response.status_code == 200
     assert _stored(tools, TOOL_ID)["toolclass"] == concurrent
 
 

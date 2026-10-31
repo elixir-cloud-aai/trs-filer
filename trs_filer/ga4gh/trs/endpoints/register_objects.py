@@ -216,14 +216,20 @@ class RegisterTool:
         was replaced in the meantime, too.
         """
         tool_class = dict(self.data["toolclass"])
-        result = self.db_coll_classes.update_one(
-            filter={"id": tool_class["id"]},
-            update={"$setOnInsert": tool_class},
-            upsert=True,
-        )
-        if result.upserted_id is not None:
-            logger.info("Added tool class with id '%s'.", tool_class["id"])
-            return
+        try:
+            result = self.db_coll_classes.update_one(
+                filter={"id": tool_class["id"]},
+                update={"$setOnInsert": tool_class},
+                upsert=True,
+            )
+        except DuplicateKeyError:
+            # concurrent upserts of the same identifier: another one inserted
+            # the tool class
+            pass
+        else:
+            if result.upserted_id is not None:
+                logger.info("Added tool class with id '%s'.", tool_class["id"])
+                return
         stored = self.db_coll_classes.find_one(
             filter={"id": tool_class["id"]}, projection={"_id": False}
         )
