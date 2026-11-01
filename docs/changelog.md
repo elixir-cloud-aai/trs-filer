@@ -1,11 +1,14 @@
 # Changelog
 
 Changes of each release are listed in the [release notes on
-GitHub](https://github.com/elixir-cloud-aai/trs-filer/releases). There is no
-release with notes yet: the tag `v0.3.0` (2023) has none, and the changes
-since then are on branch `dev` until the next release. Releases are
-published from version tags by the release workflow (see [Versioning and
-releases](development.md#versioning-and-releases)).
+GitHub](https://github.com/elixir-cloud-aai/trs-filer/releases), which are
+published from the notes in `docs/releases/` where these exist, followed by
+GitHub's generated list of changes (see [Versioning and
+releases](development.md#versioning-and-releases)):
 
-How to upgrade existing deployments is described in
+- [0.4.0](releases/0.4.0.md)
+
+The tag `v0.3.0` (2023) has no release notes.
+
+How to upgrade existing deployments is described in the notes and in
 [Upgrading](upgrading.md).

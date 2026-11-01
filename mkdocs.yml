@@ -93,8 +93,8 @@ validation:
   unrecognized_links: warn
   anchors: warn
 
-# Pages missing here fail the build; release notes, once there are any
-# (`docs/releases/<version>.md`), go under "Changelog"
+# Pages missing here fail the build; release notes
+# (`docs/releases/<version>.md`) go under "Changelog", newest first
 nav:
   - Home: index.md
   - Getting started: getting-started.md
@@ -109,3 +109,4 @@ nav:
   - API reference: reference.md
   - Changelog:
       - changelog.md
+      - "0.4.0": releases/0.4.0.md

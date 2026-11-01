@@ -48,3 +48,5 @@ keywords:
   - OpenAPI
   - FOCA
 license: Apache-2.0
+version: "0.4.0"
+date-released: "2026-11-01"
