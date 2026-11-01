@@ -69,10 +69,14 @@ On OpenShift, the Route is created by default, as the Ingress is off. It
 exposes the API **without restrictions**: the chart sets no annotations on
 it. Restrict writes at a proxy in front of the router, or allow only
 trusted clients at the router, which restricts all methods, not only
-writes (e.g., `oc annotate route <appName>
+writes (e.g., `oc annotate route <appName>-route
 haproxy.router.openshift.io/ip_allowlist="192.0.2.0/24" -n namespace`;
-`ip_whitelist` on OpenShift before 4.14). Or enable the Ingress instead
-(no Route is created then), with the means of your ingress controller.
+`ip_whitelist` on OpenShift before 4.14). Annotations added by hand
+survive `helm upgrade`, but not a reinstall, and the Route is open until
+you add them. Or enable the Ingress instead: the chart creates no Route
+then, but OpenShift creates one from an Ingress of its default class and
+copies the Ingress's annotations to it, so the allow-list can go in
+`trs_filer.ingress.annotations`.
 
 The Ingress routes all paths (`/`) to the app and is configured with:
 
