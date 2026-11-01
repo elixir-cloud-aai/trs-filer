@@ -4,17 +4,28 @@ See [Contributing](contributing/index.md) for how to contribute; this page
 describes the development setup, the checks, the documentation and the
 versions.
 
-To set up a development environment (e.g., in a virtual environment, with
-Python 3.13) and run the checks that CI runs:
+Development needs Python 3.13 or later and
+[uv](https://docs.astral.sh/uv/) (e.g., `pipx install uv`; see its
+[installation guide](https://docs.astral.sh/uv/getting-started/installation/)).
+To set up a development environment with the versions of the lock
+(`uv.lock`, see [Dependencies](#dependencies)), as CI does, and run the
+checks that CI runs:
 
 ```bash
-pip install -e ".[dev]"  # the app, with the dev dependencies
+uv sync --locked --extra dev  # the app, with the dev dependencies, in `.venv`
+source .venv/bin/activate  # or `activate.fish` etc.
 pre-commit install  # run the checks on every commit
 pre-commit run --all-files  # ruff, mypy, semgrep, ast-grep, actionlint
 pre-commit run --all-files --hook-stage manual gitleaks-all  # secrets
 coverage run -m pytest  # the tests, with coverage
 coverage report
 ```
+
+Instead of activating `.venv`, commands can be run with `uv run`, which
+syncs the environment first, so give it the extra (e.g.,
+`uv run --locked --extra dev pytest`). `pip install -e ".[dev]"` also works, but installs the
+newest versions in the ranges of `pyproject.toml` instead of the locked
+ones, so its results can differ from CI's.
 
 The tests (`tests/`, mirroring the package) need no database: app tests
 create the app from the base config (`trs_filer/config.yaml`) and send
@@ -72,6 +83,37 @@ suppress a false positive, add a comment with the reason to the line:
 `# nosemgrep: <rule-id>`, `# ast-grep-ignore: <rule-id>` or
 `# gitleaks:allow`.
 
+## Dependencies
+
+The dependencies are declared, with version ranges, in `pyproject.toml`
+(which installs of the package, e.g., with pip, use) and locked in
+`uv.lock`, with exact versions and hashes, by
+[uv](https://docs.astral.sh/uv/) (also a dev dependency, so that the lock
+pins the version of uv that CI uses). CI's lint, test and docs jobs install
+the locked versions, checked against their hashes (`uv sync --locked`, with
+uv of a pinned `astral-sh/setup-uv`, at the version of the lock), so that
+Dependabot's pull requests, which change only the lock, are tested on the
+versions they lock; the lint job also checks that the lock matches
+`pyproject.toml` (`uv lock --check`). The app itself is installed editable
+there, built with build requirements from the package index (not the lock),
+as `pip install -e` does; those jobs hold no publishing credentials. The
+`push` job, which does, still installs setuptools-scm without the lock
+(to be changed by
+[#212](https://github.com/elixir-cloud-aai/trs-filer/issues/212)). The
+image still installs the runtime dependencies from the ranges of
+`pyproject.toml` (`scripts/image_requirements.py`). After adding, removing
+or changing a dependency in `pyproject.toml`, update the lock and commit
+both:
+
+```bash
+uv lock  # update `uv.lock` after changes to `pyproject.toml`
+uv lock --upgrade-package <name>  # upgrade one locked package
+uv lock --check  # what CI checks: the lock matches `pyproject.toml`
+```
+
+Dependabot updates `pyproject.toml` and `uv.lock` together (`uv` entry of
+`.github/dependabot.yml`).
+
 ## Helm chart
 
 The [Helm chart](deployment.md) is in `deployment/`. Check changes with
@@ -93,10 +135,13 @@ by Read the Docs (configured in
 and in CI; warnings, e.g., of broken links, fail the build. The [API
 reference](reference.md) is generated from the docstrings with
 [mkdocstrings](https://mkdocstrings.github.io/). To build it locally, or serve
-it with live reloading:
+it with live reloading, in the dev environment set up as above, with the
+locked docs dependencies too (as CI does; `uv sync` removes the extras that
+it isn't given, so `dev` stays in the command; Read the Docs installs the
+`docs` extra with pip, from the ranges of `pyproject.toml`):
 
 ```bash
-pip install -e ".[docs]"
+uv sync --locked --extra dev --extra docs
 mkdocs build --strict  # into `site/`, ignored by Git
 mkdocs serve
 ```
