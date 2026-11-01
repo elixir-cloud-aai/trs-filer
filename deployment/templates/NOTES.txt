@@ -3,7 +3,7 @@
 Routes */}}
 {{- $route := and (not .Values.trs_filer.ingress.enabled) (.Capabilities.APIVersions.Has "route.openshift.io/v1") }}
 {{- $scheme := "http" }}
-{{- if or $route .Values.trs_filer.ingress.https.enabled }}
+{{- if or $route (and .Values.trs_filer.ingress.enabled .Values.trs_filer.ingress.https.enabled) }}
 {{- $scheme = "https" }}
 {{- end -}}
 TRS-Filer is being deployed!
