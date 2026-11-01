@@ -17,11 +17,12 @@ POST, PUT and DELETE only from trusted clients, at the ingress controller
 and Route" in the chart's README.
 {{- if not (or .Values.trs_filer.ingress.enabled $route) }}
 
-Nothing exposes the app: neither an Ingress (`trs_filer.ingress.enabled`)
-nor an OpenShift Route (`trs_filer.route.enabled`, on clusters that serve
-Routes) is created. Expose the app's Service
-(`{{ .Values.trs_filer.appName }}`, port 8080) yourself. To try the API
-from your machine meanwhile:
+The chart exposes the app neither via an Ingress
+(`trs_filer.ingress.enabled`) nor via an OpenShift Route
+(`trs_filer.route.enabled`, on clusters that serve Routes). If no resource
+of your own (e.g., a Route or HTTPRoute) exposes the app's Service
+(`{{ .Values.trs_filer.appName }}`, port 8080), nothing does. To try the
+API from your machine:
 
   kubectl port-forward svc/{{ .Values.trs_filer.appName }} 8080:8080 -n {{ .Release.Namespace }}
 

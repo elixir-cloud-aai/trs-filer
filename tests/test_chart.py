@@ -237,6 +237,6 @@ def test_notes_nothing_exposed(tmp_path: Path) -> None:
         "--set",
         "trs_filer.route.enabled=false",
     )
-    assert "Nothing exposes the app" in notes
+    assert "The chart exposes the app neither via an Ingress" in notes
     assert "kubectl port-forward svc/trs-filer 8080:8080 -n trs" in notes
     assert "trs.example.org" not in notes
