@@ -149,6 +149,7 @@ about the placeholders of the service info changes: FOCA logs it
 2606, e.g., `org.example.trs` or `https://trs.example.org`), instead of the
 app (logger `trs_filer.app`), which warned of the placeholders `id` and
 `organization` (name or URL) of the base config only; a placeholder
-`organization.name` is no longer warned of. FOCA's plugin store (collection `plugin_store`) and
-plugin listing are for gateway apps: TRS-Filer creates no collections or
-indexes beyond its own, so its database user needs no new rights.
+`organization.name` is no longer warned of. FOCA's plugin store
+(collection `plugin_store`) and plugin listing are for gateway apps:
+TRS-Filer creates no collections or indexes beyond its own, so its
+database user needs no new rights.
