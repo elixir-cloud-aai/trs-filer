@@ -182,6 +182,8 @@ python scripts/check_release_pins.py
 [ ! -f docs/releases/X.Y.Z.md ] || python scripts/release_notes.py check docs/releases/X.Y.Z.md
 readme="$(mktemp -d)/README.md" && cp deployment/README.md "${readme}"
 python scripts/chart_readme.py "${readme}" vX.Y.Z  # links of the chart
+helm lint deployment --strict  # as `prepare` lints and packages the chart
+helm package deployment --version X.Y.Z --app-version X.Y.Z -d "$(mktemp -d)"
 git push origin <sha>:main  # fails unless it is a fast-forward
 git tag -s vX.Y.Z <sha> -m "vX.Y.Z"
 git push origin vX.Y.Z

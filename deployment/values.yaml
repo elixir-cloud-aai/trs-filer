@@ -25,8 +25,7 @@ apiServer: kubernetes.default.svc:443 # address of k8s API server
 
 mongodb:
   image: docker.io/library/mongo:noble
-  # https://github.com/elixir-cloud-aai/trs-filer/blob/9116b702bce2ef5b2e04130a6fe5db2a89d465f3/trs_filer/gunicorn.py#L26
-  # If not set, it will use trs-filer-db
+  # The app's database (`MONGO_DBNAME` of the app); `trs-filer-db` if empty
   dbName: ""
   volumeSize: 1Gi
   resources:

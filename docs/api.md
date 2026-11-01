@@ -15,7 +15,10 @@ The served specification is TRS
 (April 2023), between the releases 2.0.1 and 2.0.2, with the service info of
 the [GA4GH service info
 specification](https://github.com/elixir-cloud-aai/trs-filer/blob/dev/trs_filer/api/20200131.11d2c12.service-info.yaml).
-The service info reports TRS version 2.0.1 (`type.version`).
+The service info reports TRS version 2.0.1 (`type.version`), the last
+release that the specification implements; the specification itself says
+`info.version: 2.1.0`, the version that `develop` was heading for at that
+commit.
 
 ## GA4GH TRS endpoints
 
