@@ -1,40 +1,32 @@
 {{- /* HTTPS at the Ingress with `https.enabled`, or at the OpenShift Route
-(edge TLS), which the chart creates without the Ingress if the cluster serves
-Routes */}}
-{{- $route := and (not .Values.trs_filer.ingress.enabled) (.Capabilities.APIVersions.Has "route.openshift.io/v1") }}
+(edge TLS), which the chart creates without the Ingress if `route.enabled`
+and the cluster serves Routes */}}
+{{- $route := and (dig "route" "enabled" true .Values.trs_filer) (not .Values.trs_filer.ingress.enabled) (.Capabilities.APIVersions.Has "route.openshift.io/v1") }}
 {{- $scheme := "http" }}
 {{- if or $route (and .Values.trs_filer.ingress.enabled .Values.trs_filer.ingress.https.enabled) }}
 {{- $scheme = "https" }}
 {{- end -}}
 TRS-Filer is being deployed!
 
-WARNING: The API has no authentication. Anyone who can reach it can register,
-replace and delete tools and tool classes. Allow POST, PUT and DELETE only
-from trusted clients; see "Ingress" in the chart's README.
-{{- if $route }}
+WARNING: The API has no authentication yet (see
+https://github.com/elixir-cloud-aai/trs-filer/issues/7). Anyone who can
+reach it can register, replace and delete tools and tool classes. Allow
+POST, PUT and DELETE only from trusted clients, at the ingress controller
+(`trs_filer.ingress.annotations`), the OpenShift router
+(`trs_filer.route.annotations`) or a proxy in front of them; see "Ingress
+and Route" in the chart's README.
+{{- if not (or .Values.trs_filer.ingress.enabled $route) }}
 
-The OpenShift Route exposes the API for `{{ .Values.host_name }}` without
-restrictions (the chart sets none): restrict writes at a proxy in front of
-the router, or allow only trusted clients at the router (this restricts all
-methods); see "Ingress" in the chart's README.
-{{- else if .Values.trs_filer.ingress.enabled }}
-
-Restrict writes with annotations for the ingress controller
-(`trs_filer.ingress.annotations`) or at a proxy in front of it.
-{{- else }}
-
-Nothing exposes the app: the Ingress is off by default
-(`trs_filer.ingress.enabled`), and the cluster serves no OpenShift Routes.
-Set `trs_filer.ingress.enabled: true` together with annotations that
-restrict writes (`trs_filer.ingress.annotations`), or expose the app's
-Service (`{{ .Values.trs_filer.appName }}`, port 8080) yourself. To try the
-API from your machine meanwhile:
+Nothing exposes the app: neither an Ingress (`trs_filer.ingress.enabled`)
+nor an OpenShift Route (`trs_filer.route.enabled`, on clusters that serve
+Routes) is created. Expose the app's Service
+(`{{ .Values.trs_filer.appName }}`, port 8080) yourself. To try the API
+from your machine meanwhile:
 
   kubectl port-forward svc/{{ .Values.trs_filer.appName }} 8080:8080 -n {{ .Release.Namespace }}
 
 and open http://localhost:8080/ga4gh/trs/v2/ui
-{{- end }}
-{{- if or .Values.trs_filer.ingress.enabled $route }}
+{{- else }}
 
 Once deployed:
 

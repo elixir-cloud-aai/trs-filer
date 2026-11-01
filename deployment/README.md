@@ -2,10 +2,12 @@
 
 > **Warning:** TRS-Filer has no authentication yet: anyone who can reach the
 > API can register, replace and delete tools and tool classes. Allow `POST`,
-> `PUT` and `DELETE` only from trusted clients, at the ingress controller (see
-> [Ingress](#ingress)) or at a proxy in front of the cluster (see
+> `PUT` and `DELETE` only from trusted clients, at the ingress controller or
+> the OpenShift router (see [Ingress and Route](#ingress-and-route)) or at a
+> proxy in front of the cluster (see
 > [Access control](https://trs-filer.readthedocs.io/en/latest/access-control/)).
-> The chart restricts nothing by default.
+> The chart restricts nothing by default. Tokens for writes are planned
+> ([#7](https://github.com/elixir-cloud-aai/trs-filer/issues/7)).
 
 ## Quick start
 
@@ -17,12 +19,6 @@ helm install trs-filer . -n namespace
 ```
 `namespace` is the name of the namespace where the cluster should be installed.
 `trs-filer` could be any name, it will be referenced later for upgrading or uninstalling.
-
-3. Expose the app. The Ingress is off by default, as the API has no
-   authentication: on clusters without OpenShift Routes, nothing exposes the
-   app until you enable the Ingress, after restricting writes, or expose its
-   Service yourself; on OpenShift, the chart creates a Route without
-   restrictions. See [Ingress](#ingress).
 
 ## Resources
 
@@ -47,38 +43,15 @@ yet: add the variable to the app's Deployment in a copy of the chart (see
 ([#135](https://github.com/elixir-cloud-aai/trs-filer/issues/135)).
 `mongodb.resources` sets those of MongoDB (by default 512Mi).
 
-## Ingress
+## Ingress and Route
 
 The chart exposes the app for `host_name` via an Ingress
-(`trs_filer.ingress.enabled`) or, if it is disabled and the cluster serves
-Routes, an OpenShift Route (with TLS at the router). As the API has no
-authentication, the Ingress is **off by default**
-(`trs_filer.ingress.enabled: false`): without it, on clusters that serve no
-Routes, nothing exposes the app (NOTES.txt warns of it), and you expose
-its Service (`<appName>`, port 8080) yourself. To use the Ingress, enable
-it together with annotations that restrict the methods that change data
-(see the example below):
-
-```yaml
-trs_filer:
-  ingress:
-    enabled: true
-```
-
-On OpenShift, the Route is created by default, as the Ingress is off. It
-exposes the API **without restrictions**: the chart sets no annotations on
-it. Restrict writes at a proxy in front of the router, or allow only
-trusted clients at the router, which restricts all methods, not only
-writes (e.g., `oc annotate route <appName>-route
-haproxy.router.openshift.io/ip_allowlist="192.0.2.0/24" -n namespace`;
-`ip_whitelist` on OpenShift before 4.14). Annotations added by hand
-survive `helm upgrade`, but not a reinstall, and the Route is open until
-you add them. Or enable the Ingress instead: the chart creates no Route
-then, but OpenShift creates one from an Ingress of its default class and
-copies the Ingress's annotations to it, so the allow-list can go in
-`trs_filer.ingress.annotations`.
-
-The Ingress routes all paths (`/`) to the app and is configured with:
+(`trs_filer.ingress.enabled`, by default `true`) or, if it is disabled and
+the cluster serves Routes, an OpenShift Route (`trs_filer.route.enabled`, by
+default `true`; with TLS at the router). With neither, nothing exposes the
+app (NOTES.txt warns of it): expose its Service (`<appName>`, port 8080)
+yourself, e.g., with a Route or HTTPRoute of your own. The Ingress routes
+all paths (`/`) to the app and is configured with:
 
 - `className` sets the Ingress class (`spec.ingressClassName`; default: the
   cluster's default class);
@@ -99,7 +72,6 @@ from the network `192.0.2.0/24`:
 ```yaml
 trs_filer:
   ingress:
-    enabled: true
     className: nginx
     annotations:
       nginx.ingress.kubernetes.io/configuration-snippet: |
@@ -127,6 +99,33 @@ this is acceptable in your cluster. ingress-nginx is also retired (no
 releases or security fixes after March 2026): with other controllers or the
 Gateway API, use their means to restrict methods or clients, or restrict
 them at a proxy in front of the cluster.
+
+### OpenShift Route
+
+The Route (`<appName>-route`) routes all paths to the app, with TLS at the
+router, which redirects HTTP to HTTPS. `trs_filer.route.annotations` sets
+its annotations, e.g., for the router's rate limits
+(`haproxy.router.openshift.io/rate-limit-connections`); quote numbers
+(e.g., `"100"`). The chart sets none, so the Route restricts nothing by
+default. The OpenShift router can't restrict methods, only clients: to
+allow only trusted clients (for all methods, also `GET`; an example only,
+adapt it to your setup), e.g., from the network `192.0.2.0/24`:
+
+```yaml
+trs_filer:
+  ingress:
+    enabled: false
+  route:
+    annotations:
+      haproxy.router.openshift.io/ip_allowlist: 192.0.2.0/24
+```
+
+Separate several networks or addresses with spaces; OpenShift before 4.14
+uses `haproxy.router.openshift.io/ip_whitelist`. The router checks the
+source address it sees, i.e., that of a load balancer in front of it, if
+any. To keep reads public and restrict only writes, restrict them at a
+proxy in front of the router. Check with a `POST` from an untrusted
+address that writes are refused.
 
 ## Configuration
 
