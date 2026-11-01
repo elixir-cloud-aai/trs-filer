@@ -15,8 +15,8 @@ trs_filer:
   appName: trs-filer
   # The image's Gunicorn defaults (one worker with four threads) peak at
   # about 175 MB (worker and master) under concurrent registrations; raise
-  # the memory with more workers (`GUNICORN_CMD_ARGS`), which load the whole
-  # app each (see deployment/README.md, Resources)
+  # the memory with more workers or threads, or a higher request size limit
+  # (see deployment/README.md, Resources)
   resources:
     limits:
       cpu: 100m
