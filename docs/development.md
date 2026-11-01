@@ -1,6 +1,6 @@
 # Development
 
-See [Contributing](contributing.md) for how to contribute; this page
+See [Contributing](contributing/index.md) for how to contribute; this page
 describes the development setup, the checks, the documentation and the
 versions.
 

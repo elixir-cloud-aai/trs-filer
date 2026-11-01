@@ -105,7 +105,7 @@ nav:
   - Operations: operations.md
   - Upgrading: upgrading.md
   - Development: development.md
-  - Contributing: contributing.md
+  - Contributing: contributing/index.md
   - API reference: reference.md
   - Changelog:
       - changelog.md
