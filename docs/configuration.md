@@ -50,7 +50,9 @@ custom:
     api_path: ga4gh/trs/v2
 ```
 
-The Helm chart sets it from its values (see [Deployment](deployment.md)).
+The Helm chart sets it from its values (see [Deployment](deployment.md));
+it can't set other parts of the config yet (see
+[Configuration](deployment.md#configuration) there).
 
 ## Identifiers
 
@@ -218,6 +220,10 @@ service_info:
     contactUrl: mailto:trs-admins@example.org
     environment: prod
 ```
+
+The Helm chart has no value for the service info yet, so chart deployments
+serve the placeholders unless they deploy an overlay of their own (see
+[Configuration](deployment.md#configuration) in the deployment docs).
 
 ## Errors
 
