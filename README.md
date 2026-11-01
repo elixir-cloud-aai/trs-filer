@@ -15,6 +15,7 @@
 [![Coverage][badge-coverage]][badge-url-coverage]
 [![GitHub_tag][badge-github-tag]][badge-url-github-tag]
 [![Docker_image][badge-docker]][badge-url-docker]
+[![DOI][badge-doi]][badge-url-doi]
 
 <!-- --8<-- [start:synopsis] -->
 A registry of tools and workflows for your project, network or
@@ -70,7 +71,10 @@ curl -X GET "http://localhost:8080/ga4gh/trs/v2/tools" -H "accept: application/j
 ## Citation
 
 <!-- --8<-- [start:citation] -->
-If you use TRS-Filer, please cite it with the metadata in
+If you use TRS-Filer, please cite it with its DOI
+[10.5281/zenodo.23862541](https://doi.org/10.5281/zenodo.23862541), which
+always resolves to the latest version on [Zenodo](https://zenodo.org/); the
+Zenodo record lists the DOI of each version, too. The citation metadata is in
 [`CITATION.cff`](https://github.com/elixir-cloud-aai/trs-filer/blob/dev/CITATION.cff):
 on GitHub, "Cite this repository" in the sidebar of the repository formats it
 as APA or BibTeX.
@@ -85,12 +89,14 @@ mind our [code of conduct][code-of-conduct].
 [badge-build-status]: <https://github.com/elixir-cloud-aai/trs-filer/actions/workflows/ci.yml/badge.svg>
 [badge-coverage]: <https://codecov.io/gh/elixir-cloud-aai/trs-filer/branch/dev/graph/badge.svg?branch=dev>
 [badge-docker]: <https://img.shields.io/docker/v/elixircloud/trs-filer?sort=semver&label=image&color=C39BD3>
+[badge-doi]: <https://zenodo.org/badge/DOI/10.5281/zenodo.23862541.svg>
 [badge-docs]: <https://img.shields.io/readthedocs/trs-filer>
 [badge-github-tag]: <https://img.shields.io/github/v/tag/elixir-cloud-aai/trs-filer?color=C39BD3>
 [badge-license]: <https://img.shields.io/badge/license-Apache%202.0-blue.svg>
 [badge-url-build-status]: <https://github.com/elixir-cloud-aai/trs-filer/actions/workflows/ci.yml>
 [badge-url-coverage]: <https://codecov.io/gh/elixir-cloud-aai/trs-filer?branch=dev>
 [badge-url-docker]: <https://hub.docker.com/r/elixircloud/trs-filer/tags>
+[badge-url-doi]: <https://doi.org/10.5281/zenodo.23862541>
 [badge-url-docs]: <https://trs-filer.readthedocs.io/en/latest/>
 [badge-url-github-tag]: <https://github.com/elixir-cloud-aai/trs-filer/releases>
 [badge-url-license]: <https://www.apache.org/licenses/LICENSE-2.0>
