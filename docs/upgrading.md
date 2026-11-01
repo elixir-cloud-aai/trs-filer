@@ -163,12 +163,21 @@ you check **before** the upgrade:
   9.0, depending on when the pod last started), whose data 7.0 can't open
   either (MongoDB doesn't support downgrades). Check the version (and the
   feature compatibility version) of the running server, with `mongo` for
-  3.6 and `mongosh` for 6.0 and later:
+  3.6 (the old shell, in images before 6.0) and `mongosh` for 6.0 and later;
+  `OLD` is the MongoDB Deployment (`mongodb` or `mongodb-<appName>`):
 
     ```bash
-    kubectl exec deploy/<mongodb-deployment> -n <namespace> -- mongo --quiet --eval \
+    kubectl exec deploy/OLD -n <namespace> -- mongo --quiet --eval \
       'printjson({version: db.version(), fcv: db.adminCommand({getParameter: 1, featureCompatibilityVersion: 1}).featureCompatibilityVersion})'
     ```
+
+    If MongoDB doesn't start any more (`CrashLoopBackOff`, e.g., after a
+    restart pulled a newer `mongo:noble` that can't open the data), its log
+    names the versions (`kubectl logs deploy/OLD -n <namespace>
+    --previous`): set an image that can open the data (e.g., `kubectl set
+    image deploy/OLD OLD=docker.io/library/mongo:8.3 -n <namespace>`; the
+    container is named after the Deployment), wait until it runs, then
+    continue here.
 
 Then:
 
@@ -185,9 +194,10 @@ Then:
 
 The app is down from the first to the last step. The commands are for the
 release `trs-filer` with the default `trs_filer.appName` (`trs-filer`, the
-name of the app's Deployment and the label `app` of its pods) and database
+name of the app's Deployment and the label `app` of its pods; MongoDB's
+Deployment and claim are `mongodb-trs-filer`) and database
 (`trs-filer-db`, `mongodb.dbName`); replace them if yours differ. `OLD` is
-the MongoDB Deployment before the upgrade (`mongodb` or
+the MongoDB Deployment, and claim, before the upgrade (`mongodb` or
 `mongodb-trs-filer`); with MongoDB 6.0 or later, use `mongosh` instead of
 `mongo` in step 2.
 
@@ -219,7 +229,7 @@ the MongoDB Deployment before the upgrade (`mongodb` or
    its claim is deleted:
 
     ```bash
-    kubectl patch pv "$(kubectl get pvc <claim> -n <namespace> \
+    kubectl patch pv "$(kubectl get pvc OLD -n <namespace> \
       -o jsonpath='{.spec.volumeName}')" \
       -p '{"spec": {"persistentVolumeReclaimPolicy": "Retain"}}'
     ```
@@ -250,14 +260,21 @@ the MongoDB Deployment before the upgrade (`mongodb` or
 
 5. Stop the app again, so that it doesn't write during the restore, and
    wait until MongoDB has initialized the new volume (its entrypoint first
-   runs a temporary server for the init script, then starts MongoDB):
+   runs a temporary server for the init script, then starts MongoDB) and
+   accepts connections:
 
     ```bash
     kubectl scale deploy/trs-filer -n <namespace> --replicas=0
     kubectl wait pod -l app=trs-filer -n <namespace> --for=delete --timeout=120s
     until kubectl logs deploy/mongodb-trs-filer -n <namespace> \
       | grep -q 'ready for start up'; do sleep 2; done
+    until kubectl exec deploy/mongodb-trs-filer -n <namespace> -- \
+      mongosh --quiet --eval 'db.runCommand({ping: 1}).ok' >/dev/null 2>&1; do sleep 2; done
     ```
+
+    If the first loop doesn't end within a few minutes, stop it and check
+    MongoDB's pod and log (`kubectl get pods`, `kubectl logs`): e.g., after a
+    failed init, MongoDB restarts without it and doesn't print the line.
 
 6. Restore the dump, replacing the collections that the app has created,
    compare the counts with those of step 2, then start the app:

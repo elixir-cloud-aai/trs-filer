@@ -46,8 +46,8 @@ kubectl get nodes -o custom-columns=NODE:.metadata.name,KERNEL:.status.nodeInfo.
 
 MongoDB only starts on data whose feature compatibility version (FCV) it
 supports, so check the running version and the FCV before changing the image
-of an existing database (with `mongo` instead of `mongosh` for MongoDB
-before 6.0):
+of an existing database (with `mongo`, the old shell, instead of
+`mongosh` for images before 6.0, e.g., 3.6):
 
 ```bash
 kubectl exec deploy/mongodb-trs-filer -n namespace -- mongosh --quiet --eval \
