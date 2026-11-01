@@ -101,10 +101,11 @@ configured) instead of `trs-filer-db`. Deployments with data in
 `MONGO_DBNAME=trs-filer-db`, or move the data (see below); the Helm chart
 sets it already (value `mongodb.dbName`, by default `trs-filer-db`).
 
-MongoDB 4.4 or later is required (Docker Compose uses 7.0). MongoDB 7.0
-can't open data files of 3.6, which earlier Compose setups used: migrate
-them with `mongodump` (with MongoDB 3.6) and `mongorestore` (with 7.0),
-e.g., into `trsStore`, or upgrade one major version at a time.
+MongoDB 4.4 or later is required (Docker Compose and the Helm chart use
+7.0). MongoDB 7.0 can't open data files of 3.6, which earlier Compose
+setups used: migrate them with `mongodump` (with MongoDB 3.6) and
+`mongorestore` (with 7.0), e.g., into `trsStore`, or upgrade one major
+version at a time. For the Helm chart, see [Helm chart](#helm-chart).
 
 ## Image
 
@@ -137,6 +138,195 @@ port 80 on all interfaces). MongoDB data lives in the named volume
 `mongorestore` if needed (see [Database](#database)). The Compose setup
 applies the overlay `config.dev.yaml` (see [Local
 overrides](configuration.md#local-overrides)).
+
+## Helm chart
+
+Releases attach the chart (see [Verifying images and
+charts](operations.md#verifying-images-and-charts)); upgrade with it, and
+your values file, as described in [Deployment](deployment.md#upgrades).
+Releases installed from the chart in the repository before (from the tag
+`v0.3.0` or from `dev`) may need more steps, depending on two things, which
+you check **before** the upgrade:
+
+- **The name of MongoDB's claim** (`kubectl get pvc -n <namespace>`): the
+  chart calls MongoDB's Deployment, Service and PersistentVolumeClaim
+  `mongodb-<appName>` (`trs_filer.appName`, by default `trs-filer`); charts
+  before July 2024, including that of `v0.3.0`, called them `mongodb`. Helm
+  deletes resources that are no longer in the chart, so upgrading such a
+  release **deletes the claim `mongodb`** and, with the reclaim policy
+  `Delete` (the default of most storage classes), its volume and the data,
+  and starts MongoDB on a new, empty claim.
+- **The running MongoDB version**: the chart runs MongoDB 7.0
+  (`mongodb.image`, see [MongoDB](deployment.md#mongodb)). Charts before
+  January 2026 ran `mongo:3.6`, whose data files 7.0 can't open; the chart
+  on `dev` since then ran the floating `mongo:noble` (MongoDB 8.2, 8.3 or
+  9.0, depending on when the pod last started), whose data 7.0 can't open
+  either (MongoDB doesn't support downgrades). Check the version (and the
+  feature compatibility version) of the running server (with `mongosh`,
+  or `mongo`, the old shell, in images before 6.0); `OLD` is the MongoDB
+  Deployment (`mongodb` or `mongodb-<appName>`):
+
+    ```bash
+    kubectl exec deploy/OLD -n <namespace> -- sh -c \
+      '"$(command -v mongosh || echo mongo)" --quiet --eval "printjson({version: db.version(), fcv: db.adminCommand({getParameter: 1, featureCompatibilityVersion: 1}).featureCompatibilityVersion})"'
+    ```
+
+    If MongoDB doesn't start any more (`CrashLoopBackOff`, e.g., after a
+    restart pulled a newer `mongo:noble` that can't open the data), its log
+    names the versions (`kubectl logs deploy/OLD -n <namespace>
+    --previous`): set an image that can open the data (e.g., `kubectl set
+    image deploy/OLD OLD=docker.io/library/mongo:8.3 -n <namespace>`; the
+    container is named after the Deployment), wait until it runs, then
+    continue here.
+
+Then:
+
+- **Claim `mongodb-<appName>` and MongoDB 7.0:** upgrade as usual.
+- **Claim `mongodb-<appName>` and MongoDB 8.x or 9.0:** set `mongodb.image`
+  in the values file to the running major and minor version (e.g.,
+  `docker.io/library/mongo:8.2`, as `db.version()` reports it; mind the
+  kernel requirements of 8.x, see [MongoDB](deployment.md#mongodb)) and
+  upgrade; or move the data to 7.0 by dump and restore as below.
+- **Otherwise** (claim `mongodb`, or MongoDB 3.6): dump the data before the
+  upgrade and restore it afterwards, as below.
+
+### Dump and restore
+
+The app is down from the first to the last step. The commands are for the
+release `trs-filer` with the default `trs_filer.appName` (`trs-filer`, the
+name of the app's Deployment and the label `app` of its pods; MongoDB's
+Deployment and claim are `mongodb-trs-filer`) and database
+(`trs-filer-db`, `mongodb.dbName`); replace them if yours differ. `OLD` is
+the MongoDB Deployment, and claim, before the upgrade (`mongodb` or
+`mongodb-trs-filer`). Clients can reach the app whenever it runs, also with
+the empty database between the upgrade (step 4, which starts the app again)
+and step 5, and the restore replaces what they write then: keep clients
+away during the migration (e.g., by blocking the host at a proxy in front
+of the cluster, or in a maintenance window).
+
+1. Stop the app and wait until its pod is gone, so that the data doesn't
+   change during the dump:
+
+    ```bash
+    kubectl scale deploy/trs-filer -n <namespace> --replicas=0
+    kubectl wait pod -l app=trs-filer -n <namespace> --for=delete --timeout=120s
+    ```
+
+2. Count the documents of each collection, for a comparison after the
+   restore, and dump the database to a local file; check that `mongodump`
+   succeeds (the command prints `Dump OK`):
+
+    ```bash
+    kubectl exec deploy/OLD -n <namespace> -- sh -c \
+      '"$(command -v mongosh || echo mongo)" --quiet trs-filer-db --eval "db.getCollectionNames().forEach(c => print(c, db[c].countDocuments ? db[c].countDocuments({}) : db[c].count()))"'
+    kubectl exec deploy/OLD -n <namespace> -- \
+      mongodump --quiet --db trs-filer-db --archive > trs-filer-db.archive \
+    && echo "Dump OK"
+    ```
+
+3. Keep the old volume as a fallback: set the reclaim policy of its
+   PersistentVolume to `Retain`, which keeps the volume (with the data) when
+   its claim is deleted:
+
+    ```bash
+    kubectl patch pv "$(kubectl get pvc OLD -n <namespace> \
+      -o jsonpath='{.spec.volumeName}')" \
+      -p '{"spec": {"persistentVolumeReclaimPolicy": "Retain"}}'
+    ```
+
+    - With the claim `mongodb`, also annotate the claim, so that Helm keeps
+      it (Helm checks the annotation on the claim in the cluster before
+      deleting it on upgrades):
+      `kubectl annotate pvc mongodb -n <namespace> helm.sh/resource-policy=keep`.
+    - With the claim `mongodb-trs-filer` (and MongoDB 3.6, or a version to
+      leave), the upgrade keeps the claim, so MongoDB would start on the old
+      data files; delete MongoDB's Deployment and the claim (the volume is
+      retained), so that the upgrade creates them anew, with an empty volume:
+      `kubectl delete deploy/mongodb-trs-filer pvc/mongodb-trs-filer -n <namespace>`.
+
+4. Update the values file (see [Values](#values)) and upgrade the release
+   with the chart of the release, e.g.:
+
+    ```bash
+    helm upgrade trs-filer trs-filer-{{ chart_version }}.tgz -n <namespace> -f values.yaml
+    ```
+
+    The chart of the tag `v0.3.0` deploys the app with the API
+    `extensions/v1beta1`, which Kubernetes no longer serves since 1.16; if
+    `helm upgrade` fails because the release's manifest contains removed
+    APIs, map them first with the
+    [mapkubeapis](https://github.com/helm/helm-mapkubeapis) plugin
+    (`helm mapkubeapis trs-filer -n <namespace>`).
+
+5. Stop the app again, so that it doesn't write during the restore, and
+   wait until MongoDB has initialized the new volume (its entrypoint first
+   runs a temporary server for the init script, then starts MongoDB) and
+   accepts connections:
+
+    ```bash
+    kubectl scale deploy/trs-filer -n <namespace> --replicas=0
+    kubectl wait pod -l app=trs-filer -n <namespace> --for=delete --timeout=120s
+    timeout 300 sh -c 'until kubectl logs deploy/mongodb-trs-filer -n <namespace> \
+      | grep -q "ready for start up"; do sleep 2; done' \
+    && timeout 120 sh -c 'until kubectl exec deploy/mongodb-trs-filer -n <namespace> -- \
+      mongosh --quiet --eval "db.runCommand({ping: 1}).ok"; do sleep 2; done' \
+    && echo "MongoDB ready"
+    ```
+
+    Continue only if `MongoDB ready` is printed; otherwise check MongoDB's
+    pod and log (`kubectl get pods`, `kubectl logs`): e.g., after a failed
+    init, MongoDB restarts without it and doesn't print the line.
+
+6. Restore the dump, replacing the collections that the app has created,
+   and count the documents again:
+
+    ```bash
+    kubectl exec -i deploy/mongodb-trs-filer -n <namespace> -- \
+      mongorestore --quiet --drop --archive < trs-filer-db.archive \
+    && kubectl exec deploy/mongodb-trs-filer -n <namespace> -- \
+      mongosh --quiet trs-filer-db --eval 'db.getCollectionNames().forEach(c => print(c, db[c].countDocuments ? db[c].countDocuments({}) : db[c].count()))'
+    ```
+
+    If the restore fails on the options of an index, restore with
+    `--noIndexRestore`: the app creates its indexes on startup. The restore
+    is repeatable (`--drop`).
+
+7. Only if the restore succeeded and the counts match those of step 2,
+   start the app:
+
+    ```bash
+    kubectl scale deploy/trs-filer -n <namespace> --replicas=1
+    ```
+
+Once the new release works, delete the old claim `mongodb` (if any:
+`kubectl delete pvc mongodb -n <namespace>`), the retained volume
+(`kubectl delete pv <name>`; this deletes only the PersistentVolume object:
+delete its storage, e.g., the disk, with your storage provider) and the
+local dump. The `service_info`
+collection of the dump is no longer used (see [Service
+info](#service-info)).
+
+### Values
+
+Since the chart of `v0.3.0`, the values changed:
+
+- `clusterType` is removed: the chart creates an Ingress
+  (`trs_filer.ingress.enabled`, by default `true`; HTTPS via cert-manager
+  with `trs_filer.ingress.https`) or, with the Ingress disabled, an
+  OpenShift Route (with TLS at the router), as `v0.3.0` did with
+  `clusterType: openshift`.
+- `host_name` has no default (it was a test host); set it.
+- `trs_filer.image` is `elixircloud/trs-filer` (released charts set the
+  release's image), no longer `lvarin/trs-filer:0.1.0`.
+- `trs_filer.resources` and `mongodb.resources` set the requests and limits
+  of the app and of MongoDB.
+- `mongodb.image` is `docker.io/library/mongo:7.0` (was `mongo:3.6`, and
+  `mongo:noble` on `dev`), pulled as `mongodb.imagePullPolicy` says;
+  `mongodb.dbName` sets the app's database (`trs-filer-db` if empty).
+
+The chart annotates MongoDB's claim with `helm.sh/resource-policy: keep`
+(see [MongoDB](deployment.md#mongodb)), and replaces MongoDB's pod with the
+`Recreate` strategy.
 
 ## Images from `dev` since FOCA 0.17
 
