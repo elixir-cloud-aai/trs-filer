@@ -24,10 +24,21 @@ trs_filer:
 apiServer: kubernetes.default.svc:443 # address of k8s API server
 
 mongodb:
-  image: docker.io/library/mongo:noble
+  # The version that CI tests; MongoDB 8.0 refuses to start on Linux kernels
+  # 6.19 to 7.0.13 (https://jira.mongodb.org/browse/SERVER-121912). See
+  # deployment/README.md (MongoDB) before changing the version of an existing
+  # database. Pinned to a minor version; patch versions are updated on
+  # restarts
+  image: docker.io/library/mongo:7.0
+  # Pull policy of the image (`Always`, `IfNotPresent` or `Never`); `Always`,
+  # so that restarts get the latest patch version
+  imagePullPolicy: Always
   # https://github.com/elixir-cloud-aai/trs-filer/blob/9116b702bce2ef5b2e04130a6fe5db2a89d465f3/trs_filer/gunicorn.py#L26
   # If not set, it will use trs-filer-db
   dbName: ""
+  # Size of the PersistentVolumeClaim `mongodb-<appName>` with the data;
+  # Helm keeps the claim (`helm.sh/resource-policy: keep`) when the release
+  # is uninstalled (see deployment/README.md, MongoDB)
   volumeSize: 1Gi
   resources:
     limits:
