@@ -7,19 +7,34 @@ Routes */}}
 {{- $scheme = "https" }}
 {{- end -}}
 TRS-Filer is being deployed!
-{{- if not (or .Values.trs_filer.ingress.enabled $route) }}
-
-WARNING: Neither an Ingress nor an OpenShift Route (the cluster serves none)
-exposes the app. The Ingress is off by default, as the API has no
-authentication: restrict POST, PUT and DELETE (see below), then set
-`trs_filer.ingress.enabled: true`, or expose the app's Service
-(`{{ .Values.trs_filer.appName }}`, port 8080) yourself.
-{{- end }}
 
 WARNING: The API has no authentication. Anyone who can reach it can register,
 replace and delete tools and tool classes. Allow POST, PUT and DELETE only
-from trusted clients, at the ingress controller (`trs_filer.ingress.annotations`)
-or a proxy in front of it; see "Ingress" in the chart's README.
+from trusted clients; see "Ingress" in the chart's README.
+{{- if $route }}
+
+The OpenShift Route exposes the API for `{{ .Values.host_name }}` without
+restrictions (the chart sets none): restrict writes at a proxy in front of
+the router, or allow only trusted clients at the router (this restricts all
+methods); see "Ingress" in the chart's README.
+{{- else if .Values.trs_filer.ingress.enabled }}
+
+Restrict writes with annotations for the ingress controller
+(`trs_filer.ingress.annotations`) or at a proxy in front of it.
+{{- else }}
+
+Nothing exposes the app: the Ingress is off by default
+(`trs_filer.ingress.enabled`), and the cluster serves no OpenShift Routes.
+Set `trs_filer.ingress.enabled: true` together with annotations that
+restrict writes (`trs_filer.ingress.annotations`), or expose the app's
+Service (`{{ .Values.trs_filer.appName }}`, port 8080) yourself. To try the
+API from your machine meanwhile:
+
+  kubectl port-forward svc/{{ .Values.trs_filer.appName }} 8080:8080 -n {{ .Release.Namespace }}
+
+and open http://localhost:8080/ga4gh/trs/v2/ui
+{{- end }}
+{{- if or .Values.trs_filer.ingress.enabled $route }}
 
 Once deployed:
 
@@ -34,4 +49,5 @@ Once deployed:
 
   The URLs use http, as the chart serves no TLS; if a proxy in front of the
   cluster terminates TLS, use https instead.
+{{- end }}
 {{- end }}

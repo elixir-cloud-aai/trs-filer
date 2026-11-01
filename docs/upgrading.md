@@ -321,7 +321,8 @@ Since the chart of `v0.3.0`, the values changed:
   lose it on upgrade, and with it the app's external access, unless you set
   `trs_filer.ingress.enabled: true`; restrict `POST`, `PUT` and `DELETE`
   first (see [Ingress](deployment.md#ingress)). On OpenShift, the chart
-  creates the Route instead, as `v0.3.0` did.
+  creates the Route instead, as `v0.3.0` did, which exposes the API
+  without restrictions.
 - `host_name` has no default (it was a test host); set it.
 - `trs_filer.image` is `elixircloud/trs-filer` (released charts set the
   release's image), no longer `lvarin/trs-filer:0.1.0`.

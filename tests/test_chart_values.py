@@ -8,7 +8,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_ingress_disabled_by_default() -> None:
-    """The chart creates no Ingress unless it is enabled.
+    """The Ingress is disabled in the default values.
 
     The API has no authentication, so operators enable the Ingress only after
     restricting the methods that change data (see `deployment/README.md`).

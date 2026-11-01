@@ -18,6 +18,12 @@ helm install trs-filer . -n namespace
 `namespace` is the name of the namespace where the cluster should be installed.
 `trs-filer` could be any name, it will be referenced later for upgrading or uninstalling.
 
+3. Expose the app. The Ingress is off by default, as the API has no
+   authentication: on clusters without OpenShift Routes, nothing exposes the
+   app until you enable the Ingress, after restricting writes, or expose its
+   Service yourself; on OpenShift, the chart creates a Route without
+   restrictions. See [Ingress](#ingress).
+
 ## Resources
 
 `trs_filer.resources` sets the CPU and memory of the app: by default a
@@ -49,14 +55,24 @@ Routes, an OpenShift Route (with TLS at the router). As the API has no
 authentication, the Ingress is **off by default**
 (`trs_filer.ingress.enabled: false`): without it, on clusters that serve no
 Routes, nothing exposes the app (NOTES.txt warns of it), and you expose
-its Service (`<appName>`, port 8080) yourself. To use the Ingress, first
-restrict the methods that change data (see below), then enable it:
+its Service (`<appName>`, port 8080) yourself. To use the Ingress, enable
+it together with annotations that restrict the methods that change data
+(see the example below):
 
 ```yaml
 trs_filer:
   ingress:
     enabled: true
 ```
+
+On OpenShift, the Route is created by default, as the Ingress is off. It
+exposes the API **without restrictions**: the chart sets no annotations on
+it. Restrict writes at a proxy in front of the router, or allow only
+trusted clients at the router, which restricts all methods, not only
+writes (e.g., `oc annotate route <appName>
+haproxy.router.openshift.io/ip_allowlist="192.0.2.0/24" -n namespace`;
+`ip_whitelist` on OpenShift before 4.14). Or enable the Ingress instead
+(no Route is created then), with the means of your ingress controller.
 
 The Ingress routes all paths (`/`) to the app and is configured with:
 
