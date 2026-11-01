@@ -311,10 +311,17 @@ info](#service-info)).
 Since the chart of `v0.3.0`, the values changed:
 
 - `clusterType` is removed: the chart creates an Ingress
-  (`trs_filer.ingress.enabled`, by default `true`; HTTPS via cert-manager
-  with `trs_filer.ingress.https`) or, with the Ingress disabled, an
-  OpenShift Route (with TLS at the router), as `v0.3.0` did with
+  (`trs_filer.ingress.enabled`; HTTPS via cert-manager with
+  `trs_filer.ingress.https`) or, with the Ingress disabled, an OpenShift
+  Route (with TLS at the router), as `v0.3.0` did with
   `clusterType: openshift`.
+- The Ingress is **off by default** (`trs_filer.ingress.enabled: false`),
+  as the API has no authentication. Releases that relied on the Ingress
+  (installed from `dev` before this change, where it was on by default)
+  lose it on upgrade, and with it the app's external access, unless you set
+  `trs_filer.ingress.enabled: true`; restrict `POST`, `PUT` and `DELETE`
+  first (see [Ingress](deployment.md#ingress)). On OpenShift, the chart
+  creates the Route instead, as `v0.3.0` did.
 - `host_name` has no default (it was a test host); set it.
 - `trs_filer.image` is `elixircloud/trs-filer` (released charts set the
   release's image), no longer `lvarin/trs-filer:0.1.0`.

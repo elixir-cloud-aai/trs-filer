@@ -9,9 +9,13 @@ host_name: ""
 # Ingress)
 
 trs_filer:
-  # if ingress.enabled: false, it will deploy an OpenShift Route (https://docs.redhat.com/en/documentation/openshift_container_platform/4.19/html/network_apis/route-route-openshift-io-v1)
+  # Off by default, as the API has no authentication: enable the Ingress
+  # only after restricting POST, PUT and DELETE (see deployment/README.md,
+  # Ingress). With the Ingress disabled, the chart deploys an OpenShift Route
+  # if the cluster serves Routes (https://docs.redhat.com/en/documentation/openshift_container_platform/4.19/html/network_apis/route-route-openshift-io-v1),
+  # and otherwise nothing that exposes the app
   ingress:
-    enabled: true
+    enabled: false
     # Ingress class (`spec.ingressClassName`); the cluster default class if
     # empty
     className: ""

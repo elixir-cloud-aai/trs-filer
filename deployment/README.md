@@ -44,9 +44,21 @@ yet: add the variable to the app's Deployment in a copy of the chart (see
 ## Ingress
 
 The chart exposes the app for `host_name` via an Ingress
-(`trs_filer.ingress.enabled`, by default `true`) or, if it is disabled and
-the cluster serves Routes, an OpenShift Route (with TLS at the router). The
-Ingress routes all paths (`/`) to the app and is configured with:
+(`trs_filer.ingress.enabled`) or, if it is disabled and the cluster serves
+Routes, an OpenShift Route (with TLS at the router). As the API has no
+authentication, the Ingress is **off by default**
+(`trs_filer.ingress.enabled: false`): without it, on clusters that serve no
+Routes, nothing exposes the app (NOTES.txt warns of it), and you expose
+its Service (`<appName>`, port 8080) yourself. To use the Ingress, first
+restrict the methods that change data (see below), then enable it:
+
+```yaml
+trs_filer:
+  ingress:
+    enabled: true
+```
+
+The Ingress routes all paths (`/`) to the app and is configured with:
 
 - `className` sets the Ingress class (`spec.ingressClassName`; default: the
   cluster's default class);
@@ -67,6 +79,7 @@ from the network `192.0.2.0/24`:
 ```yaml
 trs_filer:
   ingress:
+    enabled: true
     className: nginx
     annotations:
       nginx.ingress.kubernetes.io/configuration-snippet: |

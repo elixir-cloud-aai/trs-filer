@@ -9,8 +9,10 @@ Routes */}}
 TRS-Filer is being deployed!
 {{- if not (or .Values.trs_filer.ingress.enabled $route) }}
 
-WARNING: Neither an Ingress (`trs_filer.ingress.enabled`) nor an OpenShift
-Route (the cluster serves none) exposes the app; expose its Service
+WARNING: Neither an Ingress nor an OpenShift Route (the cluster serves none)
+exposes the app. The Ingress is off by default, as the API has no
+authentication: restrict POST, PUT and DELETE (see below), then set
+`trs_filer.ingress.enabled: true`, or expose the app's Service
 (`{{ .Values.trs_filer.appName }}`, port 8080) yourself.
 {{- end }}
 
