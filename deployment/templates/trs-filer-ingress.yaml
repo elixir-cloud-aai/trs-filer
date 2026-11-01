@@ -1,4 +1,4 @@
-{{ if .Values.trs_filer.ingress.enabled }}
+{{- if .Values.trs_filer.ingress.enabled }}
 {{- /* The chart's annotations (cert-manager, for `https`), overridden by
 those of `ingress.annotations`; `null` there removes one of the chart's */}}
 {{- $annotations := dict }}

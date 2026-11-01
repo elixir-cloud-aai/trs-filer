@@ -1,10 +1,18 @@
 {{- /* HTTPS at the Ingress with `https.enabled`, or at the OpenShift Route
-(edge TLS) without the Ingress */}}
+(edge TLS), which the chart creates without the Ingress if the cluster serves
+Routes */}}
+{{- $route := and (not .Values.trs_filer.ingress.enabled) (.Capabilities.APIVersions.Has "route.openshift.io/v1") }}
 {{- $scheme := "http" }}
-{{- if or (not .Values.trs_filer.ingress.enabled) .Values.trs_filer.ingress.https.enabled }}
+{{- if or $route .Values.trs_filer.ingress.https.enabled }}
 {{- $scheme = "https" }}
 {{- end -}}
 TRS-Filer is being deployed!
+{{- if not (or .Values.trs_filer.ingress.enabled $route) }}
+
+WARNING: Neither an Ingress (`trs_filer.ingress.enabled`) nor an OpenShift
+Route (the cluster serves none) exposes the app; expose its Service
+(`{{ .Values.trs_filer.appName }}`, port 8080) yourself.
+{{- end }}
 
 WARNING: The API has no authentication. Anyone who can reach it can register,
 replace and delete tools and tool classes. Allow POST, PUT and DELETE only

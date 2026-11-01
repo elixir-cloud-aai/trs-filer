@@ -3,9 +3,9 @@
 > **Warning:** TRS-Filer has no authentication yet: anyone who can reach the
 > API can register, replace and delete tools and tool classes. Allow `POST`,
 > `PUT` and `DELETE` only from trusted clients, at the ingress controller (see
-> [Ingress](#ingress)) or at a proxy in front of the cluster (see [Access
-> control](https://trs-filer.readthedocs.io/en/latest/access-control/)). The
-> chart restricts nothing by default.
+> [Ingress](#ingress)) or at a proxy in front of the cluster (see
+> [Access control](https://trs-filer.readthedocs.io/en/latest/access-control/)).
+> The chart restricts nothing by default.
 
 ## Quick start
 
@@ -32,7 +32,8 @@ Ingress routes all paths (`/`) to the app and is configured with:
   removes one of these;
 - `https.enabled` requests a certificate from cert-manager (via the
   ClusterIssuer `https.issuer`) and serves HTTPS with it. Without it, the
-  Ingress serves plain HTTP.
+  Ingress serves plain HTTP: terminate TLS in front of the cluster then, as
+  the app advertises `https://<host_name>` URLs (e.g., the `url` of tools).
 
 The chart sets no annotations for particular ingress controllers. Restrict
 the methods that change data (`POST`, `PUT`, `DELETE`) to trusted clients
@@ -52,14 +53,24 @@ trs_filer:
         }
 ```
 
-Snippet annotations are disabled in ingress-nginx by default (since 1.9; the
-controller must set `allow-snippet-annotations: "true"` and, since 1.12,
-`annotations-risk-level: Critical`), as they let anyone who can create
-Ingresses change the controller's configuration; check that this is
-acceptable in your cluster. ingress-nginx is also retired (no releases or
-security fixes after March 2026): with other controllers or the Gateway API,
-use their means to restrict methods or clients, or restrict them at a proxy
-in front of the cluster.
+`allow` checks the source address that the controller sees, which is the
+client's only if it gets through: behind a load balancer, e.g., with
+`externalTrafficPolicy: Local` or the PROXY protocol (with
+`externalTrafficPolicy: Cluster`, clients appear with the addresses of the
+nodes). If the controller trusts forwarded headers (`use-forwarded-headers`),
+limit them to your proxies (`proxy-real-ip-cidr`, by default `0.0.0.0/0`),
+or anyone can claim an allowed address in `X-Forwarded-For`. A controller
+that doesn't allow snippets ignores the annotation (or its admission webhook
+rejects the Ingress), leaving writes open: check with a `POST` from an
+untrusted address that writes are refused (`403`).
+Recent versions of ingress-nginx disable snippet annotations by default (the
+controller must allow them, `allow-snippet-annotations`, and annotations of
+their risk level, `annotations-risk-level: Critical`), as they let anyone
+who can create Ingresses change the controller's configuration; check that
+this is acceptable in your cluster. ingress-nginx is also retired (no
+releases or security fixes after March 2026): with other controllers or the
+Gateway API, use their means to restrict methods or clients, or restrict
+them at a proxy in front of the cluster.
 
 ## Upgrades
 
