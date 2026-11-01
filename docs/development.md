@@ -96,6 +96,9 @@ versions they lock; the lint job also checks that the lock matches
 `pyproject.toml` (`uv lock --check`). The app itself is installed editable
 there, built with build requirements from the package index (not the lock),
 as `pip install -e` does; those jobs hold no publishing credentials. The
+`push` job, which does, still installs setuptools-scm without the lock
+(to be changed by
+[#212](https://github.com/elixir-cloud-aai/trs-filer/issues/212)). The
 image still installs the runtime dependencies from the ranges of
 `pyproject.toml` (`scripts/image_requirements.py`). After adding, removing
 or changing a dependency in `pyproject.toml`, update the lock and commit
