@@ -32,7 +32,7 @@ updates:
     groups:
       github-actions:
         patterns: ["*"]
-  # Base image in the `Dockerfile` (tag and digest)
+  # Base image and uv image in the `Dockerfile` (tag and digest)
   - package-ecosystem: docker
     directory: /
     schedule:
