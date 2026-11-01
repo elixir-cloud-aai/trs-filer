@@ -30,7 +30,7 @@ spec:
           # config's `db`, so that the app reaches MongoDB also if the Job
           # failed
           - name: MONGO_DBNAME
-            value: {{ .Values.mongodb.dbName | default "trs-filer-db" }}
+            value: {{ tpl (default "trs-filer-db" .Values.mongodb.dbName) . }}
           - name: MONGO_HOST
             value: mongodb-{{ .Values.trs_filer.appName }}
           # The config that the Job renders, merged into the base config
