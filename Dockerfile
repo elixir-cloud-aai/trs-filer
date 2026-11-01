@@ -1,3 +1,10 @@
+##### TOOLS #####
+## uv, pinned by digest; Dependabot updates the tag and digest together. Not
+## used by the image build (BuildKit skips the stage): CI's `push` job
+## exports the locked build requirements with it
+## (`.github/workflows/ci.yml`), so that the uv it runs is verified
+FROM ghcr.io/astral-sh/uv:0.13.6@sha256:af22a52f5eafef3d78e551599d405c02df61919d18028f0cea8eda93bc9986d0 AS uv
+
 ##### BASE IMAGE #####
 ## Pinned by digest, so that rebuilds (e.g., of a release) use the same base
 ## image; Dependabot updates the tag and digest together

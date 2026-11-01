@@ -423,13 +423,34 @@ jobs:
         with:
           python-version: "3.13"
       # The Docker build gets no Git metadata, so the version (e.g.,
-      # `0.3.1.dev4+g<commit>`) is passed as a build argument
+      # `0.3.1.dev4+g<commit>`) is passed as a build argument. It is derived
+      # with the build requirements (`build-system.requires`, the dependency
+      # group `build-system`), exported from `uv.lock` by the uv image of the
+      # `Dockerfile` (pinned by digest, so that the uv binary is verified;
+      # without network, as `--frozen` reads the lock only), then installed
+      # at the exact versions of the lock, checked against its hashes, as
+      # wheels only, into a virtual environment of their own (with the pip
+      # of the runner's Python, `ensurepip`)
       - name: Derive version
         id: version
-        # Same bound as in `build-system.requires` of `pyproject.toml`
         run: |
-          pip install "setuptools-scm>=8"
-          echo "version=$(python -m setuptools_scm)" >> "$GITHUB_OUTPUT"
+          uv_image="$(sed -En 's/^FROM (ghcr\.io\/astral-sh\/uv:[^ @]+@sha256:[0-9a-f]{64}) AS uv$/\1/p' Dockerfile)"
+          if [[ -z "${uv_image}" ]]; then
+            echo "::error::No uv image pinned by digest in the Dockerfile"
+            exit 1
+          fi
+          requirements="${RUNNER_TEMP}/build-requirements.txt"
+          docker run --rm --network none --tmpfs /tmp --env UV_NO_CACHE=1 \
+            --volume "${PWD}/pyproject.toml:/src/pyproject.toml:ro" \
+            --volume "${PWD}/uv.lock:/src/uv.lock:ro" "${uv_image}" \
+            export --frozen --only-group build-system --no-emit-project \
+            --project /src > "${requirements}"
+          python -m venv "${RUNNER_TEMP}/build-env"
+          "${RUNNER_TEMP}/build-env/bin/pip" install --require-hashes \
+            --only-binary :all: --no-deps -r "${requirements}"
+          version="$("${RUNNER_TEMP}/build-env/bin/python" -m setuptools_scm)"
+          echo "Version: ${version}"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       # OCI labels with the version, commit and source; the tags are set by

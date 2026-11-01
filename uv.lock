@@ -2322,6 +2322,12 @@ docs = [
     { name = "pymdown-extensions" },
 ]
 
+[package.dev-dependencies]
+build-system = [
+    { name = "setuptools" },
+    { name = "setuptools-scm" },
+]
+
 [package.metadata]
 requires-dist = [
     { name = "ast-grep-cli", marker = "extra == 'dev'", specifier = ">=0.51" },
@@ -2350,6 +2356,12 @@ requires-dist = [
     { name = "uv", marker = "extra == 'dev'", specifier = ">=0.13" },
 ]
 provides-extras = ["dev", "docs"]
+
+[package.metadata.requires-dev]
+build-system = [
+    { name = "setuptools", specifier = ">=77" },
+    { name = "setuptools-scm", specifier = ">=8" },
+]
 
 [[package]]
 name = "types-pyyaml"

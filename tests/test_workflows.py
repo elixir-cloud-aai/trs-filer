@@ -10,6 +10,7 @@ import subprocess
 import tomllib
 from typing import Any
 
+from packaging.requirements import Requirement
 import pytest
 import yaml
 
@@ -644,3 +645,112 @@ def test_uv_version_locked() -> None:
     assert setups
     for name, job_id, step in setups:
         assert step["with"] == {"version-file": "uv.lock"}, (name, job_id)
+
+
+# The only options of an install in a job with credentials, besides `-r`
+HASH_CHECKED = ["--require-hashes", "--only-binary", ":all:", "--no-deps"]
+
+
+def test_credential_jobs_install_hash_checked() -> None:
+    """Jobs with publishing credentials install Python packages hash-checked.
+
+    A compromised release of a package installed unpinned would run code in
+    a job that holds registry credentials. So every pip command there that
+    installs or builds packages is a `pip install` of exported locked
+    requirements (`-r`) with hash checks, as wheels only and without
+    resolving anything else, and no other installer is used. Actions
+    (`uses:`) are pinned by commit and not checked here.
+    """
+    for name, job_id, job in _credential_jobs():
+        for step in job["steps"]:
+            for command in _commands(step):
+                where = (name, job_id, step.get("name"), command)
+                assert not INSTALLERS.search(command), where
+                assert not UV_SYNC.search(command), where
+                if match := PIP.search(command):
+                    assert match.group(2) == "install", where
+                    # Exactly these options and one requirements file (no
+                    # other files, packages or options)
+                    options = shlex.split(command[match.end() :])
+                    assert options.count("-r") == 1, where
+                    file = options.index("-r")
+                    assert options[file + 1].startswith("$"), where
+                    rest = options[:file] + options[file + 2 :]
+                    assert rest == HASH_CHECKED, where
+
+
+def _derive_version() -> dict[str, Any]:
+    """Get the step of the `push` job of `ci.yml` that derives the version.
+
+    Returns:
+        The step.
+    """
+    jobs = _load(WORKFLOWS / "ci.yml")["jobs"]
+    names = [step["name"] for step in jobs["push"]["steps"]]
+    # Unique, so that the order checked is that of the step returned
+    assert len(names) == len(set(names))
+    steps = dict(zip(names, jobs["push"]["steps"], strict=True))
+    # Before the job logs in to Docker Hub
+    assert names.index("Derive version") < names.index("Log in to Docker Hub")
+    return steps["Derive version"]
+
+
+def test_dev_version_from_locked_build_requirements() -> None:
+    """The `push` job of `ci.yml` derives the version with the locked tools.
+
+    setuptools-scm and its dependencies are the `build-system` group of
+    `uv.lock`, exported by the uv image of the `Dockerfile` (pinned by
+    digest) and run from the virtual environment they are installed into
+    (with hash checks, see `test_credential_jobs_install_hash_checked`).
+    """
+    script = " ".join(_commands(_derive_version()))
+    assert '"${uv_image}" export --frozen --only-group build-system' in script
+    assert "--no-emit-project" in script
+    assert "--network none" in script
+    # pip installs exactly the exported requirements
+    assert '--project /src > "${requirements}"' in script
+    assert '--no-deps -r "${requirements}"' in script
+    assert re.search(r"build-env/bin/python\"? -m setuptools_scm", script)
+
+
+def test_dev_version_uv_image() -> None:
+    """The step finds the uv image of the `Dockerfile`, with its digest.
+
+    The step's `sed` command runs against the `Dockerfile`, as in the step
+    (GNU `sed`, as on the GitHub runners).
+    """
+    sed = shutil.which("sed")
+    assert sed
+    (command,) = [
+        command
+        for command in _commands(_derive_version())
+        if command.startswith('uv_image="$(sed ')
+    ]
+    args = shlex.split(command.removeprefix('uv_image="$(').removesuffix(')"'))
+    assert args[0] == "sed"
+    assert args[-1] == "Dockerfile"
+    result = subprocess.run(  # noqa: S603 (fixed arguments, no shell)
+        [sed, *args[1:]],
+        capture_output=True,
+        text=True,
+        cwd=ROOT,
+        check=True,
+    )
+    dockerfile = (ROOT / "Dockerfile").read_text(encoding="utf-8")
+    match = re.search(r"^FROM (ghcr\.io/astral-sh/uv:\S+) AS uv$", dockerfile, re.M)
+    assert match
+    assert re.fullmatch(r"ghcr\.io/astral-sh/uv:[^@]+@sha256:[0-9a-f]{64}", match[1])
+    assert result.stdout == match[1] + "\n"
+
+
+def test_build_system_group() -> None:
+    """The `build-system` group is `build-system.requires`, and locked."""
+    pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    group = pyproject["dependency-groups"]["build-system"]
+    assert group == pyproject["build-system"]["requires"]
+    lock = tomllib.loads((ROOT / "uv.lock").read_text(encoding="utf-8"))
+    (project,) = [
+        package for package in lock["package"] if package["name"] == "trs-filer"
+    ]
+    locked = [entry["name"] for entry in project["dev-dependencies"]["build-system"]]
+    assert sorted(locked) == sorted(Requirement(spec).name for spec in group)
