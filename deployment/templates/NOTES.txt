@@ -28,3 +28,8 @@ Once deployed:
        curl -X GET "{{ $scheme }}://{{ .Values.host_name }}/ga4gh/trs/v2/service-info" -H "Accept: application/json"
 
   2. Access the Swagger UI via {{ $scheme }}://{{ .Values.host_name }}/ga4gh/trs/v2/ui
+{{- if eq $scheme "http" }}
+
+  The URLs use http, as the chart serves no TLS; if a proxy in front of the
+  cluster terminates TLS, use https instead.
+{{- end }}

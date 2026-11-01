@@ -23,7 +23,7 @@ metadata:
   name: {{ .Values.trs_filer.appName }}-ingress
 spec:
   {{- with .Values.trs_filer.ingress.className }}
-  ingressClassName: {{ . }}
+  ingressClassName: {{ . | quote }}
   {{- end }}
   rules:
     - host: {{ .Values.host_name }}
