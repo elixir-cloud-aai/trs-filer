@@ -1,7 +1,18 @@
-{{ if ( and (.Capabilities.APIVersions.Has "route.openshift.io/v1") (not .Values.trs_filer.ingress.enabled)) }}
+{{- if include "trs-filer.route" . }}
 apiVersion: route.openshift.io/v1
 kind: Route
 metadata:
+  {{- /* Values as strings; `null` leaves an annotation out */}}
+  {{- $annotations := dict }}
+  {{- range $key, $value := (dig "route" "annotations" (dict) .Values.trs_filer) }}
+  {{- if not (kindIs "invalid" $value) }}
+  {{- $_ := set $annotations $key (toString $value) }}
+  {{- end }}
+  {{- end }}
+  {{- with $annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
   name: {{ .Values.trs_filer.appName }}-route
 spec:
   host: {{ .Values.host_name }}

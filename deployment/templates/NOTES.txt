@@ -1,23 +1,33 @@
 {{- /* HTTPS at the Ingress with `https.enabled`, or at the OpenShift Route
-(edge TLS), which the chart creates without the Ingress if the cluster serves
-Routes */}}
-{{- $route := and (not .Values.trs_filer.ingress.enabled) (.Capabilities.APIVersions.Has "route.openshift.io/v1") }}
+(edge TLS), which the chart creates without the Ingress if `route.enabled`
+and the cluster serves Routes */}}
+{{- $route := include "trs-filer.route" . }}
 {{- $scheme := "http" }}
 {{- if or $route (and .Values.trs_filer.ingress.enabled .Values.trs_filer.ingress.https.enabled) }}
 {{- $scheme = "https" }}
 {{- end -}}
 TRS-Filer is being deployed!
+
+WARNING: The API has no authentication yet (see
+https://github.com/elixir-cloud-aai/trs-filer/issues/7). Anyone who can
+reach it can register, replace and delete tools and tool classes. Allow
+POST, PUT and DELETE only from trusted clients, at the ingress controller
+(`trs_filer.ingress.annotations`), the OpenShift router
+(`trs_filer.route.annotations`) or a proxy in front of them; see "Ingress
+and Route" in the chart's README.
 {{- if not (or .Values.trs_filer.ingress.enabled $route) }}
 
-WARNING: Neither an Ingress (`trs_filer.ingress.enabled`) nor an OpenShift
-Route (the cluster serves none) exposes the app; expose its Service
-(`{{ .Values.trs_filer.appName }}`, port 8080) yourself.
-{{- end }}
+The chart exposes the app neither via an Ingress
+(`trs_filer.ingress.enabled`) nor via an OpenShift Route
+(`trs_filer.route.enabled`, on clusters that serve Routes). If no resource
+of your own (e.g., a Route or HTTPRoute) exposes the app's Service
+(`{{ .Values.trs_filer.appName }}`, port 8080), nothing does. To try the
+API from your machine:
 
-WARNING: The API has no authentication. Anyone who can reach it can register,
-replace and delete tools and tool classes. Allow POST, PUT and DELETE only
-from trusted clients, at the ingress controller (`trs_filer.ingress.annotations`)
-or a proxy in front of it; see "Ingress" in the chart's README.
+  kubectl port-forward svc/{{ .Values.trs_filer.appName }} 8080:8080 -n {{ .Release.Namespace }}
+
+and open http://localhost:8080/ga4gh/trs/v2/ui
+{{- else }}
 
 Once deployed:
 
@@ -32,4 +42,5 @@ Once deployed:
 
   The URLs use http, as the chart serves no TLS; if a proxy in front of the
   cluster terminates TLS, use https instead.
+{{- end }}
 {{- end }}

@@ -5,11 +5,10 @@
 host_name: ""
 
 # The API has no authentication: restrict POST, PUT and DELETE at the
-# ingress controller or a proxy in front of it (see deployment/README.md,
-# Ingress)
+# ingress controller, the OpenShift router or a proxy in front of them (see
+# deployment/README.md, Ingress and Route)
 
 trs_filer:
-  # if ingress.enabled: false, it will deploy an OpenShift Route (https://docs.redhat.com/en/documentation/openshift_container_platform/4.19/html/network_apis/route-route-openshift-io-v1)
   ingress:
     enabled: true
     # Ingress class (`spec.ingressClassName`); the cluster default class if
@@ -23,6 +22,19 @@ trs_filer:
     https:
       enabled: false
       issuer: letsencrypt-prod
+  # OpenShift Route for all paths (TLS at the router, which redirects HTTP
+  # to HTTPS)
+  route:
+    # Create the Route if the Ingress is not enabled and the cluster serves
+    # Routes; false, e.g., for a Route or HTTPRoute of your own
+    enabled: true
+    # Annotations of the Route, e.g., for rate limits of the router
+    # (`haproxy.router.openshift.io/rate-limit-connections: "true"` with
+    # `haproxy.router.openshift.io/rate-limit-connections.rate-http`) or to
+    # allow only trusted clients (`haproxy.router.openshift.io/ip_allowlist`);
+    # `null` removes one. Quote numbers (e.g., `"100"`), as large ones would
+    # be written in exponent form
+    annotations: {}
   image: elixircloud/trs-filer:latest
   appName: trs-filer
   # The image's Gunicorn defaults (one worker with four threads) peak at
