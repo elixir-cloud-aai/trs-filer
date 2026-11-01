@@ -270,9 +270,9 @@ def test_ci_gate() -> None:
 def test_ci_gate_conditions() -> None:
     """The gate may skip a job exactly where the job's condition is false.
 
-    Only `push` and `publish` may be skipped; `allow-skipped` names each of
-    them under the negated `if:` of the job, so that a job skipped where it
-    should run fails the gate.
+    Only `title` (on every event), `push` and `publish` may be skipped;
+    `allow-skipped` names the last two under the negated `if:` of the job, so
+    that a job skipped where it should run fails the gate.
     """
     jobs, step = _ci_gate()
     allowed = " ".join(step["with"]["allow-skipped"].split())
@@ -281,7 +281,8 @@ def test_ci_gate_conditions() -> None:
     conditions = [
         f"!({' '.join(jobs[job]['if'].split())}) && '{job}' || ''" for job in named
     ]
-    assert allowed == f"${{{{ format('{{0}} {{1}}', {', '.join(conditions)}) }}}}"
+    expected = f"format('title {{0}} {{1}}', {', '.join(conditions)})"
+    assert allowed == f"${{{{ {expected} }}}}"
 
 
 # Values specific to identity providers or deployments, which this generic
