@@ -2,7 +2,8 @@
 
 The image runs ``gunicorn --config python:trs_filer.gunicorn_config
 'trs_filer.app:create_app()'``. The defaults suit a small container
-(e.g., the Helm chart's 128 MiB memory limit); override them via
+(about 90 MB at rest and 175 MB at peak, within the Helm chart's 256 MiB
+request and 384 MiB limit); override them via
 ``GUNICORN_CMD_ARGS`` (e.g., ``--workers 2 --threads 8``), which takes
 precedence over this module (cf. https://gunicorn.org/reference/settings/).
 

@@ -13,13 +13,17 @@ trs_filer:
       issuer: letsencrypt-prod
   image: elixircloud/trs-filer:latest
   appName: trs-filer
+  # The image's Gunicorn defaults (one worker with four threads) peak at
+  # about 175 MB (worker and master) under concurrent registrations; raise
+  # the memory with more workers (`GUNICORN_CMD_ARGS`), which load the whole
+  # app each (see deployment/README.md, Resources)
   resources:
     limits:
       cpu: 100m
-      memory: 128Mi
+      memory: 384Mi
     requests:
       cpu: 100m
-      memory: 128Mi
+      memory: 256Mi
 
 apiServer: kubernetes.default.svc:443 # address of k8s API server
 
