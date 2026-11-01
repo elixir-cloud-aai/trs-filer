@@ -24,11 +24,11 @@ helm upgrade trs-filer . -n namespace
 `namespace` is the name of the namespace where the cluster was installed.
 `trs-filer` is the name given when installing. In order to see the correct name, do a `helm ls -n namespace`.
 
-Releases whose MongoDB claim is called `mongodb` (installed from the chart
-of the tag `v0.3.0`) need more steps, or the upgrade **deletes the
-database**: see [Helm
+Releases installed from the chart in the repository before (from the tag
+`v0.3.0` or from `dev`) may need more steps, or the upgrade **deletes the
+database** or leaves MongoDB unable to start: see [Helm
 chart](https://trs-filer.readthedocs.io/en/latest/upgrading/#helm-chart) in
-the upgrade notes.
+the upgrade notes before upgrading them.
 
 ## MongoDB
 
@@ -46,7 +46,8 @@ kubectl get nodes -o custom-columns=NODE:.metadata.name,KERNEL:.status.nodeInfo.
 
 MongoDB only starts on data whose feature compatibility version (FCV) it
 supports, so check the running version and the FCV before changing the image
-of an existing database:
+of an existing database (with `mongo` instead of `mongosh` for MongoDB
+before 6.0):
 
 ```bash
 kubectl exec deploy/mongodb-trs-filer -n namespace -- mongosh --quiet --eval \
@@ -59,10 +60,10 @@ kubectl exec deploy/mongodb-trs-filer -n namespace -- mongosh --quiet --eval \
   `db.adminCommand({setFeatureCompatibilityVersion: "7.0", confirm: true})`)
   before the next step.
 - **Downgrades** are not supported by the `mongo` images (MongoDB Community
-  Edition): keep the running version (e.g., `mongodb.image:
-  docker.io/library/mongo:8.0` for a database created by `mongo:noble`, the
-  chart's earlier default), or dump the database (`mongodump`) and restore it
-  (`mongorestore`) into a new, empty volume with the older version.
+  Edition): keep the running major and minor version (as `db.version()`
+  reports it, e.g., `mongodb.image: docker.io/library/mongo:8.2`), or dump
+  the database (`mongodump`) and restore it (`mongorestore`) into a new,
+  empty volume with the older version.
 
 The MongoDB Deployment uses the `Recreate` strategy, as the data volume can
 only be used by one pod: changing the image stops MongoDB, and an image that
@@ -74,6 +75,6 @@ MongoDB keeps its data in the PersistentVolumeClaim `mongodb-<appName>` (by
 default `mongodb-trs-filer`, of `mongodb.volumeSize`). The claim is
 annotated with `helm.sh/resource-policy: keep`, so Helm keeps it, and the
 database, when the release is uninstalled; installing a release with the
-same `trs_filer.appName` in the same namespace uses it again. Delete it by
-hand to remove the data (`kubectl delete pvc mongodb-trs-filer -n
-namespace`).
+same name and `trs_filer.appName` in the same namespace uses it again (Helm
+refuses to install a release of another name over it). Delete it by hand to
+remove the data (`kubectl delete pvc mongodb-trs-filer -n namespace`).
