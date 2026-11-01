@@ -71,7 +71,7 @@ api:
 # of the installed package (`package`). Deployments set their own `id`,
 # `name`, `description`, `organization`, `contactUrl` and `environment`; `id`
 # and `organization` are placeholders with reserved example domains (RFC
-# 2606), which the app warns of on startup
+# 2606), which FOCA warns of on startup
 # Cf. https://foca.readthedocs.io/en/latest/configuration/service-info/
 service_info:
     package: trs-filer

@@ -9,6 +9,7 @@ from collections.abc import Callable
 from copy import deepcopy
 from io import BytesIO
 from pathlib import Path
+import re
 from typing import Any, NoReturn
 from zipfile import ZipFile
 
@@ -745,7 +746,11 @@ def test_type_BadRequest_unknown(
     assert response.status_code == 400
     body = response.get_json()
     assert body == {**BAD_REQUEST, "detail": body["detail"]}
-    assert body["detail"].startswith("'FOO' is not one of ['CWL', ")
+    # The reason names the allowed types of the path's parameter, in full
+    # (they differ between paths, e.g., without the `PLAIN_` types)
+    reason = body["detail"].splitlines()[0]
+    assert re.fullmatch(r"'FOO' is not one of \[('[A-Z_]+', )*'[A-Z_]+'\]", reason)
+    assert "'CWL', 'WDL', 'NFL', 'GALAXY', 'SMK'" in reason
 
 
 @pytest.mark.parametrize("path", TYPE_PATHS)
