@@ -162,13 +162,13 @@ you check **before** the upgrade:
   on `dev` since then ran the floating `mongo:noble` (MongoDB 8.2, 8.3 or
   9.0, depending on when the pod last started), whose data 7.0 can't open
   either (MongoDB doesn't support downgrades). Check the version (and the
-  feature compatibility version) of the running server, with `mongo` for
-  3.6 (the old shell, in images before 6.0) and `mongosh` for 6.0 and later;
-  `OLD` is the MongoDB Deployment (`mongodb` or `mongodb-<appName>`):
+  feature compatibility version) of the running server (with `mongosh`,
+  or `mongo`, the old shell, in images before 6.0); `OLD` is the MongoDB
+  Deployment (`mongodb` or `mongodb-<appName>`):
 
     ```bash
-    kubectl exec deploy/OLD -n <namespace> -- mongo --quiet --eval \
-      'printjson({version: db.version(), fcv: db.adminCommand({getParameter: 1, featureCompatibilityVersion: 1}).featureCompatibilityVersion})'
+    kubectl exec deploy/OLD -n <namespace> -- sh -c \
+      '"$(command -v mongosh || echo mongo)" --quiet --eval "printjson({version: db.version(), fcv: db.adminCommand({getParameter: 1, featureCompatibilityVersion: 1}).featureCompatibilityVersion})"'
     ```
 
     If MongoDB doesn't start any more (`CrashLoopBackOff`, e.g., after a
@@ -198,8 +198,11 @@ name of the app's Deployment and the label `app` of its pods; MongoDB's
 Deployment and claim are `mongodb-trs-filer`) and database
 (`trs-filer-db`, `mongodb.dbName`); replace them if yours differ. `OLD` is
 the MongoDB Deployment, and claim, before the upgrade (`mongodb` or
-`mongodb-trs-filer`); with MongoDB 6.0 or later, use `mongosh` instead of
-`mongo` in step 2.
+`mongodb-trs-filer`). Clients can reach the app whenever it runs, also with
+the empty database between the upgrade (step 4, which starts the app again)
+and step 5, and the restore replaces what they write then: keep clients
+away during the migration (e.g., by blocking the host at a proxy in front
+of the cluster, or in a maintenance window).
 
 1. Stop the app and wait until its pod is gone, so that the data doesn't
    change during the dump:
@@ -214,15 +217,12 @@ the MongoDB Deployment, and claim, before the upgrade (`mongodb` or
    succeeds (the command prints `Dump OK`):
 
     ```bash
-    kubectl exec deploy/OLD -n <namespace> -- mongo --quiet trs-filer-db --eval \
-      'db.getCollectionNames().forEach(c => print(c, db[c].countDocuments({})))'
+    kubectl exec deploy/OLD -n <namespace> -- sh -c \
+      '"$(command -v mongosh || echo mongo)" --quiet trs-filer-db --eval "db.getCollectionNames().forEach(c => print(c, db[c].countDocuments ? db[c].countDocuments({}) : db[c].count()))"'
     kubectl exec deploy/OLD -n <namespace> -- \
       mongodump --quiet --db trs-filer-db --archive > trs-filer-db.archive \
     && echo "Dump OK"
     ```
-
-    (With MongoDB 3.6, use `db[c].count()` instead of
-    `db[c].countDocuments({})`.)
 
 3. Keep the old volume as a fallback: set the reclaim policy of its
    PersistentVolume to `Retain`, which keeps the volume (with the data) when
@@ -266,34 +266,43 @@ the MongoDB Deployment, and claim, before the upgrade (`mongodb` or
     ```bash
     kubectl scale deploy/trs-filer -n <namespace> --replicas=0
     kubectl wait pod -l app=trs-filer -n <namespace> --for=delete --timeout=120s
-    until kubectl logs deploy/mongodb-trs-filer -n <namespace> \
-      | grep -q 'ready for start up'; do sleep 2; done
-    until kubectl exec deploy/mongodb-trs-filer -n <namespace> -- \
-      mongosh --quiet --eval 'db.runCommand({ping: 1}).ok' >/dev/null 2>&1; do sleep 2; done
+    timeout 300 sh -c 'until kubectl logs deploy/mongodb-trs-filer -n <namespace> \
+      | grep -q "ready for start up"; do sleep 2; done' \
+    && timeout 120 sh -c 'until kubectl exec deploy/mongodb-trs-filer -n <namespace> -- \
+      mongosh --quiet --eval "db.runCommand({ping: 1}).ok"; do sleep 2; done' \
+    && echo "MongoDB ready"
     ```
 
-    If the first loop doesn't end within a few minutes, stop it and check
-    MongoDB's pod and log (`kubectl get pods`, `kubectl logs`): e.g., after a
-    failed init, MongoDB restarts without it and doesn't print the line.
+    Continue only if `MongoDB ready` is printed; otherwise check MongoDB's
+    pod and log (`kubectl get pods`, `kubectl logs`): e.g., after a failed
+    init, MongoDB restarts without it and doesn't print the line.
 
 6. Restore the dump, replacing the collections that the app has created,
-   compare the counts with those of step 2, then start the app:
+   and count the documents again:
 
     ```bash
     kubectl exec -i deploy/mongodb-trs-filer -n <namespace> -- \
-      mongorestore --quiet --drop --archive < trs-filer-db.archive
-    kubectl exec deploy/mongodb-trs-filer -n <namespace> -- mongosh --quiet trs-filer-db --eval \
-      'db.getCollectionNames().forEach(c => print(c, db[c].countDocuments({})))'
-    kubectl scale deploy/trs-filer -n <namespace> --replicas=1
+      mongorestore --quiet --drop --archive < trs-filer-db.archive \
+    && kubectl exec deploy/mongodb-trs-filer -n <namespace> -- \
+      mongosh --quiet trs-filer-db --eval 'db.getCollectionNames().forEach(c => print(c, db[c].countDocuments ? db[c].countDocuments({}) : db[c].count()))'
     ```
 
     If the restore fails on the options of an index, restore with
     `--noIndexRestore`: the app creates its indexes on startup. The restore
     is repeatable (`--drop`).
 
+7. Only if the restore succeeded and the counts match those of step 2,
+   start the app:
+
+    ```bash
+    kubectl scale deploy/trs-filer -n <namespace> --replicas=1
+    ```
+
 Once the new release works, delete the old claim `mongodb` (if any:
 `kubectl delete pvc mongodb -n <namespace>`), the retained volume
-(`kubectl delete pv <name>`) and the local dump. The `service_info`
+(`kubectl delete pv <name>`; this deletes only the PersistentVolume object:
+delete its storage, e.g., the disk, with your storage provider) and the
+local dump. The `service_info`
 collection of the dump is no longer used (see [Service
 info](#service-info)).
 

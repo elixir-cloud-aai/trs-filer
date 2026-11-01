@@ -117,12 +117,12 @@ kubectl get nodes -o custom-columns=NODE:.metadata.name,KERNEL:.status.nodeInfo.
 
 MongoDB only starts on data whose feature compatibility version (FCV) it
 supports, so check the running version and the FCV before changing the image
-of an existing database (with `mongo`, the old shell, instead of
-`mongosh` for images before 6.0, e.g., 3.6):
+of an existing database (with `mongosh`, or `mongo`, the old shell, in
+images before 6.0):
 
 ```bash
-kubectl exec deploy/mongodb-trs-filer -n namespace -- mongosh --quiet --eval \
-  'printjson({version: db.version(), fcv: db.adminCommand({getParameter: 1, featureCompatibilityVersion: 1}).featureCompatibilityVersion})'
+kubectl exec deploy/mongodb-trs-filer -n namespace -- sh -c \
+  '"$(command -v mongosh || echo mongo)" --quiet --eval "printjson({version: db.version(), fcv: db.adminCommand({getParameter: 1, featureCompatibilityVersion: 1}).featureCompatibilityVersion})"'
 ```
 
 - **Upgrades** go one major version at a time (e.g., 6.0 → 7.0 → 8.0): set
@@ -148,4 +148,12 @@ annotated with `helm.sh/resource-policy: keep`, so Helm keeps it, and the
 database, when the release is uninstalled; installing a release with the
 same name and `trs_filer.appName` in the same namespace uses it again (Helm
 refuses to install a release of another name over it). Delete it by hand to
-remove the data (`kubectl delete pvc mongodb-trs-filer -n namespace`).
+remove the data (`kubectl delete pvc mongodb-trs-filer -n namespace`; with
+the reclaim policy `Retain`, also delete its PersistentVolume and the
+storage behind it with your storage provider).
+
+The claim's name follows `trs_filer.appName`: changing it for an installed
+release starts MongoDB on a new, empty claim (the old one is kept). Don't
+change it, or move the data with `mongodump` and `mongorestore` (see [Helm
+chart](https://trs-filer.readthedocs.io/en/latest/upgrading/#helm-chart) in
+the upgrade notes).
