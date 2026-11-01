@@ -74,8 +74,9 @@ Compose setup, e.g., to [allow](configuration.md#remote-files) files whose
 contents are retrieved from local URLs. Set the [service
 info](configuration.md#service-info) and the [public
 URL](configuration.md#public-url) to describe your deployment: the defaults
-are placeholders, and TRS-Filer logs a warning on startup while `id` or
-`organization` of the service info still have them.
+are placeholders, and FOCA logs a warning on startup while values of
+the service info (e.g., `id`, `organization.url`) are in reserved example
+domains, as the placeholders are.
 
 !!! warning
     TRS-Filer has no authentication yet: anybody who can reach the API can

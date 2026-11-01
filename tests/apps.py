@@ -89,8 +89,8 @@ def set_client(
 def mock_unset_collections(app: Flask) -> None:
     """Give the collections without clients new in-memory clients.
 
-    FOCA 0.17's `get_collection()` refuses collections without clients, which
-    the registration classes look up on construction.
+    FOCA's `get_collection()` (since 0.17) refuses collections without
+    clients, which the registration classes look up on construction.
 
     Args:
         app: Flask app (cf. :py:func:`make_app`).

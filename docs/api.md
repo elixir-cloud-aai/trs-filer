@@ -126,3 +126,8 @@ responses of the TRS specification), e.g.:
   "detail": "The requested resource wasn't found."
 }
 ```
+
+Requests that don't match the API specification (e.g., an unknown
+descriptor type, or a body without required properties) get `400 Bad
+Request` with the reason of the validation as `detail` (see
+[Errors](configuration.md#errors)).

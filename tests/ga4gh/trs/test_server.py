@@ -9,6 +9,7 @@ from collections.abc import Callable
 from copy import deepcopy
 from io import BytesIO
 from pathlib import Path
+import re
 from typing import Any, NoReturn
 from zipfile import ZipFile
 
@@ -725,25 +726,47 @@ def test_toolsIdVersionsVersionIdTypeDescriptorGet_type_NotFound(
     assert response.status_code == 404
 
 
-@pytest.mark.parametrize(
-    "path", ["descriptor", "descriptor/path_other_cwl", "tests", "files"]
-)
-@pytest.mark.parametrize("descriptor_type", ["FOO", "SMK"])
-def test_type_BadRequest(
-    client: FlaskClient, tool: dict[str, Any], path: str, descriptor_type: str
-) -> None:
-    """Unknown and unsupported descriptor types are refused.
+TYPE_PATHS = ["descriptor", "descriptor/path_other_cwl", "tests", "files"]
 
-    `FOO` is refused by the validation of requests, `SMK` (in the spec, but
-    not supported by the app) by the controllers.
+
+@pytest.mark.parametrize("path", TYPE_PATHS)
+def test_type_BadRequest_unknown(
+    client: FlaskClient, tool: dict[str, Any], path: str
+) -> None:
+    """Unknown descriptor types are refused by the validation of requests.
+
+    The reason is sent as `detail` (`exceptions.validation_details`).
 
     Args:
         client: Test client.
         tool: Registered tool.
         path: Path below the type.
-        descriptor_type: Descriptor type.
     """
-    response = client.get(f"{VERSION_PATH}/{descriptor_type}/{path}")
+    response = client.get(f"{VERSION_PATH}/FOO/{path}")
+    assert response.status_code == 400
+    body = response.get_json()
+    assert body == {**BAD_REQUEST, "detail": body["detail"]}
+    # The reason names the allowed types of the path's parameter, in full
+    # (they differ between paths, e.g., without the `PLAIN_` types)
+    reason = body["detail"].splitlines()[0]
+    assert re.fullmatch(r"'FOO' is not one of \[('[A-Z_]+', )*'[A-Z_]+'\]", reason)
+    assert "'CWL', 'WDL', 'NFL', 'GALAXY', 'SMK'" in reason
+
+
+@pytest.mark.parametrize("path", TYPE_PATHS)
+def test_type_BadRequest_unsupported(
+    client: FlaskClient, tool: dict[str, Any], path: str
+) -> None:
+    """Descriptor types of the spec that the app doesn't support are refused.
+
+    `SMK` is refused by the controllers, with the generic `detail`.
+
+    Args:
+        client: Test client.
+        tool: Registered tool.
+        path: Path below the type.
+    """
+    response = client.get(f"{VERSION_PATH}/SMK/{path}")
     assert response.status_code == 400
     assert response.get_json() == BAD_REQUEST
 

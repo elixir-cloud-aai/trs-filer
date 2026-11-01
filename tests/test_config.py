@@ -55,6 +55,17 @@ def test_config_dev_overlay(monkeypatch: pytest.MonkeyPatch) -> None:
     ]
 
 
+def test_config_validation_details() -> None:
+    """The base config sends the reasons of rejected requests to clients.
+
+    Set explicitly (`exceptions.validation_details`), not left to FOCA's
+    default (`true` since FOCA 0.18), as clients rely on it.
+    """
+    config = yaml.safe_load(CONFIG_FILE.read_text())
+    assert config["exceptions"]["validation_details"] is True
+    assert _parse_config().exceptions.validation_details is True
+
+
 def _package_data() -> list[str]:
     """Get the files that the base config references, relative to the package.
 

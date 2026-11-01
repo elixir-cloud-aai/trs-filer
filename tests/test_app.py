@@ -1,4 +1,4 @@
-"""Tests of the app created from `config.yaml`, with FOCA 0.17."""
+"""Tests of the app created from `config.yaml`, with FOCA 0.19."""
 
 from collections.abc import Callable
 from copy import deepcopy
@@ -87,55 +87,74 @@ def test_service_info_not_writable(
 
 
 class _Records(logging.Handler):
-    """Log handler keeping the messages of its records."""
+    """Log handler keeping the logger names and messages of its records."""
 
     def __init__(self) -> None:
-        """Initialize the handler without messages."""
+        """Initialize the handler without records."""
         super().__init__(level=logging.WARNING)
-        self.messages: list[str] = []
+        self.records: list[tuple[str, str]] = []
+
+    @property
+    def messages(self) -> list[str]:
+        """The messages of the records, in order."""
+        return [message for _, message in self.records]
 
     def emit(self, record: logging.LogRecord) -> None:
-        """Keep the message of a record.
+        """Keep the logger name and message of a record.
 
         Args:
             record: Log record.
         """
-        self.messages.append(record.getMessage())
+        self.records.append((record.name, record.getMessage()))
 
 
 def test_placeholder_warning(
     mongo_client: MongoClient[dict[str, Any]],
     overlay: Path,
 ) -> None:
-    """The app warns of placeholders of the service info, unless replaced.
+    """The app warns once of placeholders of the service info, unless replaced.
 
-    The handler is added to the app's logger, as FOCA's log config replaces
-    the handlers of the root logger (and with them, pytest's).
+    FOCA warns of values in reserved example domains (RFC 2606), as the
+    placeholders of `config.yaml` are; the app adds no warning of its own.
+    The handler is added to the loggers of FOCA's check and of the app, as
+    FOCA's log config replaces the handlers of the root logger (and with
+    them, pytest's).
 
     Args:
         mongo_client: MongoDB client.
         overlay: Config overlay.
     """
     records = _Records()
-    logger = logging.getLogger("trs_filer.app")
-    logger.addHandler(records)
+    loggers = [logging.getLogger(name) for name in ("foca", "trs_filer")]
+    for logger in loggers:
+        logger.addHandler(records)
     try:
         create_app()
-        assert len(records.messages) == 1
-        assert "set `id`, `organization`" in records.messages[0]
-        records.messages.clear()
+        warnings = [
+            (name, message)
+            for name, message in records.records
+            if "service info" in message
+        ]
+        assert [name for name, _ in warnings] == ["foca.api.service_info"]
+        assert "reserved example domains" in warnings[0][1]
+        assert "'id', 'organization.url'" in warnings[0][1]
+        assert not [name for name, _ in records.records if name.startswith("trs_")]
+        records.records.clear()
         overlay.write_text(
             "service_info:\n"
             "  service:\n"
-            "    id: org.example.trs\n"
+            "    id: eu.elixir.trs\n"
             "    organization:\n"
             "      name: Other\n"
-            "      url: https://trs.example.com\n"
+            "      url: https://trs.elixir.eu\n"
         )
         create_app()
-        assert records.messages == []
+        assert not [
+            message for message in records.messages if "service info" in message
+        ]
     finally:
-        logger.removeHandler(records)
+        for logger in loggers:
+            logger.removeHandler(records)
 
 
 def test_problem_details(client: FlaskClient) -> None:
