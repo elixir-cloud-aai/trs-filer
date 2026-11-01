@@ -9,11 +9,9 @@ spec:
   selector:
     matchLabels:
       app: mongodb-{{ .Values.trs_filer.appName }}
+  # The data volume can be used by one pod only: stop the old pod first
   strategy:
-    rollingUpdate:
-      maxSurge: 25%
-      maxUnavailable: 25%
-    type: RollingUpdate
+    type: Recreate
   template:
     metadata:
       creationTimestamp: null
@@ -22,7 +20,7 @@ spec:
     spec:
       containers:
       - image: {{ .Values.mongodb.image }}
-        imagePullPolicy: Always
+        imagePullPolicy: {{ .Values.mongodb.imagePullPolicy }}
         name: mongodb-{{ .Values.trs_filer.appName }}
         ports:
         - containerPort: 27017
