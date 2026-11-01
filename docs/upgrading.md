@@ -8,11 +8,13 @@ date, with FOCA 0.12).
 
 ## Configuration
 
-TRS-Filer runs on FOCA 0.17 and Python 3.13. Custom configs must apply the
-config changes of FOCA 0.14 to 0.17 (see the [FOCA release
+TRS-Filer runs on FOCA 0.19 and Python 3.13. Custom configs must apply the
+config changes of FOCA 0.14 to 0.19 (see the [FOCA release
 notes](https://github.com/elixir-cloud-aai/foca/releases) and migration
 guides), e.g., `exceptions.mapping` instead of the old exception members,
-and no `server.environment` or `server.use_reloader`;
+no `server.environment` or `server.use_reloader`, and no top-level
+`plugins` section other than FOCA's (validated since FOCA 0.18, with
+unknown keys refused; TRS-Filer loads no plugins);
 `server.max_content_length` must be set (see [Request size
 limit](configuration.md#request-size-limit)). Configs are best written as
 overlays of the base config (see [Configuration](configuration.md)), which
@@ -84,7 +86,11 @@ drop it if you like.
 
 Errors are problem details (`title`, `status`, `detail`), sent as
 `application/json`, instead of objects with `message` and `code` (see
-[Errors](api.md#errors)).
+[Errors](api.md#errors)). Requests that the validation of the API
+specification rejects get the reason as `detail` (e.g., `'FOO' is not one
+of ['CWL', ...]`), no longer the generic `The request is malformed.`; set
+`exceptions.validation_details: false` to keep the generic one (see
+[Errors](configuration.md#errors)).
 
 ## Database
 
@@ -130,3 +136,16 @@ port 80 on all interfaces). MongoDB data lives in the named volume
 `mongorestore` if needed (see [Database](#database)). The Compose setup
 applies the overlay `config.dev.yaml` (see [Local
 overrides](configuration.md#local-overrides)).
+
+## Images from `dev` with FOCA 0.17
+
+Images from `dev` built since the move to FOCA 0.17 (`dev`, `sha-<commit>`)
+ran on an unreleased FOCA commit; releases run on FOCA 0.19. Besides the
+`detail` of rejected requests (see [Errors](#errors)), the startup warning
+about the placeholders of the service info changes: FOCA logs it
+(logger `foca.api.service_info`), for any value in a reserved example
+domain (RFC 2606, e.g., `org.example.trs` or `https://trs.example.org`),
+instead of the app (logger `trs_filer.app`), for the placeholders of the
+base config only. FOCA's plugin store (collection `plugin_store`) and
+plugin listing are for gateway apps: TRS-Filer creates no collections or
+indexes beyond its own, so its database user needs no new rights.

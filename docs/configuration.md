@@ -199,8 +199,9 @@ config, according to the GA4GH service info schema (validated on startup).
 Its `version` is the version of the installed package
 (`service_info.package`). The base config describes the app, not a
 deployment: its `id` (`org.example.trs-filer`) and `organization` are
-placeholders with reserved example domains, which the app warns of on
-startup. Deployments set their own `id`, `name`, `description`,
+placeholders with reserved example domains (RFC 2606), which FOCA warns of
+on startup, as of any value of the service info in such a domain (e.g.,
+the `id` and the URLs of the example below). Deployments set their own `id`, `name`, `description`,
 `organization`, `contactUrl` and `environment` in `service_info.service`,
 e.g.:
 
@@ -216,3 +217,13 @@ service_info:
     contactUrl: mailto:trs-admins@example.org
     environment: prod
 ```
+
+## Errors
+
+Errors are problem details, sent as `application/json` (section
+`exceptions`, see [Errors](api.md#errors)). Requests that the validation of
+the API specification rejects (e.g., an unknown descriptor type) get the
+reason as `detail`, shortened to `exceptions.max_detail_length` characters
+(500 by default); set `exceptions.validation_details: false` to send a
+generic `detail` instead (see FOCA's
+[documentation](https://foca.readthedocs.io/en/latest/configuration/exceptions/)).
