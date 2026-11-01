@@ -327,6 +327,13 @@ Since the chart of `v0.3.0`, the values changed:
 The chart annotates MongoDB's claim with `helm.sh/resource-policy: keep`
 (see [MongoDB](deployment.md#mongodb)), and replaces MongoDB's pod with the
 `Recreate` strategy.
+MongoDB's init script (ConfigMap `mongo-init-script-<appName>`, was
+`mongo-init-script`) creates the collections of the app's database only
+(no `service_info`, and nothing in `trsStore`); it runs on an empty volume
+only, so existing databases are not changed. The app gets the MongoDB host
+from `MONGO_HOST` (the Service `mongodb-<appName>`), also if the config Job
+fails. The chart in the repository has the placeholder version `0.0.0`
+(was `2.0.0`); released charts have the release's version.
 
 ## Images from `dev` since FOCA 0.17
 

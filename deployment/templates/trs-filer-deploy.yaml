@@ -24,11 +24,15 @@ spec:
       - image: {{ .Values.trs_filer.image }}
         imagePullPolicy: Always
         name: {{ .Values.trs_filer.appName }}
-        # https://github.com/elixir-cloud-aai/trs-filer/blob/9116b702bce2ef5b2e04130a6fe5db2a89d465f3/trs_filer/gunicorn.py#L26
-        # If not set in values.yaml, it will use trs-filer-db
         env:
+          # The app's database (value `mongodb.dbName`, `trs-filer-db` if
+          # empty) and MongoDB's Service, which FOCA reads instead of the
+          # config's `db`, so that the app reaches MongoDB also if the Job
+          # failed
           - name: MONGO_DBNAME
-            value: {{ .Values.mongodb.dbName | default "trs-filer-db" }}
+            value: {{ tpl (default "trs-filer-db" .Values.mongodb.dbName) . }}
+          - name: MONGO_HOST
+            value: mongodb-{{ .Values.trs_filer.appName }}
           # The config that the Job renders, merged into the base config
           - name: FOCA_CONFIG_OVERLAY
             value: /etc/trs-filer/config.yaml

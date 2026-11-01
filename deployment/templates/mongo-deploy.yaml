@@ -45,4 +45,4 @@ spec:
           claimName: mongodb-{{ .Values.trs_filer.appName }}
       - name: init-script
         configMap:
-          name: mongo-init-script
+          name: mongo-init-script-{{ .Values.trs_filer.appName }}

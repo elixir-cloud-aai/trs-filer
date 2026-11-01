@@ -1,7 +1,13 @@
 apiVersion: v2
 name: trs-filer
-description: A Helm chart for Kubernetes
+description: >-
+  TRS-Filer, an implementation of the GA4GH Tool Registry Service (TRS) API,
+  with a MongoDB database
 icon: https://avatars.githubusercontent.com/u/60704687?s=48&v=4
 type: application
-version: 2.0.0
-appVersion: 2.0.0
+# Placeholders: releases set `version` and `appVersion` from the tag
+# (`vX.Y.Z`, see "Versioning and releases" in `docs/development.md`).
+# `appVersion` is informational: the image is set by `trs_filer.image`
+# (released charts set the release's image)
+version: 0.0.0
+appVersion: "dev"
