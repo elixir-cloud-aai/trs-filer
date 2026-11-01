@@ -14,9 +14,11 @@ helm install trs-filer . -n namespace
 ## Configuration
 
 The chart can't configure the app yet, apart from the public URL
-(`https://<host_name>:443`) and the MongoDB host and database: a Job
+(`https://<host_name>:443`), the MongoDB host and the database (the latter
+via `MONGO_DBNAME` on the app's Deployment): a Job
 (`configmap-job-<appName>-<revision>`, run on every install and upgrade)
-renders these into the base config of the image and writes the result to
+renders the public URL and the MongoDB host into the base config of the
+image and writes the result to
 the ConfigMap `app-config-<appName>`, the app's config overlay
 (`FOCA_CONFIG_OVERLAY`), replacing it as a whole. `values.yaml` has no value
 for the config, and changes to the ConfigMap are lost on the next upgrade.
@@ -77,8 +79,8 @@ separated by `:`); leave out the settings that the Job sets
 
 3. Install or upgrade the release from the copy. Files mounted with
    `subPath` aren't updated in running pods, so restart the app after
-   changing the overlay (`kubectl rollout restart deploy/trs-filer -n
-   namespace`).
+   changing the overlay (`kubectl rollout restart deploy/<appName> -n
+   namespace`; the app's Deployment is named after `trs_filer.appName`).
 
 ## Upgrades
 
