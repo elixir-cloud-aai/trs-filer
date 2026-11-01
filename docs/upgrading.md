@@ -4,7 +4,8 @@ The [release notes](changelog.md) list the breaking changes of each release
 and how to upgrade. This page describes how existing setups and data are
 affected by the changes since the tag `v0.3.0` (2023) and the images
 published from `dev` before the move to FOCA 0.17 (tagged `latest` and by
-date, with FOCA 0.12).
+date, with FOCA 0.12); for images from `dev` since then, see [Images from
+`dev` since FOCA 0.17](#images-from-dev-since-foca-017).
 
 ## Configuration
 
@@ -137,15 +138,17 @@ port 80 on all interfaces). MongoDB data lives in the named volume
 applies the overlay `config.dev.yaml` (see [Local
 overrides](configuration.md#local-overrides)).
 
-## Images from `dev` with FOCA 0.17
+## Images from `dev` since FOCA 0.17
 
 Images from `dev` built since the move to FOCA 0.17 (`dev`, `sha-<commit>`)
 ran on an unreleased FOCA commit; releases run on FOCA 0.19. Besides the
 `detail` of rejected requests (see [Errors](#errors)), the startup warning
 about the placeholders of the service info changes: FOCA logs it
-(logger `foca.api.service_info`), for any value in a reserved example
-domain (RFC 2606, e.g., `org.example.trs` or `https://trs.example.org`),
-instead of the app (logger `trs_filer.app`), for the placeholders of the
-base config only. FOCA's plugin store (collection `plugin_store`) and
+(logger `foca.api.service_info`) while `id`, `organization.url`,
+`contactUrl` or `documentationUrl` are in a reserved example domain (RFC
+2606, e.g., `org.example.trs` or `https://trs.example.org`), instead of the
+app (logger `trs_filer.app`), which warned of the placeholders `id` and
+`organization` (name or URL) of the base config only; a placeholder
+`organization.name` is no longer warned of. FOCA's plugin store (collection `plugin_store`) and
 plugin listing are for gateway apps: TRS-Filer creates no collections or
 indexes beyond its own, so its database user needs no new rights.

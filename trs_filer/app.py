@@ -17,8 +17,8 @@ def create_app() -> App:
     FOCA validates the config, including the custom config
     (`trs_filer.custom_config.CustomConfig`) and the service info
     (`service_info`), and limits the size of request bodies
-    (`server.max_content_length`); it warns of placeholders in the service
-    info (values in reserved example domains, RFC 2606, as those of
+    (`server.max_content_length`). FOCA also warns of placeholders in the
+    service info (values in reserved example domains, RFC 2606, as those of
     `config.yaml`). The app additionally requires a size limit.
 
     Gunicorn calls this in each worker, after forking (MongoDB clients must

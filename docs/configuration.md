@@ -199,11 +199,12 @@ config, according to the GA4GH service info schema (validated on startup).
 Its `version` is the version of the installed package
 (`service_info.package`). The base config describes the app, not a
 deployment: its `id` (`org.example.trs-filer`) and `organization` are
-placeholders with reserved example domains (RFC 2606), which FOCA warns of
-on startup, as of any value of the service info in such a domain (e.g.,
-the `id` and the URLs of the example below). Deployments set their own `id`, `name`, `description`,
-`organization`, `contactUrl` and `environment` in `service_info.service`,
-e.g.:
+placeholders in reserved example domains (RFC 2606). FOCA warns on startup
+while `id`, `organization.url`, `contactUrl` or `documentationUrl` are in
+such a domain (as in the example below), not of other fields (e.g.,
+`organization.name`, which overlays keep unless they set it). Deployments
+set their own `id`, `name`, `description`, `organization`, `contactUrl` and
+`environment` in `service_info.service`, e.g.:
 
 ```yaml
 service_info:

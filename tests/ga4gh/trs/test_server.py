@@ -725,36 +725,45 @@ def test_toolsIdVersionsVersionIdTypeDescriptorGet_type_NotFound(
     assert response.status_code == 404
 
 
-@pytest.mark.parametrize(
-    "path", ["descriptor", "descriptor/path_other_cwl", "tests", "files"]
-)
-@pytest.mark.parametrize("descriptor_type", ["FOO", "SMK"])
-def test_type_BadRequest(
-    client: FlaskClient, tool: dict[str, Any], path: str, descriptor_type: str
-) -> None:
-    """Unknown and unsupported descriptor types are refused.
+TYPE_PATHS = ["descriptor", "descriptor/path_other_cwl", "tests", "files"]
 
-    `FOO` is refused by the validation of requests, with the reason as
-    `detail` (`exceptions.validation_details`), `SMK` (in the spec, but not
-    supported by the app) by the controllers.
+
+@pytest.mark.parametrize("path", TYPE_PATHS)
+def test_type_BadRequest_unknown(
+    client: FlaskClient, tool: dict[str, Any], path: str
+) -> None:
+    """Unknown descriptor types are refused by the validation of requests.
+
+    The reason is sent as `detail` (`exceptions.validation_details`).
 
     Args:
         client: Test client.
         tool: Registered tool.
         path: Path below the type.
-        descriptor_type: Descriptor type.
     """
-    response = client.get(f"{VERSION_PATH}/{descriptor_type}/{path}")
+    response = client.get(f"{VERSION_PATH}/FOO/{path}")
     assert response.status_code == 400
-    if descriptor_type == "SMK":
-        assert response.get_json() == BAD_REQUEST
-    else:
-        body = response.get_json()
-        assert {key: body[key] for key in ("title", "status")} == {
-            "title": BAD_REQUEST["title"],
-            "status": 400,
-        }
-        assert body["detail"].startswith("'FOO' is not one of ['CWL', ")
+    body = response.get_json()
+    assert body == {**BAD_REQUEST, "detail": body["detail"]}
+    assert body["detail"].startswith("'FOO' is not one of ['CWL', ")
+
+
+@pytest.mark.parametrize("path", TYPE_PATHS)
+def test_type_BadRequest_unsupported(
+    client: FlaskClient, tool: dict[str, Any], path: str
+) -> None:
+    """Descriptor types of the spec that the app doesn't support are refused.
+
+    `SMK` is refused by the controllers, with the generic `detail`.
+
+    Args:
+        client: Test client.
+        tool: Registered tool.
+        path: Path below the type.
+    """
+    response = client.get(f"{VERSION_PATH}/SMK/{path}")
+    assert response.status_code == 400
+    assert response.get_json() == BAD_REQUEST
 
 
 # GET /tools/{id}/versions/{version_id}/{type}/descriptor/{relative_path}

@@ -303,7 +303,7 @@ with `scripts/release_assets.py` (tested in `tests/test_release_assets.py`).
 To test unreleased changes of FOCA, `pyproject.toml` may pin a FOCA commit
 (`foca @ git+https://github.com/elixir-cloud-aai/foca@<sha>`), with FOCA's
 development image of that commit as the base image (tagged by date, e.g.,
-`elixircloud/foca:20261023-py3.13`, pinned by digest, as the tag moves with
+`elixircloud/foca:YYYYMMDD-py3.13`, pinned by digest, as the tag moves with
 later commits of that day). The `Dockerfile` records the commit as
 `## FOCA commit: <sha>`, which the tests check (`tests/test_config.py`); the
 image build doesn't reinstall FOCA, but fails unless the base image has FOCA

@@ -87,20 +87,25 @@ def test_service_info_not_writable(
 
 
 class _Records(logging.Handler):
-    """Log handler keeping the messages of its records."""
+    """Log handler keeping the logger names and messages of its records."""
 
     def __init__(self) -> None:
-        """Initialize the handler without messages."""
+        """Initialize the handler without records."""
         super().__init__(level=logging.WARNING)
-        self.messages: list[str] = []
+        self.records: list[tuple[str, str]] = []
+
+    @property
+    def messages(self) -> list[str]:
+        """The messages of the records, in order."""
+        return [message for _, message in self.records]
 
     def emit(self, record: logging.LogRecord) -> None:
-        """Keep the message of a record.
+        """Keep the logger name and message of a record.
 
         Args:
             record: Log record.
         """
-        self.messages.append(record.getMessage())
+        self.records.append((record.name, record.getMessage()))
 
 
 def test_placeholder_warning(
@@ -126,12 +131,15 @@ def test_placeholder_warning(
     try:
         create_app()
         warnings = [
-            message for message in records.messages if "service info" in message
+            (name, message)
+            for name, message in records.records
+            if "service info" in message
         ]
-        assert len(warnings) == 1
-        assert "reserved example domains" in warnings[0]
-        assert "'id', 'organization.url'" in warnings[0]
-        records.messages.clear()
+        assert [name for name, _ in warnings] == ["foca.api.service_info"]
+        assert "reserved example domains" in warnings[0][1]
+        assert "'id', 'organization.url'" in warnings[0][1]
+        assert not [name for name, _ in records.records if name.startswith("trs_")]
+        records.records.clear()
         overlay.write_text(
             "service_info:\n"
             "  service:\n"
