@@ -1,7 +1,7 @@
 {{- /* HTTPS at the Ingress with `https.enabled`, or at the OpenShift Route
 (edge TLS), which the chart creates without the Ingress if `route.enabled`
 and the cluster serves Routes */}}
-{{- $route := and (dig "route" "enabled" true .Values.trs_filer) (not .Values.trs_filer.ingress.enabled) (.Capabilities.APIVersions.Has "route.openshift.io/v1") }}
+{{- $route := include "trs-filer.route" . }}
 {{- $scheme := "http" }}
 {{- if or $route (and .Values.trs_filer.ingress.enabled .Values.trs_filer.ingress.https.enabled) }}
 {{- $scheme = "https" }}

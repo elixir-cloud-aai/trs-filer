@@ -1,13 +1,13 @@
-{{- /* `dig`, so that upgrades with `--reuse-values` from charts without
-`trs_filer.route` keep the Route */}}
-{{- $route := dig "route" (dict) .Values.trs_filer }}
-{{- if and (dig "enabled" true $route) (not .Values.trs_filer.ingress.enabled) (.Capabilities.APIVersions.Has "route.openshift.io/v1") }}
+{{- if include "trs-filer.route" . }}
 apiVersion: route.openshift.io/v1
 kind: Route
 metadata:
+  {{- /* Values as strings; `null` leaves an annotation out */}}
   {{- $annotations := dict }}
-  {{- range $key, $value := (dig "annotations" (dict) $route) }}
+  {{- range $key, $value := (dig "route" "annotations" (dict) .Values.trs_filer) }}
+  {{- if not (kindIs "invalid" $value) }}
   {{- $_ := set $annotations $key (toString $value) }}
+  {{- end }}
   {{- end }}
   {{- with $annotations }}
   annotations:

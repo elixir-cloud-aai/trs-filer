@@ -314,7 +314,10 @@ Since the chart of `v0.3.0`, the values changed:
   (`trs_filer.ingress.enabled`, by default `true`; HTTPS via cert-manager
   with `trs_filer.ingress.https`) or, with the Ingress disabled, an
   OpenShift Route (with TLS at the router), as `v0.3.0` did with
-  `clusterType: openshift`.
+  `clusterType: openshift`. `trs_filer.route.enabled` (by default `true`)
+  turns the Route off, e.g., for a Route of your own, and
+  `trs_filer.route.annotations` sets its annotations (see [Ingress and
+  Route](deployment.md#ingress-and-route)).
 - `host_name` has no default (it was a test host); set it.
 - `trs_filer.image` is `elixircloud/trs-filer` (released charts set the
   release's image), no longer `lvarin/trs-filer:0.1.0`.

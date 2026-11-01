@@ -29,10 +29,11 @@ trs_filer:
     # Routes; false, e.g., for a Route or HTTPRoute of your own
     enabled: true
     # Annotations of the Route, e.g., for rate limits of the router
-    # (`haproxy.router.openshift.io/rate-limit-connections`) or to allow
-    # only trusted clients (`haproxy.router.openshift.io/ip_allowlist`).
-    # Quote numbers (e.g., `"100"`), as large ones would be written in
-    # exponent form
+    # (`haproxy.router.openshift.io/rate-limit-connections: "true"` with
+    # `haproxy.router.openshift.io/rate-limit-connections.rate-http`) or to
+    # allow only trusted clients (`haproxy.router.openshift.io/ip_allowlist`);
+    # `null` removes one. Quote numbers (e.g., `"100"`), as large ones would
+    # be written in exponent form
     annotations: {}
   image: elixircloud/trs-filer:latest
   appName: trs-filer
