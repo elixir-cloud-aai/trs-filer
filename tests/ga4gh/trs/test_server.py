@@ -734,8 +734,9 @@ def test_type_BadRequest(
 ) -> None:
     """Unknown and unsupported descriptor types are refused.
 
-    `FOO` is refused by the validation of requests, `SMK` (in the spec, but
-    not supported by the app) by the controllers.
+    `FOO` is refused by the validation of requests, with the reason as
+    `detail` (`exceptions.validation_details`), `SMK` (in the spec, but not
+    supported by the app) by the controllers.
 
     Args:
         client: Test client.
@@ -745,7 +746,15 @@ def test_type_BadRequest(
     """
     response = client.get(f"{VERSION_PATH}/{descriptor_type}/{path}")
     assert response.status_code == 400
-    assert response.get_json() == BAD_REQUEST
+    if descriptor_type == "SMK":
+        assert response.get_json() == BAD_REQUEST
+    else:
+        body = response.get_json()
+        assert {key: body[key] for key in ("title", "status")} == {
+            "title": BAD_REQUEST["title"],
+            "status": 400,
+        }
+        assert body["detail"].startswith("'FOO' is not one of ['CWL', ")
 
 
 # GET /tools/{id}/versions/{version_id}/{type}/descriptor/{relative_path}

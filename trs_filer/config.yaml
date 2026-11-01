@@ -119,6 +119,11 @@ log:
 exceptions:
     mapping: trs_filer.errors.exceptions.exceptions
     media_type: application/json
+    # Requests rejected by Connexion's validation (e.g., of the schema) get
+    # the reason as `detail` (shortened to `max_detail_length`, 500
+    # characters by default); FOCA's default since 0.18, set explicitly, as
+    # clients rely on it
+    validation_details: True
 
 # Custom configuration
 # Available in app context via `trs_filer.utils.get_custom_config()`
