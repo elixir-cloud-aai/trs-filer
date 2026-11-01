@@ -108,9 +108,10 @@ its annotations, e.g., for the router's rate limits
 (`haproxy.router.openshift.io/rate-limit-connections: "true"` with, e.g.,
 `haproxy.router.openshift.io/rate-limit-connections.rate-http: "100"`);
 quote numbers, and `null` removes an annotation. The chart sets none, so
-the Route restricts nothing by default. The OpenShift router can't restrict methods, only clients: to
-allow only trusted clients (for all methods, also `GET`; an example only,
-adapt it to your setup), e.g., from the network `192.0.2.0/24`:
+the Route restricts nothing by default. The OpenShift router can't
+restrict methods, only clients: to allow only trusted clients (for all
+methods, also `GET`; an example only, adapt it to your setup), e.g., from
+the network `192.0.2.0/24`:
 
 ```yaml
 trs_filer:
@@ -126,9 +127,9 @@ uses `haproxy.router.openshift.io/ip_whitelist`. The router checks the
 source address that it sees, which is the client's only if it gets
 through a load balancer in front of it (e.g., with the PROXY protocol or
 `externalTrafficPolicy: Local`); otherwise, it is that of the load
-balancer or a node. To keep reads public and restrict only writes, restrict them at a
-proxy in front of the router. Check with a `POST` from an untrusted
-address that writes are refused.
+balancer or a node. To keep reads public and restrict only writes,
+restrict them at a proxy in front of the router. Check with a `POST` from
+an untrusted address that writes are refused.
 
 ## Configuration
 

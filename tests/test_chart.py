@@ -178,6 +178,7 @@ def test_route_without_route_values() -> None:
     """Values without `trs_filer.route` (e.g., of older charts) keep the Route.
 
     So do upgrades with `--reuse-values` from charts without the value.
+    `null` removes the key from the chart's defaults.
     """
     resources = render(
         "--api-versions",
@@ -197,7 +198,9 @@ def test_notes_ingress(tmp_path: Path) -> None:
         tmp_path: Directory for the copy of the chart.
     """
     notes = render_notes(tmp_path)
-    assert "issues/7" in notes
+    # The warning links the issue of authentication (#7)
+    assert "has no authentication yet" in notes
+    assert "trs-filer/issues/7" in notes
     assert "http://trs.example.org/ga4gh/trs/v2/" in notes
     assert "port-forward" not in notes
 
