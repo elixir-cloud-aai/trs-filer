@@ -129,6 +129,9 @@ dev = [
     "setuptools-scm>=10.3",
     "types-PyYAML>=6.0.12",
     "types-requests>=2.31",
+    # Locks the dependencies (`uv lock`, checked in CI); also the version of
+    # uv that CI installs (`astral-sh/setup-uv`)
+    "uv>=0.13",
 ]
 # Documentation (`mkdocs.yml`), built by Read the Docs (`.readthedocs.yaml`)
 # and in CI. The packages that add warnings, which fail the strict build, are

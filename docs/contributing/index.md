@@ -52,7 +52,11 @@ checked in reviews.
 - **Packaging:** the package, its dependencies and the configuration of the
   tools are in `pyproject.toml`; runtime dependencies in
   `project.dependencies`, those for development and the documentation in the
-  extras `dev` and `docs`. Don't add `setup.py` or requirements files.
+  extras `dev` and `docs`. `uv.lock` locks them all, at exact versions and
+  with hashes, and CI's checks run on the locked versions. After changing
+  dependencies, run `uv lock` and commit `uv.lock` with the change (see
+  [Dependencies](../development.md#dependencies)). Don't add `setup.py` or
+  requirements files.
 - **Formatting and linting:** [ruff](https://docs.astral.sh/ruff/) formats
   the code (`ruff format`, compatible with Black, 88 characters per line) and
   lints it (`ruff check`) with the rule set shared by FOCA and FOCA apps:

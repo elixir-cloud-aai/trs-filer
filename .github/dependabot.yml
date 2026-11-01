@@ -3,8 +3,9 @@ version: 2
 # requests whatever the default branch is (`main` only moves forward to
 # releases); security updates always target the default branch, though
 updates:
-  # Dependencies in `pyproject.toml`
-  - package-ecosystem: pip
+  # Dependencies in `pyproject.toml` and the lock (`uv.lock`), updated
+  # together; CI's checks install the locked ones
+  - package-ecosystem: uv
     directory: /
     schedule:
       interval: monthly
@@ -40,7 +41,7 @@ updates:
     ignore:
       # FOCA minors are bumped by hand, in the base image and the `foca`
       # requirement in `pyproject.toml` together (a new base image alone would
-      # get the old FOCA reinstalled on top; see the `pip` entry)
+      # get the old FOCA reinstalled on top; see the `uv` entry)
       - dependency-name: elixircloud/foca
         update-types: ["version-update:semver-major", "version-update:semver-minor"]
     groups:
