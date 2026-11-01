@@ -705,7 +705,8 @@ def test_dev_version_from_locked_build_requirements() -> None:
     digest) and run from the virtual environment they are installed into
     (with hash checks, see `test_credential_jobs_install_hash_checked`).
     """
-    script = " ".join(_commands(_derive_version()))
+    commands = _commands(_derive_version())
+    script = " ".join(commands)
     assert '"${uv_image}" export --frozen --only-group build-system' in script
     assert "--no-emit-project" in script
     assert "--network none" in script
@@ -713,6 +714,26 @@ def test_dev_version_from_locked_build_requirements() -> None:
     assert '--project /src > "${requirements}"' in script
     assert '--no-deps -r "${requirements}"' in script
     assert re.search(r"build-env/bin/python\"? -m setuptools_scm", script)
+
+    def position(pattern: str) -> int:
+        """Find the first command that matches a pattern.
+
+        Args:
+            pattern: Regular expression.
+
+        Returns:
+            Index of the command.
+        """
+        (index, *_) = [i for i, c in enumerate(commands) if re.search(pattern, c)]
+        return index
+
+    # Export, then install, then derive, and pass the version on
+    export = position(r"\bexport --frozen\b")
+    install = position(r"\bpip\"? install\b")
+    derive = position(r"-m setuptools_scm")
+    assert export < install < derive
+    assert 'echo "version=${version}" >> "$GITHUB_OUTPUT"' in commands[derive + 1 :]
+    assert commands[derive].startswith('version="$(')
 
 
 def test_dev_version_uv_image() -> None:
