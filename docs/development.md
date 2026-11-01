@@ -103,8 +103,11 @@ version of dev images with them, exported by the uv image of the
 `Dockerfile` (pinned by digest) and installed with hash checks (by the pip
 of the runner's Python, `ensurepip`, nothing downloaded), so that no
 workflow step of a job that holds publishing credentials installs a package
-without hash checks (the tests check this). Keep the group and
-`build-system.requires` the same (the tests fail if they differ). The image
+without hash checks (`tests/test_workflows.py` checks this, and that the
+group and `build-system.requires` are the same: keep them so). Two uv
+versions are in use: that of `uv.lock` (`astral-sh/setup-uv`, updated with
+the `uv` entry of Dependabot) and that of the `Dockerfile` stage (`docker`
+entry). The image
 build, which these jobs run too, still installs the runtime dependencies
 from the ranges of `pyproject.toml` (`scripts/image_requirements.py`). After adding, removing or changing a
 dependency in `pyproject.toml`, update the lock and commit both:

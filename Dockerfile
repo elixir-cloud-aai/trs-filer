@@ -2,7 +2,9 @@
 ## uv, pinned by digest; Dependabot updates the tag and digest together. Not
 ## used by the image build (BuildKit skips the stage): CI's `push` job
 ## exports the locked build requirements with it
-## (`.github/workflows/ci.yml`), so that the uv it runs is verified
+## (`.github/workflows/ci.yml`), so that the uv it runs is verified. CI finds
+## this line with a pattern (`test_dev_version_uv_image` in
+## `tests/test_workflows.py` checks its format): keep it as it is
 FROM ghcr.io/astral-sh/uv:0.13.6@sha256:af22a52f5eafef3d78e551599d405c02df61919d18028f0cea8eda93bc9986d0 AS uv
 
 ##### BASE IMAGE #####

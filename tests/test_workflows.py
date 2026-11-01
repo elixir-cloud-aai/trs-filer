@@ -662,6 +662,7 @@ def test_credential_jobs_install_hash_checked() -> None:
     (`uses:`) are pinned by commit and not checked here.
     """
     for name, job_id, job in _credential_jobs():
+        assert "uses" not in job, (name, job_id)  # steps are checked here
         for step in job["steps"]:
             for command in _commands(step):
                 where = (name, job_id, step.get("name"), command)
@@ -674,7 +675,8 @@ def test_credential_jobs_install_hash_checked() -> None:
                     options = shlex.split(command[match.end() :])
                     assert options.count("-r") == 1, where
                     file = options.index("-r")
-                    assert options[file + 1].startswith("$"), where
+                    # The file the step exported the lock to
+                    assert options[file + 1] == "${requirements}", where
                     rest = options[:file] + options[file + 2 :]
                     assert rest == HASH_CHECKED, where
 
@@ -744,7 +746,11 @@ def test_dev_version_uv_image() -> None:
 
 
 def test_build_system_group() -> None:
-    """The `build-system` group is `build-system.requires`, and locked."""
+    """The `build-system` group is `build-system.requires`, and locked.
+
+    The layout of the lock (`dev-dependencies`) is uv's; only the names are
+    compared, as `uv lock --check` (lint job) covers the specifiers.
+    """
     pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     group = pyproject["dependency-groups"]["build-system"]
     assert group == pyproject["build-system"]["requires"]
