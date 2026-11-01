@@ -15,8 +15,9 @@ access in front of it:
   authentication at the proxy).
 
 See your proxy's documentation for how to restrict methods and clients. The
-Helm chart's Ingress or OpenShift Route (see [Deployment](deployment.md))
-applies no such restrictions.
+Helm chart's Ingress or OpenShift Route applies no such restrictions by
+default; the Ingress takes annotations for the ingress controller (see
+[Ingress](deployment.md#ingress), with an example for ingress-nginx).
 
 Access tokens for writes and ownership of tools are planned (see the [issue
 tracker](https://github.com/elixir-cloud-aai/trs-filer/issues)); this page
