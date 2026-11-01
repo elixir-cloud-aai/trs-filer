@@ -6,8 +6,18 @@ host_name: ""
 
 trs_filer:
   # if ingress.enabled: false, it will deploy an OpenShift Route (https://docs.redhat.com/en/documentation/openshift_container_platform/4.19/html/network_apis/route-route-openshift-io-v1)
+  # The API has no authentication: restrict POST, PUT and DELETE at the
+  # ingress controller or a proxy in front of it (see deployment/README.md,
+  # Ingress)
   ingress:
     enabled: true
+    # Ingress class (`spec.ingressClassName`); the cluster default class if
+    # empty
+    className: ""
+    # Annotations of the Ingress, e.g., for the ingress controller (to
+    # restrict methods or clients); they take precedence over those that the
+    # chart sets for `https`, and `null` removes one of these
+    annotations: {}
     https:
       enabled: false
       issuer: letsencrypt-prod

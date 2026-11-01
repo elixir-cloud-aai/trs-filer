@@ -1,11 +1,22 @@
-Elixir Cloud TRS-Filer is being deployed!
+{{- /* HTTPS at the Ingress with `https.enabled`, or at the OpenShift Route
+(edge TLS) without the Ingress */}}
+{{- $scheme := "http" }}
+{{- if or (not .Values.trs_filer.ingress.enabled) .Values.trs_filer.ingress.https.enabled }}
+{{- $scheme = "https" }}
+{{- end -}}
+TRS-Filer is being deployed!
+
+WARNING: The API has no authentication. Anyone who can reach it can register,
+replace and delete tools and tool classes. Allow POST, PUT and DELETE only
+from trusted clients, at the ingress controller (`trs_filer.ingress.annotations`)
+or a proxy in front of it; see "Ingress" in the chart's README.
 
 Once deployed:
 
-  1. Access the API via https://{{ .Values.host_name }}/ga4gh/trs/v2/
+  1. Access the API via {{ $scheme }}://{{ .Values.host_name }}/ga4gh/trs/v2/
 
      To test the connection, you can run:
 
-       curl -X GET "https://{{ .Values.host_name }}/ga4gh/trs/v2/service-info" -H "Accept: application/json"
+       curl -X GET "{{ $scheme }}://{{ .Values.host_name }}/ga4gh/trs/v2/service-info" -H "Accept: application/json"
 
-  2. Access the Swagger UI via https://{{ .Values.host_name }}/ga4gh/trs/v2/ui
+  2. Access the Swagger UI via {{ $scheme }}://{{ .Values.host_name }}/ga4gh/trs/v2/ui

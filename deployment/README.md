@@ -1,5 +1,12 @@
 # TRS filer Helm chart
 
+> **Warning:** TRS-Filer has no authentication yet: anyone who can reach the
+> API can register, replace and delete tools and tool classes. Allow `POST`,
+> `PUT` and `DELETE` only from trusted clients, at the ingress controller (see
+> [Ingress](#ingress)) or at a proxy in front of the cluster (see [Access
+> control](https://trs-filer.readthedocs.io/en/latest/access-control/)). The
+> chart restricts nothing by default.
+
 ## Quick start
 
 1. Edit `values.yaml`. It is important to change `host_name` to the URL you want the application to respond to.
@@ -10,6 +17,49 @@ helm install trs-filer . -n namespace
 ```
 `namespace` is the name of the namespace where the cluster should be installed.
 `trs-filer` could be any name, it will be referenced later for upgrading or uninstalling.
+
+## Ingress
+
+The chart exposes the app for `host_name` via an Ingress
+(`trs_filer.ingress.enabled`, by default `true`) or, if it is disabled and
+the cluster serves Routes, an OpenShift Route (with TLS at the router). The
+Ingress routes all paths (`/`) to the app and is configured with:
+
+- `className` sets the Ingress class (`spec.ingressClassName`; default: the
+  cluster's default class);
+- `annotations` sets annotations, e.g., for the ingress controller; they
+  take precedence over those that the chart sets for `https`, and `null`
+  removes one of these;
+- `https.enabled` requests a certificate from cert-manager (via the
+  ClusterIssuer `https.issuer`) and serves HTTPS with it. Without it, the
+  Ingress serves plain HTTP.
+
+The chart sets no annotations for particular ingress controllers. Restrict
+the methods that change data (`POST`, `PUT`, `DELETE`) to trusted clients
+with the means of your ingress controller or proxy. For example (an example
+only, adapt it to your setup), with ingress-nginx, which allows them only
+from the network `192.0.2.0/24`:
+
+```yaml
+trs_filer:
+  ingress:
+    className: nginx
+    annotations:
+      nginx.ingress.kubernetes.io/configuration-snippet: |
+        limit_except GET HEAD OPTIONS {
+          allow 192.0.2.0/24;
+          deny all;
+        }
+```
+
+Snippet annotations are disabled in ingress-nginx by default (since 1.9; the
+controller must set `allow-snippet-annotations: "true"` and, since 1.12,
+`annotations-risk-level: Critical`), as they let anyone who can create
+Ingresses change the controller's configuration; check that this is
+acceptable in your cluster. ingress-nginx is also retired (no releases or
+security fixes after March 2026): with other controllers or the Gateway API,
+use their means to restrict methods or clients, or restrict them at a proxy
+in front of the cluster.
 
 ## Upgrades
 
