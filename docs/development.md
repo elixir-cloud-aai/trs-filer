@@ -21,8 +21,9 @@ coverage run -m pytest  # the tests, with coverage
 coverage report
 ```
 
-Instead of activating `.venv`, commands can be run with `uv run` (e.g.,
-`uv run pytest`). `pip install -e ".[dev]"` also works, but installs the
+Instead of activating `.venv`, commands can be run with `uv run`, which
+syncs the environment first, so give it the extra (e.g.,
+`uv run --locked --extra dev pytest`). `pip install -e ".[dev]"` also works, but installs the
 newest versions in the ranges of `pyproject.toml` instead of the locked
 ones, so its results can differ from CI's.
 
