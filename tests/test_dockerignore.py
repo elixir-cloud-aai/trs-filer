@@ -84,7 +84,7 @@ def test_secret_files_are_excluded(path: str) -> None:
     ],
 )
 def test_other_files_are_excluded(path: str) -> None:
-    """Only the listed paths reach the build; no `.env` example is included."""
+    """Paths outside the allowlist, and `.env` examples, stay out of the build."""
     assert not _in_build_context(path)
 
 
