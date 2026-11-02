@@ -11,6 +11,9 @@ DOCKERIGNORE = Path(__file__).parents[1] / ".dockerignore"
 def _matches(pattern: str, path: str) -> bool:
     """Check whether a pattern matches a path or one of its parent folders.
 
+    Covers only the forms used in the file (`*`, `dir/`, `name`, `**/name`), not
+    all of Docker's syntax.
+
     Args:
         pattern: The `.dockerignore` pattern, without a leading `!`.
         path: The path relative to the build context.
@@ -61,6 +64,21 @@ def _in_build_context(path: str) -> bool:
 )
 def test_secret_files_are_excluded(path: str) -> None:
     """Local secret files never reach the build, also not in included paths."""
+    assert not _in_build_context(path)
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        ".env.example",
+        "trs_filer/.env.example",
+        ".git/config",
+        "docs/index.md",
+        "tests/test_dockerignore.py",
+    ],
+)
+def test_other_files_are_excluded(path: str) -> None:
+    """Only the listed paths reach the build; no `.env` example is included."""
     assert not _in_build_context(path)
 
 
