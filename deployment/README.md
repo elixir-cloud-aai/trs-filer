@@ -18,19 +18,31 @@ useful default, and the configuration Job fails (exit 1) on the empty one.
 
 Install the chart attached to a release (`trs-filer-{{ chart_version }}.tgz`
 of the latest release, `{{ version }}`), which sets the release's image. It is
-signed and has a build attestation: verify it first (see [Verifying images
-and charts](https://trs-filer.readthedocs.io/en/latest/operations/#verifying-images-and-charts)).
+signed and has a build attestation: download and verify it before you
+install it (see [Verifying images and
+charts](https://trs-filer.readthedocs.io/en/latest/operations/#verifying-images-and-charts)
+for the signature check with cosign and the details).
 
 ```bash
 gh release download v{{ version }} --repo elixir-cloud-aai/trs-filer \
     --pattern 'trs-filer-{{ chart_version }}.tgz*'
+gh attestation verify trs-filer-{{ chart_version }}.tgz \
+    --repo elixir-cloud-aai/trs-filer \
+    --signer-workflow elixir-cloud-aai/trs-filer/.github/workflows/release.yml \
+    --source-ref refs/tags/v{{ version }}
+```
+
+If the verification succeeds, install the chart:
+
+```bash
 helm install trs-filer trs-filer-{{ chart_version }}.tgz -n namespace \
-    --set host_name=trs.example.org
+    --create-namespace --set host_name=trs.example.org
 ```
 
 `namespace` is the name of the namespace where TRS-Filer should be
-installed, and `trs-filer` could be any name: it is referenced later for
-upgrading or uninstalling. Set further values with `--set` or with a file
+installed (`--create-namespace` creates it if it doesn't exist), and
+`trs-filer` could be any name: it is referenced later for upgrading or
+uninstalling. Set further values with `--set` or with a file
 (`-f my-values.yaml`; `helm show values trs-filer-{{ chart_version }}.tgz`
 prints the defaults).
 
@@ -41,7 +53,8 @@ whose default image is `elixircloud/trs-filer:latest`), edit `values.yaml` or
 pass your values as above, and run this from the `deployment` folder:
 
 ```bash
-helm install trs-filer . -n namespace --set host_name=trs.example.org
+helm install trs-filer . -n namespace --create-namespace \
+    --set host_name=trs.example.org
 ```
 
 ## Values
@@ -50,7 +63,7 @@ The values of `values.yaml`; the sections below describe them.
 
 | Value | Default | Description |
 | --- | --- | --- |
-| `host_name` | `""` | **Required.** Host name that the app serves (the public URL is `https://<host_name>`), used by the Ingress, the Route and the configuration Job. |
+| `host_name` | `""` | **Required.** Host name that the app serves (the app advertises `https://<host_name>`, so serve HTTPS: see `trs_filer.ingress.https` and [Ingress and Route](#ingress-and-route)), used by the Ingress, the Route and the configuration Job. |
 | `apiServer` | `kubernetes.default.svc:443` | Address of the Kubernetes API server, which the configuration Job writes the ConfigMap to. |
 | `trs_filer.image` | `elixircloud/trs-filer:latest` | Image of the app (released charts set the release's image). |
 | `trs_filer.appName` | `trs-filer` | Name of the app's Deployment and Service; names the other resources (e.g., `mongodb-<appName>`). Don't change it for an installed release (see [Persistence](#persistence)). |
@@ -84,9 +97,11 @@ The values of `values.yaml`; the sections below describe them.
   FOCA's library chart ([#135](https://github.com/elixir-cloud-aai/trs-filer/issues/135)).
 - **The app trusts `X-Forwarded-*` headers from every address**
   (`FORWARDED_ALLOW_IPS="*"`), so that links in responses keep `https` behind
-  the ingress or route that terminates TLS. The pod is reached through its
-  Service only; don't expose the Service or the pod to clients directly, as
-  they could forge these headers.
+  the ingress or route that terminates TLS. Every workload that can reach the
+  app's Service or pod can forge these headers, and so make responses
+  contain forged URLs. Don't expose the Service or the pod to clients
+  directly, and restrict access to them to the ingress controller or
+  router, e.g., with NetworkPolicies.
 
 ## Resources
 
@@ -277,9 +292,13 @@ If you need to change any parameter of the deployment, the procedure is similar 
 1. Edit `values.yaml` (or your values file) with the new configuration you want to apply. For example, if you want to change the image of trs-filer, change `trs_filer.image`.
 
 2. Upgrade the Helm chart. Run this from the `deployment` folder, or with the
-   `.tgz` of a release instead of `.`:
+   `.tgz` of a release instead of `.`. `helm upgrade` applies the chart's
+   defaults for values you don't pass again (`host_name` would be empty, and
+   the configuration Job fails), so pass the same values as when installing,
+   e.g., your values file (`-f my-values.yaml`) or `--set host_name=...`,
+   or reuse those of the release with `--reuse-values`:
 ```
-helm upgrade trs-filer . -n namespace
+helm upgrade trs-filer . -n namespace -f my-values.yaml
 ```
 `namespace` is the name of the namespace where the cluster was installed.
 `trs-filer` is the name given when installing. In order to see the correct name, do a `helm ls -n namespace`.
