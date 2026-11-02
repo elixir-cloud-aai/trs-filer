@@ -23,5 +23,11 @@
 **/*.pem
 **/*.key
 **/id_rsa*
+**/id_ed25519*
+**/id_ecdsa*
+**/*.p12
+**/*.pfx
+**/.git-credentials
+**/.pypirc
 **/credentials*.json
 **/.netrc

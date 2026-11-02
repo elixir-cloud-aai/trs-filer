@@ -60,6 +60,12 @@ def _in_build_context(path: str) -> bool:
         "trs_filer/credentials.json",
         "trs_filer/.netrc",
         "trs_filer/id_rsa",
+        "trs_filer/id_ed25519",
+        "trs_filer/id_ecdsa",
+        "trs_filer/keystore.p12",
+        "trs_filer/keystore.pfx",
+        "trs_filer/.git-credentials",
+        "trs_filer/.pypirc",
     ],
 )
 def test_secret_files_are_excluded(path: str) -> None:
@@ -87,6 +93,7 @@ def test_other_files_are_excluded(path: str) -> None:
     [
         "trs_filer/app.py",
         "trs_filer/config.yaml",
+        "trs_filer/api/spec.yaml",
         "pyproject.toml",
         "README.md",
         "LICENSE",
