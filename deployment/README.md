@@ -11,14 +11,97 @@
 
 ## Quick start
 
-1. Edit `values.yaml`. It is important to change `host_name` to the URL you want the application to respond to.
+Set `host_name` (see [Values](#values)): it is **required**, the chart has no
+useful default, and the configuration Job fails (exit 1) on the empty one.
 
-2. Install the Helm chart. Run this from the `deployment` folder:
+### Install a release
+
+Install the chart attached to a release (`trs-filer-{{ chart_version }}.tgz`
+of the latest release, `{{ version }}`), which sets the release's image. It is
+signed and has a build attestation: download and verify it before you
+install it (see [Verifying images and
+charts](https://trs-filer.readthedocs.io/en/latest/operations/#verifying-images-and-charts)
+for the signature check with cosign and the details).
+
+```bash
+gh release download v{{ version }} --repo elixir-cloud-aai/trs-filer \
+    --pattern 'trs-filer-{{ chart_version }}.tgz*'
+gh attestation verify trs-filer-{{ chart_version }}.tgz \
+    --repo elixir-cloud-aai/trs-filer \
+    --signer-workflow elixir-cloud-aai/trs-filer/.github/workflows/release.yml \
+    --source-ref refs/tags/v{{ version }}
 ```
-helm install trs-filer . -n namespace
+
+If the verification succeeds, install the chart:
+
+```bash
+helm install trs-filer trs-filer-{{ chart_version }}.tgz -n namespace \
+    --create-namespace --set host_name=trs.example.org
 ```
-`namespace` is the name of the namespace where the cluster should be installed.
-`trs-filer` could be any name, it will be referenced later for upgrading or uninstalling.
+
+`namespace` is the name of the namespace where TRS-Filer should be
+installed (`--create-namespace` creates it if it doesn't exist), and
+`trs-filer` could be any name: it is referenced later for upgrading or
+uninstalling. Set further values with `--set` or with a file
+(`-f my-values.yaml`; `helm show values trs-filer-{{ chart_version }}.tgz`
+prints the defaults).
+
+### Install from source
+
+To install the chart of a checkout of the repository (e.g., the branch `dev`,
+whose default image is `elixircloud/trs-filer:latest`), edit `values.yaml` or
+pass your values as above, and run this from the `deployment` folder:
+
+```bash
+helm install trs-filer . -n namespace --create-namespace \
+    --set host_name=trs.example.org
+```
+
+## Values
+
+The values of `values.yaml`; the sections below describe them.
+
+| Value | Default | Description |
+| --- | --- | --- |
+| `host_name` | `""` | **Required.** Host name that the app serves (the app advertises `https://<host_name>`, so serve HTTPS: see `trs_filer.ingress.https` and [Ingress and Route](#ingress-and-route)), used by the Ingress, the Route and the configuration Job. |
+| `apiServer` | `kubernetes.default.svc:443` | Address of the Kubernetes API server, which the configuration Job writes the ConfigMap to. |
+| `trs_filer.image` | `elixircloud/trs-filer:latest` | Image of the app (released charts set the release's image). |
+| `trs_filer.appName` | `trs-filer` | Name of the app's Deployment and Service; names the other resources (e.g., `mongodb-<appName>`). Don't change it for an installed release (see [Persistence](#persistence)). |
+| `trs_filer.resources` | 100m CPU; 256Mi memory request, 384Mi limit | CPU and memory of the app (see [Resources](#resources)). |
+| `trs_filer.ingress.enabled` | `true` | Create an Ingress (see [Ingress and Route](#ingress-and-route)). |
+| `trs_filer.ingress.className` | `""` | Ingress class; the cluster's default class if empty. |
+| `trs_filer.ingress.annotations` | `{}` | Annotations of the Ingress; `null` removes one of the chart's. |
+| `trs_filer.ingress.https.enabled` | `false` | Request a certificate from cert-manager and serve HTTPS. |
+| `trs_filer.ingress.https.issuer` | `letsencrypt-prod` | cert-manager ClusterIssuer for `https`. |
+| `trs_filer.route.enabled` | `true` | Create an OpenShift Route if the Ingress is disabled and the cluster serves Routes. |
+| `trs_filer.route.annotations` | `{}` | Annotations of the Route; `null` removes one. |
+| `mongodb.image` | `docker.io/library/mongo:7.0` | MongoDB image (see [MongoDB](#mongodb)). |
+| `mongodb.imagePullPolicy` | `Always` | Pull policy of the MongoDB image. |
+| `mongodb.dbName` | `""` | Name of the app's database; `trs-filer-db` if empty. |
+| `mongodb.volumeSize` | `1Gi` | Size of the PersistentVolumeClaim with the data (see [Persistence](#persistence)). |
+| `mongodb.resources` | 200m CPU; 512Mi memory | CPU and memory of MongoDB (request and limit). |
+
+## Security notes
+
+- **No authentication in the API**, see the warning at the top.
+- **MongoDB runs without authentication.** It is reachable by every pod in
+  the cluster through its Service (`mongodb-<appName>`, port 27017; the
+  chart exposes it nowhere else). Restrict access to the namespace with
+  NetworkPolicies and don't run untrusted workloads in it.
+- **The configuration Job has namespace admin rights.** Its ServiceAccount
+  (`<appName>-configurer`) is bound to the ClusterRole `admin` in the
+  namespace (RoleBinding `admin-<appName>-configurer`), so that it can write
+  the ConfigMap `app-config-<appName>`. It runs on every install and
+  upgrade; the chart needs permission to create these resources, and the
+  rights exist as long as the release does. This stays until the chart uses
+  FOCA's library chart ([#135](https://github.com/elixir-cloud-aai/trs-filer/issues/135)).
+- **The app trusts `X-Forwarded-*` headers from every address**
+  (`FORWARDED_ALLOW_IPS="*"`), so that links in responses keep `https` behind
+  the ingress or route that terminates TLS. Every workload that can reach the
+  app's Service or pod can forge these headers, and so make responses
+  contain forged URLs. Don't expose the Service or the pod to clients
+  directly, and restrict access to them to the ingress controller or
+  router, e.g., with NetworkPolicies.
 
 ## Resources
 
@@ -206,11 +289,16 @@ separated by `:`); leave out the settings that the Job sets
 
 If you need to change any parameter of the deployment, the procedure is similar to installing:
 
-1. Edit `values.yaml` with the new configuration you want to apply. For example, if you want to change the image of trs-filer, change `trs_filer.image`.
+1. Edit `values.yaml` (or your values file) with the new configuration you want to apply. For example, if you want to change the image of trs-filer, change `trs_filer.image`.
 
-2. Upgrade the Helm chart. Run this from the `deployment` folder:
+2. Upgrade the Helm chart. Run this from the `deployment` folder, or with the
+   `.tgz` of a release instead of `.`. `helm upgrade` applies the chart's
+   defaults for values you don't pass again (`host_name` would be empty, and
+   the configuration Job fails), so pass the same values as when installing,
+   e.g., your values file (`-f my-values.yaml`) or `--set host_name=...`,
+   or reuse those of the release with `--reuse-values`:
 ```
-helm upgrade trs-filer . -n namespace
+helm upgrade trs-filer . -n namespace -f my-values.yaml
 ```
 `namespace` is the name of the namespace where the cluster was installed.
 `trs-filer` is the name given when installing. In order to see the correct name, do a `helm ls -n namespace`.
