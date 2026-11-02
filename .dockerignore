@@ -13,3 +13,8 @@
 **/__pycache__
 **/*.py[cod]
 **/*.egg-info
+# Local secrets (e.g., `.env`, `.env.local`, `.envrc`) must never reach the
+# build, also not within the included paths; no example is re-included, as
+# the build copies none (and an exception with wildcards makes Docker walk
+# all excluded directories)
+**/.env*
