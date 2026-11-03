@@ -25,10 +25,14 @@ LABEL org.opencontainers.image.licenses="Apache-2.0"
 LABEL org.opencontainers.image.authors="ELIXIR On-Cloud <cloud-service@elixir-europe.org>"
 LABEL org.opencontainers.image.vendor="ELIXIR On-Cloud"
 
+## TEMPORARY: the pip of the base image vendors copies of urllib3 and msgpack
+## with known vulnerabilities, which pip 26.3 fixes. Removed with pip (#218)
+USER root
+RUN pip install --no-cache-dir pip==26.3
+
 ## TEMPORARY: the Helm chart's config Job runs `update-config-map.sh` in this
 ## image, which needs `curl`, `jq` and `yq`; FOCA's images ship none of them,
 ## and `yq` is no dependency of the app. Removed with the config Job (#135)
-USER root
 RUN apt-get update \
   && apt-get install -y --no-install-recommends curl jq \
   && rm -rf /var/lib/apt/lists/* \
