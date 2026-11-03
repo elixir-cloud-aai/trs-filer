@@ -14,31 +14,23 @@
 #
 # See https://trivy.dev/latest/docs/configuration/filtering/#trivyignoreyaml
 vulnerabilities:
-  # Copies vendored by pip (listed in its SBOM, `pip-*.dist-info/sboms/`) of
-  # the base image (Python's), used only when pip runs (to install the app's
-  # dependencies at build time), not by the app; the installed packages are
-  # separate (urllib3 2.8.0 on 2026-10-31). pip 26.2.2, the latest release on
-  # 2026-10-31, still vendors these versions. Trivy reports the vendored
-  # copies without a path, so the entries can't be limited with `paths`; they
-  # would also hide these versions if installed normally. Accepted alike in
-  # cloud-registry
+  # Copy vendored by pip (listed in its SBOM, `pip/_vendor/bom.cdx.json`),
+  # used only when pip runs (to install the app's dependencies at build time),
+  # not by the app, which has no setuptools of its own in the image. pip 26.3,
+  # the latest release on 2026-11-03 and the one the image upgrades to
+  # (`Dockerfile`), still vendors this version. Trivy reports the vendored
+  # copy without a path, so the entries can't be limited with `paths`; they
+  # would also hide this version if installed normally. Accepted alike in
+  # cloud-registry; removing pip from the image (#218) ends the need for them
   - id: CVE-2025-47273
     purls: ["pkg:pypi/setuptools@70.3.0"]
     statement: Vendored by pip, not used by the app (path traversal in PackageIndex, which pip doesn't use)
     expired_at: 2027-01-31
-  - id: CVE-2026-97687
-    purls: ["pkg:pypi/urllib3@2.7.0"]
-    statement: Vendored by pip, not used by the app (pip only runs at build time)
+  - id: CVE-2026-59890
+    purls: ["pkg:pypi/setuptools@70.3.0"]
+    statement: Vendored by pip, not used by the app (MANIFEST.in exclusion bypass in sdist builds on macOS; pip vendors only pkg_resources)
     expired_at: 2027-01-31
-  - id: CVE-2026-97689
-    purls: ["pkg:pypi/urllib3@2.7.0"]
-    statement: Vendored by pip, not used by the app (pip only runs at build time)
-    expired_at: 2027-01-31
-  - id: GHSA-6v7p-g79w-8964
-    purls: ["pkg:pypi/msgpack@1.1.2"]
-    statement: Vendored by pip, not used by the app (pip only runs at build time)
-    expired_at: 2027-01-31
-  - id: CVE-2026-114613
-    purls: ["pkg:pypi/msgpack@1.1.2"]
-    statement: Vendored by pip, not used by the app (memory leak in map deserialization; pip only runs at build time, on its own cache data)
+  - id: GHSA-xmj3-9gf7-h52w
+    purls: ["pkg:pypi/setuptools@70.3.0"]
+    statement: Vendored by pip, not used by the app (Windows path escape in legacy wheel installation; the image is Linux, and pip vendors only pkg_resources)
     expired_at: 2027-01-31
