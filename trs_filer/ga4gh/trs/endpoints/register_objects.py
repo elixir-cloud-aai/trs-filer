@@ -9,8 +9,8 @@ from pymongo.collection import Collection
 from pymongo.errors import DuplicateKeyError
 
 from trs_filer.errors.exceptions import (
-    BadRequest,
     InternalServerError,
+    InvalidRequest,
     NotFound,
 )
 from trs_filer.remote_files import fetch_remote_file
@@ -152,7 +152,7 @@ class RegisterTool:
         tool classes are not changed, and tools store a copy of them.
 
         Raises:
-            BadRequest: Version identifiers are duplicated, the files of a
+            InvalidRequest: Version identifiers are duplicated, the files of a
                 version are invalid, or the tool class does not exist while
                 tool classes are validated.
             InternalServerError: No unique identifier could be generated, or the
@@ -178,7 +178,10 @@ class RegisterTool:
             self.data["toolclass"] = stored_class
         elif self.tool_class_validation:
             logger.error("Tool class '%s' does not exist.", tool_class_id)
-            raise BadRequest
+            raise InvalidRequest(
+                "The tool class doesn't exist; register it first (tool classes "
+                "are validated)."
+            )
 
         version_list = [
             v.get("id", None)
@@ -187,7 +190,9 @@ class RegisterTool:
         ]
         if len(version_list) != len(set(version_list)):
             logger.error("Duplicate tool version IDs specified.")
-            raise BadRequest
+            raise InvalidRequest(
+                "The identifiers of the versions of a tool must be unique."
+            )
 
         # process versions once (their files included); retries below only
         # change the identifier of the tool, and so the versions' URLs
@@ -386,7 +391,7 @@ class RegisterToolVersion:
         """Process version metadata.
 
         Raises:
-            BadRequest: The files of the version are invalid.
+            InvalidRequest: The files of the version are invalid.
             trs_filer.errors.exceptions.RemoteFileError: The content of a file
                 could not be retrieved from its URL.
         """
@@ -429,7 +434,7 @@ class RegisterToolVersion:
         """Process file (meta)data.
 
         Raises:
-            BadRequest: The files of the version are invalid.
+            InvalidRequest: The files of the version are invalid.
             trs_filer.errors.exceptions.RemoteFileError: The content of a file
                 could not be retrieved from its URL.
         """
@@ -440,7 +445,9 @@ class RegisterToolVersion:
             file_types[f["type"]].append(f["tool_file"]["file_type"])
             if f["tool_file"]["path"] in file_path_dict.get(f["type"], []):
                 logger.error("Duplicate file paths are not allowed")
-                raise BadRequest
+                raise InvalidRequest(
+                    "The paths of the files of a version must be unique per type."
+                )
             file_path_dict[f["type"]].append(f["tool_file"]["path"])
 
         invalid = False
@@ -471,7 +478,11 @@ class RegisterToolVersion:
                 "one of the files must be desginaed the 'PRIMARY_DESCRIPTOR' "
                 "file"
             )
-            raise BadRequest
+            raise InvalidRequest(
+                "Each descriptor type of a version must have at most one "
+                "PRIMARY_DESCRIPTOR file, and one if it has SECONDARY_DESCRIPTOR "
+                "files."
+            )
 
         # validate required fields
         for _file in self.data.get("files", []):
@@ -483,7 +494,10 @@ class RegisterToolVersion:
                 logger.error(
                     "FileWrapper must contain at least one of `url` or `content`."
                 )
-                raise BadRequest
+                raise InvalidRequest(
+                    "Each file must have its content (file_wrapper.content) or a "
+                    "URL to retrieve it from (file_wrapper.url)."
+                )
             if self.data.get("is_production", False) and (
                 "checksum" not in _file["file_wrapper"]
                 or not _file["file_wrapper"]["checksum"]
@@ -491,7 +505,10 @@ class RegisterToolVersion:
                 logger.error(
                     "Production tools must contain checksum information for all files."
                 )
-                raise BadRequest
+                raise InvalidRequest(
+                    "The files of production versions (is_production) must have "
+                    "checksums (file_wrapper.checksum)."
+                )
 
             # store contents accessible at url in database
             # TODO: this needs more checks on the content
@@ -516,7 +533,11 @@ class RegisterToolVersion:
             if _file["tool_file"]["file_type"] in descriptor_set:
                 if _file["type"] not in self.descriptor_types:
                     logger.error("Invalid descriptor type.")
-                    raise BadRequest
+                    raise InvalidRequest(
+                        "The type of descriptor, test and other files must be a "
+                        "supported descriptor type: "
+                        f"{', '.join(self.descriptor_types)}."
+                    )
 
             # validate image file types
             elif (
@@ -524,7 +545,10 @@ class RegisterToolVersion:
                 and _file["type"] not in self.image_types
             ):
                 logger.error("Missing or invalid image file type.")
-                raise BadRequest
+                raise InvalidRequest(
+                    "The type of containerfiles must be a supported image type: "
+                    f"{', '.join(self.image_types)}."
+                )
 
     def register_metadata(self) -> None:
         """Register version with tool.
@@ -535,7 +559,7 @@ class RegisterToolVersion:
         `custom.tool.meta_version.on_version_change` is `false`.
 
         Raises:
-            BadRequest: The files of the version are invalid.
+            InvalidRequest: The files of the version are invalid.
             InternalServerError: No unique identifier could be generated, or the
                 object could not be stored.
             NotFound: The tool does not exist.
