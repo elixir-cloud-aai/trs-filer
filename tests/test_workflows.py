@@ -434,7 +434,7 @@ INSTALLERS = re.compile(
 # `uv sync`, also with options before the subcommand
 UV_SYNC = re.compile(r"\buv\s+(\S+\s+)*?sync\b")
 # The jobs of `ci.yml` that install the app's dependencies, with their extra
-LOCKED_JOBS = {"lint": "dev", "test": "dev", "docs": "docs"}
+LOCKED_JOBS = {"lint": "dev", "test": "dev", "chart": "dev", "docs": "docs"}
 
 
 def test_credential_jobs_found() -> None:
@@ -781,3 +781,24 @@ def test_build_system_group() -> None:
     ]
     locked = [entry["name"] for entry in project["dev-dependencies"]["build-system"]]
     assert sorted(locked) == sorted(Requirement(spec).name for spec in group)
+
+
+def test_chart_job() -> None:
+    """CI lints and tests the chart with the Helm version of the release.
+
+    The gate and `publish` need the job, so that a broken chart fails CI and
+    holds back the `dev` image.
+    """
+    ci = _load(WORKFLOWS / "ci.yml")["jobs"]
+    release = _load(WORKFLOWS / "release.yml")["jobs"]
+    (ci_helm,) = _steps(ci["chart"], "azure/setup-helm")
+    (release_helm,) = _steps(release["prepare"], "azure/setup-helm")
+    assert ci_helm == release_helm
+    assert ci["chart"]["name"] == "Chart"
+    assert "chart" in ci["passed"]["needs"]
+    assert "chart" in ci["publish"]["needs"]
+    steps = {step.get("name"): step for step in ci["chart"]["steps"]}
+    assert "helm lint deployment --strict" in _commands(steps["Lint chart"])
+    tests = _commands(steps["Test chart"])
+    assert any("tests/test_update_config_map.py" in command for command in tests)
+    assert any("tests/test_chart.py" in command for command in tests)

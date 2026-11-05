@@ -132,6 +132,18 @@ helm lint deployment --set host_name=trs.example.org
 helm template trs-filer deployment --set host_name=trs.example.org
 ```
 
+CI's job "Chart" (`.github/workflows/ci.yml`) lints the chart as the
+release workflow does (`helm lint deployment --strict`), and runs the tests
+that render it (`tests/test_chart.py`) and that run the script of its
+config Job, `update-config-map.sh`, against a stub of the Kubernetes API
+server (`tests/test_update_config_map.py`; with `jq` and the Python `yq`
+of the image, a dev dependency). Locally, these tests are skipped without
+Helm, `jq` or that `yq`:
+
+```bash
+pytest tests/test_chart.py tests/test_update_config_map.py
+```
+
 ## Documentation
 
 This documentation is built with [MkDocs](https://www.mkdocs.org/) and
@@ -452,6 +464,6 @@ from the first release on, and the default branch is left empty, so that
 rule activates the versions of tags (`v*`), so that the docs linked from
 packaged charts exist.
 
-The release workflow installs a fixed Helm version (`version:` of
-`azure/setup-helm` in `release.yml`). Dependabot updates the action, but not
-that version: bump it by hand.
+The release workflow and CI's job "Chart" install a fixed Helm version
+(`version:` of `azure/setup-helm` in `release.yml` and `ci.yml`).
+Dependabot updates the action, but not that version: bump both by hand.
