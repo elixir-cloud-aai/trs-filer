@@ -14,6 +14,7 @@ from trs_filer.errors.exceptions import (
     InvalidRequest,
     RemoteFileError,
     describe_invalid_request,
+    exceptions,
 )
 
 
@@ -88,7 +89,8 @@ def test_remote_file_error_response(
     wrapper["url"] = "https://user:hidden@example.org/main.cwl"
     response = client.post(f"{BASE_PATH}/tools", json=data)
     assert response.status_code == 400
-    assert "retrieved from its URL" in response.get_json()["detail"]
+    # Exactly the fixed problem details, with nothing appended
+    assert response.get_json() == exceptions[RemoteFileError]
     text = response.get_data(as_text=True)
     assert "reason-not-for-clients" not in text
     assert "hidden" not in text
