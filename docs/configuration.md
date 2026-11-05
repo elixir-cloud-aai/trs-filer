@@ -234,3 +234,6 @@ reason as `detail`, shortened to `exceptions.max_detail_length` characters
 (500 by default); set `exceptions.validation_details: false` to send a
 generic `detail` instead (see FOCA's
 [documentation](https://foca.readthedocs.io/en/latest/configuration/exceptions/)).
+Requests that TRS-Filer itself refuses (e.g., deleting the last version of
+a tool) get their reason as `detail` regardless of this setting; it names
+the rule, not the values sent (see [Errors](api.md#errors)).

@@ -134,3 +134,21 @@ Requests that don't match the API specification (e.g., an unknown
 descriptor type, or a body without required properties) get `400 Bad
 Request` with the reason of the validation as `detail` (see
 [Errors](configuration.md#errors)).
+
+Requests that match the specification but that TRS-Filer refuses also get
+`400 Bad Request` with the reason as `detail`, which names the rule but not
+the values sent (they may hold credentials, e.g., in URLs):
+
+| Request | Reason |
+| --- | --- |
+| `GET /tools` | The filter `tags` is given (tools have no tags); the `offset` is not a non-negative integer; the `limit` is below 1. |
+| `GET` of the descriptors, tests and files of a version | The descriptor type is one of the specification that TRS-Filer doesn't support (e.g., `SMK`); the reason lists the supported ones. |
+| `POST`, `PUT` of tools | The tool class doesn't exist while tool classes are validated (see [Tool classes](configuration.md#tool-classes)); the versions have duplicate identifiers; a version is invalid (see below). |
+| `POST`, `PUT` of versions | The paths of the files of a version are not unique per type; a descriptor type has more than one `PRIMARY_DESCRIPTOR` file, or `SECONDARY_DESCRIPTOR` files but none; a file has neither `file_wrapper.content` nor `file_wrapper.url`; a file of a production version (`is_production`) has no checksums (`file_wrapper.checksum`); the type of a descriptor, test or other file is not a supported descriptor type, or that of a containerfile not a supported image type. |
+| `DELETE /tools/{id}/versions/{version_id}` | The version is the last one of the tool (delete the tool instead). |
+| `DELETE /toolClasses/{id}` | Tools use the tool class. |
+
+Files whose content can't be retrieved from their URL get `400 Bad Request`
+with a fixed `detail` that lists the possible causes; the reason is only
+logged, as it may reveal details of the destination (see [Remote
+files](configuration.md#remote-files)).
