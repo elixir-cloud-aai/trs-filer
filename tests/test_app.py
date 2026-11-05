@@ -212,9 +212,19 @@ def test_undeclared_query_parameters(
         assert mongo_client[DB][name].count_documents({}) == 0
 
 
-@pytest.mark.parametrize("path", ["/tools", "/toolClasses"])
+@pytest.mark.parametrize(
+    ("path", "body"),
+    [
+        ("/tools", {**MOCK_TOOL, "name": "Work\ud800flow"}),
+        ("/toolClasses", {"name": "Work\ud800flow", "description": "A workflow."}),
+    ],
+    ids=["tools", "toolClasses"],
+)
 def test_unpaired_surrogates(
-    client: FlaskClient, mongo_client: MongoClient[dict[str, Any]], path: str
+    client: FlaskClient,
+    mongo_client: MongoClient[dict[str, Any]],
+    path: str,
+    body: dict[str, Any],
 ) -> None:
     """JSON bodies with unpaired surrogates are rejected (`400`).
 
@@ -225,10 +235,8 @@ def test_unpaired_surrogates(
         client: Test client.
         mongo_client: MongoDB client.
         path: Path of the operation, relative to the base path.
+        body: JSON body, with an unpaired surrogate in `name`.
     """
-    body = {"name": "Work\ud800flow", "description": "A workflow."}
-    if path == "/tools":
-        body = {**deepcopy(MOCK_TOOL), "name": "Work\ud800flow"}
     response = client.post(
         f"{BASE_PATH}{path}",
         # escaped as `\ud800`, which JSON allows
@@ -238,7 +246,8 @@ def test_unpaired_surrogates(
     assert response.status_code == 400, response.get_json()
     detail = response.get_json()["detail"]
     assert "unpaired surrogates" in detail
-    assert "Work" not in detail
+    for withheld in ("'name'", "Work", "flow", "ud800"):
+        assert withheld not in detail
     for name in ("tools", "toolclasses"):
         assert mongo_client[DB][name].count_documents({}) == 0
 

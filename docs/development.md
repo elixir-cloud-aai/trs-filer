@@ -107,7 +107,9 @@ without hash checks (`tests/test_workflows.py` checks this, and that the
 group and `build-system.requires` are the same: keep them so). Two uv
 versions are in use: that of `uv.lock` (`astral-sh/setup-uv`, updated with
 the `uv` entry of Dependabot) and that of the `Dockerfile` stage (`docker`
-entry). The image build, which these jobs run too, installs the locked
+entry).
+
+The image build, which these jobs run too, installs the locked
 runtime dependencies only (`uv export --frozen --no-dev --group config-job
 --no-emit-project`, which leaves out the extras and the group
 `build-system`, then `uv pip install --system --require-hashes
@@ -120,7 +122,8 @@ the app's wheel with the locked build requirements (group `build-system`),
 installed with hash checks, too, and without network, so it downloads
 nothing that isn't hash-checked; it fails unless the base image has the
 locked FOCA release (`scripts/image_requirements.py`), so update the
-`foca` requirement, the lock and the base image together. The image
+`foca` requirement, the lock and the base image together, by hand
+(Dependabot updates neither FOCA nor its image). The image
 contains no pip and no uv: the FOCA base image has none (since FOCA 0.20),
 and uv is mounted from the `Dockerfile` stage pinned by digest into the
 steps that use it, which the smoke test of CI checks (step "Check that

@@ -15,12 +15,12 @@
 # See https://trivy.dev/latest/docs/configuration/filtering/#trivyignoreyaml
 vulnerabilities:
   # Copies vendored by pip, used only when pip runs (to install the app's
-  # dependencies at build time), not by the app. Images built from `dev` have
-  # no pip since the move to FOCA 0.21 (whose base image has none, #218), but
-  # the weekly scan (`scan.yml`) applies this file to the latest release,
-  # which still has pip (setuptools 70.3.0 in its SBOM,
-  # `pip/_vendor/bom.cdx.json`; urllib3 2.7.0 and msgpack 1.1.2 of pip
-  # before 26.3). Trivy reports the vendored copies without a path, so the
+  # dependencies at build time), not by the app. FOCA's base image has no
+  # pip since FOCA 0.20, and images built from `dev` have none since the move
+  # to FOCA 0.21 (#218), but the weekly scan (`scan.yml`) applies this file
+  # to the latest release, which still has the pip of the FOCA 0.19 image
+  # (setuptools 70.3.0 in its SBOM, `pip/_vendor/bom.cdx.json`, and urllib3
+  # 2.7.0 and msgpack 1.1.2, which pip 26.3 no longer vendors). Trivy reports the vendored copies without a path, so the
   # entries can't be limited with `paths`. Remove them all with the first
   # release without pip
   - id: CVE-2025-47273
