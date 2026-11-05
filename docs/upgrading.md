@@ -378,8 +378,8 @@ fails. The chart in the repository has the placeholder version `0.0.0`
 ## Images from `dev` since FOCA 0.17
 
 Images from `dev` built since the move to FOCA 0.17 (`dev`, `sha-<commit>`)
-ran on an unreleased FOCA commit; the first release since then runs on FOCA 0.19. Besides the
-`detail` of rejected requests (see [Errors](#errors)), the startup warning
+ran on an unreleased FOCA commit; the first release since then runs on
+FOCA 0.19. Besides the `detail` of rejected requests (see [Errors](#errors)), the startup warning
 about the placeholders of the service info changes: FOCA logs it
 (logger `foca.api.service_info`) while `id`, `organization.url`,
 `contactUrl` or `documentationUrl` are in a reserved example domain (RFC

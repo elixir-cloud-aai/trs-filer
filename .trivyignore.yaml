@@ -20,9 +20,9 @@ vulnerabilities:
   # to FOCA 0.21 (#218), but the weekly scan (`scan.yml`) applies this file
   # to the latest release, which still has the pip of the FOCA 0.19 image
   # (setuptools 70.3.0 in its SBOM, `pip/_vendor/bom.cdx.json`, and urllib3
-  # 2.7.0 and msgpack 1.1.2, which pip 26.3 no longer vendors). Trivy reports the vendored copies without a path, so the
-  # entries can't be limited with `paths`. Remove them all with the first
-  # release without pip
+  # 2.7.0 and msgpack 1.1.2, which pip 26.3 no longer vendors). Trivy
+  # reports the vendored copies without a path, so the entries can't be
+  # limited with `paths`. Remove them all with the first release without pip
   - id: CVE-2025-47273
     purls: ["pkg:pypi/setuptools@70.3.0"]
     statement: Vendored by pip, not used by the app (path traversal in PackageIndex, which pip doesn't use)
