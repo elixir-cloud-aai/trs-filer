@@ -323,6 +323,55 @@ def test_downloads_hash_checked() -> None:
             assert "--seed" not in args, args
 
 
+def _option(args: list[str], name: str) -> str:
+    """Get the value of an option of a command.
+
+    Args:
+        args: Arguments of the command.
+        name: Name of the option (e.g., `-r`).
+
+    Returns:
+        The argument after the option.
+    """
+    return args[args.index(name) + 1]
+
+
+def test_installs_exported_requirements() -> None:
+    """The hash-checked installs read the requirements that the exports write.
+
+    The build requirements are installed from their export; the runtime
+    requirements from the output of `scripts/image_requirements.py`, which
+    reads their export. So no other (e.g., incomplete) requirements file can
+    be installed instead.
+    """
+    commands = _run_commands()
+    exports = {
+        _option(args, "--output-file"): args
+        for args in map(_uv_args, commands)
+        if args is not None and args[0] == "export"
+    }
+    filtered = {}
+    for command in commands:
+        match = re.fullmatch(
+            r"python \S+/image_requirements\.py (\S+) > (\S+)", command
+        )
+        if match:
+            assert match[1] in exports, command
+            assert "--only-group" not in exports[match[1]], command
+            filtered[match[2]] = match[1]
+    assert len(filtered) == 1, commands
+    installed = [
+        _option(args, "-r")
+        for args in map(_uv_args, commands)
+        if args is not None and args[:2] == ["pip", "install"] and "-r" in args
+    ]
+    assert len(installed) == 2, installed
+    (build,) = [path for path in installed if path in exports]
+    assert _option(exports[build], "--only-group") == GROUP
+    (runtime,) = [path for path in installed if path not in exports]
+    assert runtime in filtered, runtime
+
+
 def test_builds_offline() -> None:
     """The steps that build and install the app have no network.
 
