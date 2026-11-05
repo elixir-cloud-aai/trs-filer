@@ -11,8 +11,8 @@ from flask import Response, request, send_file
 from foca.utils.logging import log_traffic
 
 from trs_filer.errors.exceptions import (
-    BadRequest,
     InternalServerError,
+    InvalidRequest,
     NotFound,
     RemoteFileError,
 )
@@ -30,6 +30,8 @@ logger = logging.getLogger(__name__)
 # Default and maximum number of tools per page of `GET /tools` (the spec's
 # default limit)
 MAX_LIMIT = 1000
+# Reason of `400 Bad Request` for invalid offsets of `GET /tools`
+OFFSET_INVALID = "The offset must be a non-negative integer."
 
 
 @log_traffic
@@ -167,13 +169,13 @@ def toolsGet(
         The links to pages keep the other query parameters of the request.
 
     Raises:
-        BadRequest: The offset is not a non-negative integer, the limit is
-            below 1, or `tags` are given.
+        InvalidRequest: The offset is not a non-negative integer, the limit
+            is below 1, or `tags` are given.
     """
     # deliberately refused (not ignored): tools have no tags to filter by
     if tags is not None:
         logger.error("Filtering tools by tags is not supported.")
-        raise BadRequest
+        raise InvalidRequest("The filter 'tags' is not supported: tools have no tags.")
 
     # set filters; those of versions apply to the same version, those of
     # images to the same image of that version
@@ -212,10 +214,13 @@ def toolsGet(
         offset_int = 0 if offset is None else int(offset)
     except ValueError as exc:
         logger.error("Offset '%s' is not an integer.", offset)
-        raise BadRequest from exc
-    if offset_int < 0 or limit < 1:
-        logger.error("Invalid offset %s or limit %s.", offset_int, limit)
-        raise BadRequest
+        raise InvalidRequest(OFFSET_INVALID) from exc
+    if offset_int < 0:
+        logger.error("Invalid offset %s.", offset_int)
+        raise InvalidRequest(OFFSET_INVALID)
+    if limit < 1:
+        logger.error("Invalid limit %s.", limit)
+        raise InvalidRequest("The limit must be at least 1.")
     limit = min(limit, MAX_LIMIT)
 
     # fetch data
@@ -294,7 +299,7 @@ def toolsIdVersionsVersionIdTypeDescriptorGet(
         "non-plain" types return a descriptor wrapped with metadata.
 
     Raises:
-        BadRequest: The descriptor type is invalid.
+        InvalidRequest: The descriptor type is invalid.
         NotFound: The tool version or its primary descriptor of the given
             type does not exist.
     """
@@ -352,7 +357,7 @@ def toolsIdVersionsVersionIdTypeDescriptorRelativePathGet(
         tool version.
 
     Raises:
-        BadRequest: The descriptor type is invalid.
+        InvalidRequest: The descriptor type is invalid.
         NotFound: The tool version or a file with the given path and type
             does not exist.
     """
@@ -416,7 +421,7 @@ def toolsIdVersionsVersionIdTypeTestsGet(
         tool version.
 
     Raises:
-        BadRequest: The descriptor type is invalid.
+        InvalidRequest: The descriptor type is invalid.
         NotFound: The tool version or test files of the given type do not
             exist.
     """
@@ -477,7 +482,7 @@ def toolsIdVersionsVersionIdTypeFilesGet(
         the ZIP archive of the files.
 
     Raises:
-        BadRequest: The descriptor type is invalid.
+        InvalidRequest: The descriptor type is invalid.
         InternalServerError: The ZIP archive could not be created.
         NotFound: The tool version does not exist, or, for format `zip`, the
             content of a file is not available.
@@ -622,7 +627,7 @@ def postTool() -> str:
         Identifier of created tool.
 
     Raises:
-        BadRequest: The tool is invalid, e.g., its version identifiers are
+        InvalidRequest: The tool is invalid, e.g., its version identifiers are
             duplicated or the files of a version are invalid, or its tool
             class does not exist while tool classes are validated.
         InternalServerError: No unique identifier could be generated, or the
@@ -648,7 +653,7 @@ def putTool(
         Identifier of created/updated tool.
 
     Raises:
-        BadRequest: The tool is invalid, e.g., its version identifiers are
+        InvalidRequest: The tool is invalid, e.g., its version identifiers are
             duplicated or the files of a version are invalid, or its tool
             class does not exist while tool classes are validated.
         InternalServerError: No unique identifier could be generated, or the
@@ -701,7 +706,7 @@ def postToolVersion(
         Identifier of created tool version.
 
     Raises:
-        BadRequest: The files of the version are invalid.
+        InvalidRequest: The files of the version are invalid.
         InternalServerError: No unique identifier could be generated, or the
             object could not be stored.
         NotFound: No tool with the given identifier exists.
@@ -731,7 +736,7 @@ def putToolVersion(
         Identifier of created tool version.
 
     Raises:
-        BadRequest: The files of the version are invalid.
+        InvalidRequest: The files of the version are invalid.
         InternalServerError: No unique identifier could be generated, or the
             object could not be stored.
         NotFound: No tool with the given identifier exists.
@@ -764,7 +769,7 @@ def deleteToolVersion(
         is `false`.
 
     Raises:
-        BadRequest: The version is the last one of the tool.
+        InvalidRequest: The version is the last one of the tool.
         InternalServerError: The tool version could not be deleted.
         NotFound: No tool with the given identifier and version exists.
     """
@@ -792,7 +797,9 @@ def deleteToolVersion(
     if not del_ver_tools.matched_count:
         if db_coll_tools.count_documents({"id": id, "versions.id": version_id}):
             logger.error("Version '%s' is the last one of tool '%s'.", version_id, id)
-            raise BadRequest
+            raise InvalidRequest(
+                "The last version of a tool can't be deleted; delete the tool instead."
+            )
         raise NotFound
     elif not del_ver_tools.modified_count:
         raise InternalServerError
@@ -850,12 +857,10 @@ def deleteToolClass(
         id: Identifier of tool class to be deleted.
 
     Returns:
-        Previous identifier of deleted tool class. Note that a `BadRequest/400`
-        error response is returned if attempting to delete a tool class that
-        is associated with any tool.
+        Previous identifier of deleted tool class.
 
     Raises:
-        BadRequest: The tool class is associated with a tool.
+        InvalidRequest: The tool class is associated with a tool.
         NotFound: No tool class with the given identifier exists.
     """
     db_coll_classes = get_collection("toolclasses")
@@ -863,7 +868,7 @@ def deleteToolClass(
     # do not allow deleting tool class associated with tool
     if get_collection("tools").find_one({"toolclass.id": id}) is not None:
         logger.error("Tool class '%s' is used by tools.", id)
-        raise BadRequest
+        raise InvalidRequest("The tool class is used by tools and can't be deleted.")
 
     if db_coll_classes.delete_one({"id": id}).deleted_count:
         return id
@@ -878,11 +883,14 @@ def validate_descriptor_type(type: str) -> None:
         type: Descriptor type, e.g., "NFL".
 
     Raises:
-        BadRequest: Provided descriptor type is invalid.
+        InvalidRequest: Provided descriptor type is invalid.
     """
     valid_types = [f"PLAIN_{t}" for t in RegisterToolVersion.descriptor_types]
     valid_types += RegisterToolVersion.descriptor_types
 
     if type not in valid_types:
         logger.error("Specified type '%s' not among valid types: %s", type, valid_types)
-        raise BadRequest
+        raise InvalidRequest(
+            "The descriptor type is not supported; supported are: "
+            f"{', '.join(valid_types)}."
+        )

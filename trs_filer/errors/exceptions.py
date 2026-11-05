@@ -7,6 +7,8 @@ from connexion.exceptions import (
     OAuthProblem,
     Unauthorized,
 )
+from flask import Response
+from foca.errors.exceptions import problem_response
 from werkzeug.exceptions import (
     BadRequest,
     InternalServerError,
@@ -17,10 +19,22 @@ from werkzeug.exceptions import (
 __all__ = [
     "BadRequest",
     "InternalServerError",
+    "InvalidRequest",
     "NotFound",
     "RemoteFileError",
+    "describe_invalid_request",
     "exceptions",
 ]
+
+
+class InvalidRequest(BadRequest):
+    """The app refuses a request that matches the API specification.
+
+    E.g., a tool whose files break a rule of the app, or a query that the
+    app doesn't support. The description says why and is sent to clients as
+    `detail` (cf. `describe_invalid_request()`), so it must not contain
+    submitted values, which may hold credentials (e.g., URLs).
+    """
 
 
 class RemoteFileError(BadRequest):
@@ -30,6 +44,27 @@ class RemoteFileError(BadRequest):
     (`custom.remote_files`). The description says why; it is logged, not
     returned to clients.
     """
+
+
+def describe_invalid_request(exc: InvalidRequest) -> Response:
+    """Answer an invalid request with its reason as `detail`.
+
+    Error handler of the app for `InvalidRequest` (registered in
+    `trs_filer.app.create_app()`): FOCA's error handler sends the fixed
+    problem details of `exceptions` for all other exceptions, including
+    other bad requests (e.g., `RemoteFileError`, whose description is not
+    for clients). Like FOCA's, its responses are not validated against the
+    API specification. Cf. FOCA's `problem_response()`, which
+    cloud-registry's controllers return.
+
+    Args:
+        exc: Invalid request.
+
+    Returns:
+        `400 Bad Request` problem details response with the description of
+        the exception as `detail`.
+    """
+    return problem_response(exc)
 
 
 # Problem details (RFC 9457) of exceptions raised in app context, served by
