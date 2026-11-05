@@ -37,8 +37,8 @@ def create_app() -> App:
             (`server.max_content_length` is null).
         ValueError: The custom config is invalid, e.g., it still sets
             `custom.service_info`, or an ID character set is an expression
-            (FOCA raises it from the `pydantic.ValidationError`, which names
-            the invalid field).
+            (FOCA raises it from a plain `ValueError` that names the invalid
+            setting and the reason, without the invalid value).
         pydantic.ValidationError: FOCA's config is invalid, e.g., the
             service info.
     """

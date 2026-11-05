@@ -133,7 +133,12 @@ responses of the TRS specification), e.g.:
 Requests that don't match the API specification (e.g., an unknown
 descriptor type, or a body without required properties) get `400 Bad
 Request` with the reason of the validation as `detail` (see
-[Errors](configuration.md#errors)).
+[Errors](configuration.md#errors)). So do query parameters that an
+operation doesn't declare, on all operations (e.g., `GET /tools?x=1`, and
+also `GET /service-info?x=1`, `GET /toolClasses?x=1` and `POST /tools?x=1`,
+whose operations have no parameters), and JSON bodies with unpaired
+surrogates (e.g., `"\ud800"`), for which `detail` names neither the field
+nor the value.
 
 Requests that match the specification but that TRS-Filer refuses also get
 `400 Bad Request` with the reason as `detail`, which names the rule but not

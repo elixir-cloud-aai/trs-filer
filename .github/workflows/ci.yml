@@ -335,6 +335,22 @@ jobs:
             echo "::error::App reports version '${actual}', expected '${SETUPTOOLS_SCM_PRETEND_VERSION}'"
             exit 1
           fi
+      # No pip (whose vendored packages image scans report) and no uv in
+      # the image, which installs packages in its build stages only
+      - name: Check that image has no installer
+        run: |
+          docker compose exec -T --user 0 trs-filer sh -c '
+            if command -v pip || command -v pip3 || command -v uv ||
+              python -c "import pip" 2>/dev/null ||
+              find / -xdev -name "pip-*.dist-info" | grep .; then
+              exit 1
+            fi'
+      # The tools of the Helm chart's config Job (temporary, #135); `yq` is
+      # installed from the lock (dependency group `config-job`)
+      - name: Check tools of config Job
+        run: |
+          docker compose exec -T trs-filer sh -c \
+            'curl --version && jq --version && yq --version'
       - name: Check license text in image
         run: |
           docker compose exec -T trs-filer python -c \

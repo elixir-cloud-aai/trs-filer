@@ -3,6 +3,8 @@
 !trs_filer/
 !LICENSE
 !pyproject.toml
+# The lock, from which the image build installs the dependencies
+!uv.lock
 !README.md
 # Run by the image build to list the requirements to install
 !scripts/image_requirements.py

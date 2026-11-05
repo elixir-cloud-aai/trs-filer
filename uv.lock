@@ -891,7 +891,7 @@ wheels = [
 
 [[package]]
 name = "foca"
-version = "0.19.0"
+version = "0.21.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "addict" },
@@ -914,9 +914,9 @@ dependencies = [
     { name = "urllib3" },
     { name = "werkzeug" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/7f/0b/d0c7025f907e227fb501d7f247e3df89a01f52ea596079d33da8be9d5b54/foca-0.19.0.tar.gz", hash = "sha256:b3f3e87f3107231998060ed0d894af2743afa1189af158eeaacae760cc292adf", size = 496552, upload-time = "2026-10-31T16:30:25.197Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/7d/3c/30e645f663616c100307736259cfebcbbfd0e931ffce8d492de14042496a/foca-0.21.0.tar.gz", hash = "sha256:0b1187c5b4ef23bcb9cf9b24da841cd32df15378e3f7ddc9876f9b928127c650", size = 641321, upload-time = "2026-11-05T00:57:47.226Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/18/b8/cd781dfc69b4769085661f843748f272e8aa6f46800f9b9699f71892409d/foca-0.19.0-py3-none-any.whl", hash = "sha256:518137e392d746e9b3432cfb558a0680ac6cbe518c6e09a3a06c9a27aa9f569e", size = 277463, upload-time = "2026-10-31T16:30:23.622Z" },
+    { url = "https://files.pythonhosted.org/packages/81/f2/ea5d20b4c998c5a74193764078d0972585a8f473826070f8e44f4bd05460/foca-0.21.0-py3-none-any.whl", hash = "sha256:45d1653a6f7a3c8ec0e44c68e8d47d01897358b74b60d459ef4dc8d2e2a5d468", size = 338273, upload-time = "2026-11-05T00:57:45.513Z" },
 ]
 
 [[package]]
@@ -2346,6 +2346,9 @@ build-system = [
     { name = "setuptools" },
     { name = "setuptools-scm" },
 ]
+config-job = [
+    { name = "yq" },
+]
 
 [package.metadata]
 requires-dist = [
@@ -2353,7 +2356,7 @@ requires-dist = [
     { name = "build", marker = "extra == 'dev'", specifier = ">=1.6" },
     { name = "connexion", specifier = ">=2.15.1,<3.0.0" },
     { name = "coverage", marker = "extra == 'dev'", specifier = ">=7.16" },
-    { name = "foca", specifier = ">=0.19.0,<0.20" },
+    { name = "foca", specifier = ">=0.21.0,<0.22" },
     { name = "griffelib", marker = "extra == 'docs'", specifier = ">=2.4,<3" },
     { name = "gunicorn", specifier = ">=26.2.0,<27" },
     { name = "mkdocs", marker = "extra == 'docs'", specifier = ">=1.6.1,<2" },
@@ -2382,6 +2385,7 @@ build-system = [
     { name = "setuptools", specifier = ">=77" },
     { name = "setuptools-scm", specifier = ">=8" },
 ]
+config-job = [{ name = "yq", specifier = ">=3.4.3,<4" }]
 
 [[package]]
 name = "types-pyyaml"

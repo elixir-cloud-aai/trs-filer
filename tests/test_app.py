@@ -1,10 +1,11 @@
-"""Tests of the app created from `config.yaml`, with FOCA 0.19."""
+"""Tests of the app created from `config.yaml`, with FOCA 0.21."""
 
 from collections.abc import Callable
 from copy import deepcopy
 from importlib import import_module
 from importlib.metadata import version
 import inspect
+import json
 import logging
 from pathlib import Path
 import re
@@ -14,7 +15,6 @@ from connexion import App
 from flask.testing import FlaskClient
 from foca import get_config
 from foca.api.service_info import getServiceInfo
-import pydantic
 from pymongo import MongoClient
 import pytest
 import yaml
@@ -173,6 +173,85 @@ def test_problem_details(client: FlaskClient) -> None:
     }
 
 
+@pytest.mark.parametrize(
+    ("method", "path", "body"),
+    [
+        ("get", "/service-info", None),
+        ("get", "/toolClasses", None),
+        ("post", "/tools", MOCK_TOOL),
+        ("post", "/toolClasses", {"name": "Workflow", "description": "A workflow."}),
+        # operations with parameters rejected them before FOCA 0.21, too
+        ("get", "/tools", None),
+        ("get", "/tools/UNKNOWN", None),
+    ],
+)
+def test_undeclared_query_parameters(
+    client: FlaskClient,
+    mongo_client: MongoClient[dict[str, Any]],
+    method: str,
+    path: str,
+    body: dict[str, Any] | None,
+) -> None:
+    """Query parameters that an operation doesn't declare are rejected (`400`).
+
+    FOCA 0.21 checks them also on operations without parameters (request
+    bodies don't count), which Connexion doesn't (`strict_validation`), as
+    `docs/api.md` (Errors) says; nothing is stored.
+
+    Args:
+        client: Test client.
+        mongo_client: MongoDB client.
+        method: HTTP method of the operation.
+        path: Path of the operation, relative to the base path.
+        body: JSON body of the request, if any.
+    """
+    response = client.open(f"{BASE_PATH}{path}?x=1", method=method, json=deepcopy(body))
+    assert response.status_code == 400, response.get_json()
+    assert response.mimetype == "application/json"
+    for name in ("tools", "toolclasses"):
+        assert mongo_client[DB][name].count_documents({}) == 0
+
+
+@pytest.mark.parametrize(
+    ("path", "body"),
+    [
+        ("/tools", {**MOCK_TOOL, "name": "Work\ud800flow"}),
+        ("/toolClasses", {"name": "Work\ud800flow", "description": "A workflow."}),
+    ],
+    ids=["tools", "toolClasses"],
+)
+def test_unpaired_surrogates(
+    client: FlaskClient,
+    mongo_client: MongoClient[dict[str, Any]],
+    path: str,
+    body: dict[str, Any],
+) -> None:
+    """JSON bodies with unpaired surrogates are rejected (`400`).
+
+    Such strings can't be stored; FOCA rejects them before the app sees them,
+    with a `detail` that names neither the field nor the value.
+
+    Args:
+        client: Test client.
+        mongo_client: MongoDB client.
+        path: Path of the operation, relative to the base path.
+        body: JSON body, with an unpaired surrogate in `name`.
+    """
+    response = client.post(
+        f"{BASE_PATH}{path}",
+        # escaped as `\ud800`, which JSON allows
+        data=json.dumps(body),
+        content_type="application/json",
+    )
+    assert response.status_code == 400, response.get_json()
+    detail = response.get_json()["detail"]
+    assert "unpaired surrogates" in detail
+    for withheld in ("'name'", "Work", "flow", "ud800"):
+        assert withheld not in detail
+    for name in ("tools", "toolclasses"):
+        assert mongo_client[DB][name].count_documents({}) == 0
+
+
 def test_request_body_size_limit(client: FlaskClient) -> None:
     """Request bodies larger than 1 MiB are rejected.
 
@@ -207,19 +286,20 @@ def test_no_request_body_size_limit(
     [
         (
             "custom:\n  service_info:\n    id: org.example.trs\n",
-            r"service_info\s+Extra inputs are not permitted",
+            r"service_info: Extra inputs are not permitted",
         ),
         (
             "custom:\n  tool:\n    id:\n      charset: string.digits\n",
-            r"tool\.id\.charset\s+Value error.*expression",
+            # the app's message quotes the value, so FOCA leaves it out
+            r"tool\.id\.charset: invalid value",
         ),
         (
             "custom:\n  version:\n    id:\n      charset: ''\n",
-            r"version\.id\.charset\s+Value error",
+            r"version\.id\.charset: Value error",
         ),
         (
             "custom:\n  toolclass:\n    id:\n      length: 0\n",
-            r"toolclass\.id\.length\s+Input should be greater than 0",
+            r"toolclass\.id\.length: Input should be greater than 0",
         ),
     ],
     ids=["service-info", "expression", "empty-charset", "zero-length"],
@@ -232,7 +312,8 @@ def test_invalid_custom_config(
 ) -> None:
     """Invalid custom configs, and those of previous versions, are rejected.
 
-    FOCA raises a `ValueError` from the model's validation error.
+    FOCA raises a `ValueError` caused by a plain `ValueError` with the setting
+    and the reason, without the input (since FOCA 0.20).
 
     Args:
         mongo_client: MongoDB client.
@@ -243,8 +324,8 @@ def test_invalid_custom_config(
     overlay.write_text(custom)
     with pytest.raises(ValueError, match="does not match model") as exc:
         create_app()
-    cause = exc.value.__cause__ or exc.value.__context__
-    assert isinstance(cause, pydantic.ValidationError)
+    cause = exc.value.__cause__
+    assert type(cause) is ValueError
     assert re.search(reason, str(cause))
 
 
