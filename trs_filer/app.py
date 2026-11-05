@@ -10,6 +10,8 @@ from pathlib import Path
 from connexion import App
 from foca import Foca, get_config
 
+from trs_filer.errors.exceptions import InvalidRequest, describe_invalid_request
+
 
 def create_app() -> App:
     """Create the app from the config, with the app's checks.
@@ -19,7 +21,9 @@ def create_app() -> App:
     (`service_info`), and limits the size of request bodies
     (`server.max_content_length`). FOCA also warns of placeholders in the
     service info (values in reserved example domains, RFC 2606, as those of
-    `config.yaml`). The app additionally requires a size limit.
+    `config.yaml`). The app additionally requires a size limit, and answers
+    invalid requests (`trs_filer.errors.exceptions.InvalidRequest`) with
+    their reason as `detail`.
 
     Gunicorn calls this in each worker, after forking (MongoDB clients must
     not be shared across forks), so the checks run in each worker; if they
@@ -43,6 +47,9 @@ def create_app() -> App:
         custom_config_model="trs_filer.custom_config.CustomConfig",
     )
     app = foca.create_app()
+    # Invalid requests are answered with their reason (more specific than
+    # FOCA's handler of all exceptions)
+    app.add_error_handler(InvalidRequest, describe_invalid_request)
     with app.app.app_context():
         # `null` would remove FOCA's size limit of request bodies, so that
         # bodies of any size are read

@@ -841,6 +841,7 @@ components:
           type: string
           description: A unique identifier of the version of this tool for this
             particular tool registry. If not provided, will be auto-generated
-            by the implementation. Note that a `BadRequest` will be returned if
-            multiple versions with the same `id` properties are provided.
+            by the implementation. Note that a `BadRequest` will be returned,
+            with the reason as `detail`, if multiple versions with the same
+            `id` properties are provided.
           example: v1

@@ -30,6 +30,13 @@ LABEL org.opencontainers.image.vendor="ELIXIR On-Cloud"
 USER root
 RUN pip install --no-cache-dir pip==26.3
 
+## TEMPORARY: apt 3.0.3 of the base image has CVE-2026-109518 (HIGH, fixed in
+## 3.0.4), which fails the image scans. Removed once the base image (`FROM`
+## above) ships the fix
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends --only-upgrade apt libapt-pkg7.0 \
+  && rm -rf /var/lib/apt/lists/*
+
 ## TEMPORARY: the Helm chart's config Job runs `update-config-map.sh` in this
 ## image, which needs `curl`, `jq` and `yq`; FOCA's images ship none of them,
 ## and `yq` is no dependency of the app. Removed with the config Job (#135)

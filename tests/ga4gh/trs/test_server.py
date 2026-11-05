@@ -60,6 +60,24 @@ BAD_REQUEST = {
     "detail": "The request is malformed.",
 }
 FileChange = Callable[[dict[str, Any]], None]
+OFFSET_INVALID = "The offset must be a non-negative integer."
+LIMIT_INVALID = "The limit must be at least 1."
+TOOL_CLASS_UNKNOWN = (
+    "The tool class doesn't exist; register it first (tool classes are validated)."
+)
+TOOL_CLASS_IN_USE = "The tool class is used by tools and can't be deleted."
+
+
+def _bad_request(detail: str) -> dict[str, Any]:
+    """Get the problem details of a bad request refused by the app.
+
+    Args:
+        detail: Reason of the refusal.
+
+    Returns:
+        Problem details with the reason as `detail`.
+    """
+    return {**BAD_REQUEST, "detail": detail}
 
 
 def _without_files(tool: dict[str, Any]) -> dict[str, Any]:
@@ -301,20 +319,33 @@ def test_toolsGet_pagination_max_limit(
     )
 
 
-@pytest.mark.parametrize("query", ["limit=-1", "limit=0", "offset=-1", "offset=a"])
+@pytest.mark.parametrize(
+    ("query", "detail"),
+    [
+        ("limit=-1", LIMIT_INVALID),
+        ("limit=0", LIMIT_INVALID),
+        ("offset=-1", OFFSET_INVALID),
+        ("offset=a", OFFSET_INVALID),
+        ("offset=https://user:secret@example.org", OFFSET_INVALID),
+        ("offset=-1&limit=0", OFFSET_INVALID),
+    ],
+)
 def test_toolsGet_pagination_invalid(
-    client: FlaskClient, tool: dict[str, Any], query: str
+    client: FlaskClient, tool: dict[str, Any], query: str, detail: str
 ) -> None:
     """Negative or non-integer offsets, and limits below 1, are refused.
+
+    The reason is sent as `detail`, without the submitted value.
 
     Args:
         client: Test client.
         tool: Registered tool.
         query: Query string with an invalid value.
+        detail: Expected reason.
     """
     response = client.get(f"{BASE_PATH}/tools?{query}")
     assert response.status_code == 400
-    assert response.get_json() == BAD_REQUEST
+    assert response.get_json() == _bad_request(detail)
 
 
 def test_toolsGet_filters(client: FlaskClient, tool: dict[str, Any]) -> None:
@@ -528,7 +559,7 @@ def test_toolsGet_filters_empty_descriptor_type(
 
 @pytest.mark.parametrize("query", ["tags=a", "tags=a,b", "tags=a&tags=b", "tags="])
 def test_toolsGet_tags(client: FlaskClient, tool: dict[str, Any], query: str) -> None:
-    """The filter `tags` is not supported and refused.
+    """The filter `tags` is not supported and refused, with the reason.
 
     Args:
         client: Test client.
@@ -537,7 +568,9 @@ def test_toolsGet_tags(client: FlaskClient, tool: dict[str, Any], query: str) ->
     """
     response = client.get(f"{BASE_PATH}/tools?{query}")
     assert response.status_code == 400
-    assert response.get_json() == BAD_REQUEST
+    assert response.get_json() == _bad_request(
+        "The filter 'tags' is not supported: tools have no tags."
+    )
 
 
 # GET /tools/{id}
@@ -759,7 +792,8 @@ def test_type_BadRequest_unsupported(
 ) -> None:
     """Descriptor types of the spec that the app doesn't support are refused.
 
-    `SMK` is refused by the controllers, with the generic `detail`.
+    `SMK` is refused by the controllers, with the supported types as
+    `detail`.
 
     Args:
         client: Test client.
@@ -768,7 +802,10 @@ def test_type_BadRequest_unsupported(
     """
     response = client.get(f"{VERSION_PATH}/SMK/{path}")
     assert response.status_code == 400
-    assert response.get_json() == BAD_REQUEST
+    assert response.get_json() == _bad_request(
+        "The descriptor type is not supported; supported are: PLAIN_CWL, "
+        "PLAIN_WDL, PLAIN_NFL, PLAIN_GALAXY, CWL, WDL, NFL, GALAXY."
+    )
 
 
 # GET /tools/{id}/versions/{version_id}/{type}/descriptor/{relative_path}
@@ -1387,7 +1424,9 @@ def test_tool_class_validation(
     overlay.write_text("custom:\n  toolclass:\n    validation: true\n")
     client = create_app().app.test_client()
     path = f"{BASE_PATH}/tools/{TOOL_ID}"
-    assert client.put(path, json=deepcopy(MOCK_TOOL_VERSION_ID)).status_code == 400
+    response = client.put(path, json=deepcopy(MOCK_TOOL_VERSION_ID))
+    assert response.status_code == 400
+    assert response.get_json() == _bad_request(TOOL_CLASS_UNKNOWN)
     response = client.put(
         f"{BASE_PATH}/toolClasses/{MOCK_TOOL_CLASS['id']}",
         json={"name": "validated", "description": "Validated."},
@@ -1407,7 +1446,9 @@ def test_tool_class_validation(
     }
     data = deepcopy(MOCK_TOOL_VERSION_ID)
     data["toolclass"]["id"] = "other"
-    assert client.put(path, json=data).status_code == 400
+    response = client.put(path, json=data)
+    assert response.status_code == 400
+    assert response.get_json() == _bad_request(TOOL_CLASS_UNKNOWN)
 
 
 # DELETE /tools/{id}
@@ -1469,6 +1510,198 @@ def test_postToolVersion_NotFound(client: FlaskClient) -> None:
         f"{BASE_PATH}/tools/{UNKNOWN}/versions", json=deepcopy(MOCK_VERSION_NO_ID)
     )
     assert response.status_code == 404
+
+
+def _duplicate_path(version: dict[str, Any]) -> None:
+    """Give the second file of a version the path of the first one.
+
+    Args:
+        version: Version to change.
+    """
+    version["files"][1]["tool_file"]["path"] = version["files"][0]["tool_file"]["path"]
+
+
+def _two_primary_descriptors(version: dict[str, Any]) -> None:
+    """Make the test file of a version a second primary descriptor.
+
+    Args:
+        version: Version to change.
+    """
+    version["files"][0]["tool_file"]["file_type"] = "PRIMARY_DESCRIPTOR"
+
+
+def _no_primary_descriptor(version: dict[str, Any]) -> None:
+    """Remove the primary descriptor of a version, keeping the secondary one.
+
+    Args:
+        version: Version to change.
+    """
+    version["files"] = [
+        file
+        for file in version["files"]
+        if file["tool_file"]["file_type"] != "PRIMARY_DESCRIPTOR"
+    ]
+
+
+def _no_content(version: dict[str, Any]) -> None:
+    """Remove the content and the URL of the first file of a version.
+
+    Args:
+        version: Version to change.
+    """
+    del version["files"][0]["file_wrapper"]["content"]
+    del version["files"][0]["file_wrapper"]["url"]
+
+
+def _no_checksum(version: dict[str, Any]) -> None:
+    """Remove the checksums of the first file of a production version.
+
+    Args:
+        version: Version to change.
+    """
+    del version["files"][0]["file_wrapper"]["checksum"]
+
+
+def _descriptor_image_type(version: dict[str, Any]) -> None:
+    """Give the test file of a version an image type.
+
+    Args:
+        version: Version to change.
+    """
+    version["files"][0]["type"] = "Docker"
+
+
+def _containerfile_descriptor_type(version: dict[str, Any]) -> None:
+    """Give the containerfile of a version a descriptor type.
+
+    Args:
+        version: Version to change.
+    """
+    for file in version["files"]:
+        if file["tool_file"]["file_type"] == "CONTAINERFILE":
+            file["type"] = "CWL"
+
+
+# URL with credentials, which responses must not echo
+CREDENTIAL_URL = "https://user:hidden@example.org/main.cwl"
+INVALID_VERSIONS = pytest.mark.parametrize(
+    ("change", "detail"),
+    [
+        (
+            _duplicate_path,
+            "The paths of the files of a version must be unique per type.",
+        ),
+        (
+            _two_primary_descriptors,
+            "Each descriptor type of a version must have at most one "
+            "PRIMARY_DESCRIPTOR file, and one if it has SECONDARY_DESCRIPTOR "
+            "files.",
+        ),
+        (
+            _no_primary_descriptor,
+            "Each descriptor type of a version must have at most one "
+            "PRIMARY_DESCRIPTOR file, and one if it has SECONDARY_DESCRIPTOR "
+            "files.",
+        ),
+        (
+            _no_content,
+            "Each file must have its content (file_wrapper.content) or a URL "
+            "to retrieve it from (file_wrapper.url).",
+        ),
+        (
+            _no_checksum,
+            "The files of production versions (is_production) must have "
+            "checksums (file_wrapper.checksum).",
+        ),
+        (
+            _descriptor_image_type,
+            "The type of descriptor, test and other files must be a "
+            "supported descriptor type: CWL, WDL, NFL, GALAXY.",
+        ),
+        (
+            _containerfile_descriptor_type,
+            "The type of containerfiles must be a supported image type: "
+            "Docker, Singularity, Conda.",
+        ),
+    ],
+)
+
+
+@INVALID_VERSIONS
+@pytest.mark.parametrize("method", ["POST", "PUT"])
+def test_tool_invalid_reason(
+    client: FlaskClient,
+    method: str,
+    change: Callable[[dict[str, Any]], None],
+    detail: str,
+) -> None:
+    """Tools with invalid versions are refused, with the reason as `detail`.
+
+    Submitted values are not sent back, e.g., URLs, which may hold
+    credentials.
+
+    Args:
+        client: Test client.
+        method: Method of the request.
+        change: Change that makes the version invalid.
+        detail: Expected reason.
+    """
+    data = deepcopy(MOCK_TOOL_VERSION_ID)
+    data["versions"][0]["files"][0]["file_wrapper"]["url"] = CREDENTIAL_URL
+    change(data["versions"][0])
+    path = f"{BASE_PATH}/tools" + ("" if method == "POST" else f"/{TOOL_ID}")
+    response = client.open(path, method=method, json=data)
+    assert response.status_code == 400
+    assert response.get_json() == _bad_request(detail)
+    assert "hidden" not in response.get_data(as_text=True)
+
+
+@INVALID_VERSIONS
+@pytest.mark.parametrize("method", ["POST", "PUT"])
+def test_toolVersion_invalid_reason(
+    client: FlaskClient,
+    tool: dict[str, Any],
+    method: str,
+    change: Callable[[dict[str, Any]], None],
+    detail: str,
+) -> None:
+    """Invalid versions are refused, with the reason as `detail`.
+
+    Args:
+        client: Test client.
+        tool: Registered tool.
+        method: Method of the request.
+        change: Change that makes the version invalid.
+        detail: Expected reason.
+    """
+    data = deepcopy(MOCK_VERSION_NO_ID)
+    data["files"][0]["file_wrapper"]["url"] = CREDENTIAL_URL
+    change(data)
+    path = f"{BASE_PATH}/tools/{TOOL_ID}/versions" + (
+        "" if method == "POST" else f"/{VERSION_ID}"
+    )
+    response = client.open(path, method=method, json=data)
+    assert response.status_code == 400
+    assert response.get_json() == _bad_request(detail)
+    assert "hidden" not in response.get_data(as_text=True)
+
+
+@pytest.mark.parametrize("method", ["POST", "PUT"])
+def test_tool_duplicate_version_ids(client: FlaskClient, method: str) -> None:
+    """Tools with duplicate version identifiers are refused, with the reason.
+
+    Args:
+        client: Test client.
+        method: Method of the request.
+    """
+    data = deepcopy(MOCK_TOOL_VERSION_ID)
+    data["versions"].append(deepcopy(data["versions"][0]))
+    path = f"{BASE_PATH}/tools" + ("" if method == "POST" else f"/{TOOL_ID}")
+    response = client.open(path, method=method, json=data)
+    assert response.status_code == 400
+    assert response.get_json() == _bad_request(
+        "The identifiers of the versions of a tool must be unique."
+    )
 
 
 @pytest.mark.parametrize("method", ["POST", "PUT"])
@@ -1768,7 +2001,9 @@ def test_deleteToolVersion(
     """
     response = client.delete(VERSION_PATH)
     assert response.status_code == 400
-    assert response.get_json() == BAD_REQUEST
+    assert response.get_json() == _bad_request(
+        "The last version of a tool can't be deleted; delete the tool instead."
+    )
     assert len(_stored(tools, TOOL_ID)["versions"]) == 1
     response = client.put(
         f"{BASE_PATH}/tools/{TOOL_ID}/versions/other",
@@ -1910,6 +2145,7 @@ def test_deleteToolClass_BadRequest(
     """
     response = client.delete(f"{BASE_PATH}/toolClasses/{MOCK_TOOL_CLASS['id']}")
     assert response.status_code == 400
+    assert response.get_json() == _bad_request(TOOL_CLASS_IN_USE)
     assert toolclasses.count_documents({}) == 1
 
 
