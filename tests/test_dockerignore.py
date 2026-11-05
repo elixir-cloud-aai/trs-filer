@@ -95,6 +95,7 @@ def test_other_files_are_excluded(path: str) -> None:
         "trs_filer/config.yaml",
         "trs_filer/api/spec.yaml",
         "pyproject.toml",
+        "uv.lock",
         "README.md",
         "LICENSE",
         "scripts/image_requirements.py",

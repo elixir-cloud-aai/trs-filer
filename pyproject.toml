@@ -107,7 +107,7 @@ dependencies = [
     "connexion>=2.15.1,<3.0.0",
     # FOCA minors are bumped by hand, together with the base image in the
     # `Dockerfile` (`.github/dependabot.yml`).
-    "foca>=0.19.0,<0.20",
+    "foca>=0.21.0,<0.22",
     "gunicorn>=26.2.0,<27",
     # Remote files are retrieved with connection classes of urllib3 2.x
     # (`trs_filer/remote_files.py`)
@@ -133,8 +133,8 @@ dev = [
     # Locks the dependencies (`uv lock`, checked in CI); also the version of
     # uv that CI installs (`astral-sh/setup-uv`)
     "uv>=0.13",
-    # The `yq` of the image (`Dockerfile`, same major version), which
-    # `update-config-map.sh` uses; its tests run it
+    # The `yq` of the image (the dependency group `config-job`, same range),
+    # which `update-config-map.sh` uses; its tests run it
     # (`tests/test_update_config_map.py`)
     "yq>=3.4.3,<4",
 ]
@@ -159,6 +159,11 @@ docs = [
 # `push` job, which holds the Docker Hub credentials, installs them
 # hash-checked; Dependabot updates them with the other locked packages
 build-system = ["setuptools>=77", "setuptools-scm>=8"]
+# TEMPORARY: `yq` for the Helm chart's config Job, which runs
+# `update-config-map.sh` in the image; no dependency of the app, but locked
+# with its hashes and installed in the image with the runtime dependencies
+# (`Dockerfile`). Removed with the config Job (#135)
+config-job = ["yq>=3.4.3,<4"]
 
 [project.readme]
 file = "README.md"
