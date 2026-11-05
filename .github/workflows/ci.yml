@@ -1,5 +1,6 @@
 # Everything that must pass on pull requests and pushes to `dev`: the pull
-# request title, lint, build, test, build the docs, run the app with Docker Compose, check the
+# request title, lint, build, test, lint and test the Helm chart, build the
+# docs, run the app with Docker Compose, check the
 # readiness of a release in preparation, scan the Docker image for known
 # vulnerabilities, and, on pushes, push the Docker image by digest (with
 # SBOM and provenance attestations), scan exactly that digest, then attest,
@@ -209,6 +210,54 @@ jobs:
       - name: Run tests against MongoDB
         if: ${{ matrix.uri != '' }}
         run: pytest -W ignore::DeprecationWarning
+
+  # The Helm chart (`deployment/`), which the release workflow packages:
+  # lints it as `release.yml` does, renders it (`tests/test_chart.py`) and
+  # runs the script of its config Job against a stub of the Kubernetes API
+  # server (`tests/test_update_config_map.py`; TEMPORARY, with the Job, until
+  # the chart uses the FOCA library chart: #135). `test` runs these tests
+  # too, with the runner's Helm; this job with the Helm of the release
+  chart:
+    name: Chart
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.13"
+      # As in `lint`
+      - name: Set up uv
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version-file: uv.lock
+      # The versions of `uv.lock`, as in `lint`; with the Python `yq` of the
+      # image, which the script uses
+      - name: Install dependencies
+        run: |
+          uv sync --locked --extra dev --python "$(which python)"
+          echo "${PWD}/.venv/bin" >> "$GITHUB_PATH"
+      # Same Helm version as in `release.yml` (bump both by hand)
+      - name: Set up Helm
+        uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+        with:
+          version: v3.22.1
+      # As `prepare` of `release.yml` lints it, and with a host name
+      - name: Lint chart
+        run: |
+          helm lint deployment --strict
+          helm lint deployment --strict --set host_name=trs.example.org
+      # The tests fail instead of skipping if Helm, jq or yq is missing (`CI`)
+      - name: Test chart
+        run: |
+          helm version
+          jq --version
+          yq --version
+          pytest -W ignore::DeprecationWarning tests/test_chart.py tests/test_update_config_map.py
 
   # The app as deployed with Docker Compose (image, Gunicorn, MongoDB): starts
   # it and checks the API (`test` covers the API in detail), the version and
@@ -556,7 +605,7 @@ jobs:
     timeout-minutes: 30
     # The same expression as `PUBLISH` (`tests/test_workflows.py`)
     if: github.event_name == 'push' && (github.repository_owner == 'elixir-cloud-aai' || vars.DOCKERHUB_ORG != '')
-    needs: [lint, test, docs, readiness, smoke, push, scan]
+    needs: [lint, test, chart, docs, readiness, smoke, push, scan]
     # Docker Hub secrets; the environment only allows branch `dev`
     environment: dev-images
     permissions:
@@ -644,7 +693,7 @@ jobs:
     name: CI passed
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    needs: [title, lint, test, docs, readiness, smoke, push, scan, publish]
+    needs: [title, lint, test, chart, docs, readiness, smoke, push, scan, publish]
     if: always()
     permissions: {}
     steps:

@@ -133,6 +133,10 @@ dev = [
     # Locks the dependencies (`uv lock`, checked in CI); also the version of
     # uv that CI installs (`astral-sh/setup-uv`)
     "uv>=0.13",
+    # The `yq` of the image (`Dockerfile`, same major version), which
+    # `update-config-map.sh` uses; its tests run it
+    # (`tests/test_update_config_map.py`)
+    "yq>=3.4.3,<4",
 ]
 # Documentation (`mkdocs.yml`), built by Read the Docs (`.readthedocs.yaml`)
 # and in CI. The packages that add warnings, which fail the strict build, are
