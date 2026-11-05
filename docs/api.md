@@ -137,7 +137,8 @@ Request` with the reason of the validation as `detail` (see
 
 Requests that match the specification but that TRS-Filer refuses also get
 `400 Bad Request` with the reason as `detail`, which names the rule but not
-the values sent (they may hold credentials, e.g., in URLs):
+the values sent (they may hold credentials, e.g., in URLs). Only the first
+reason found is given:
 
 | Request | Reason |
 | --- | --- |

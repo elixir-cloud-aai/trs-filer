@@ -30,8 +30,9 @@ logger = logging.getLogger(__name__)
 # Default and maximum number of tools per page of `GET /tools` (the spec's
 # default limit)
 MAX_LIMIT = 1000
-# Reason of `400 Bad Request` for invalid offsets of `GET /tools`
+# Reasons of `400 Bad Request` for invalid offsets and limits of `GET /tools`
 OFFSET_INVALID = "The offset must be a non-negative integer."
+LIMIT_INVALID = "The limit must be at least 1."
 
 
 @log_traffic
@@ -220,7 +221,7 @@ def toolsGet(
         raise InvalidRequest(OFFSET_INVALID)
     if limit < 1:
         logger.error("Invalid limit %s.", limit)
-        raise InvalidRequest("The limit must be at least 1.")
+        raise InvalidRequest(LIMIT_INVALID)
     limit = min(limit, MAX_LIMIT)
 
     # fetch data

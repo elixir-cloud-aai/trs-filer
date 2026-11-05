@@ -1,9 +1,15 @@
 """Tests for the problem details of exceptions."""
 
+from copy import deepcopy
+from typing import NoReturn
+
 from connexion import App
+from flask.testing import FlaskClient
 from foca import get_config
 from foca.errors.exceptions import _problem_handler_json
+import pytest
 
+from tests.mock_data import BASE_PATH, MOCK_TOOL_VERSION_ID
 from trs_filer.errors.exceptions import (
     InvalidRequest,
     RemoteFileError,
@@ -50,15 +56,39 @@ def test_describe_invalid_request(app: App) -> None:
     }
 
 
-def test_invalid_request_handler(app: App) -> None:
-    """The app answers invalid requests, and only those, with their reason.
+def test_remote_file_error_response(
+    client: FlaskClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Failed retrievals keep the fixed detail, unlike invalid requests.
 
-    Other bad requests (e.g., `RemoteFileError`) reach FOCA's handler.
+    Neither the reason nor the URL, which may hold credentials, is sent.
 
     Args:
-        app: FOCA app.
+        client: Test client.
+        monkeypatch: Patch of the retrieval.
     """
-    # Flask registers handlers of HTTP exceptions by their status code
-    handlers = app.app.error_handler_spec[None][400]
-    assert handlers[InvalidRequest] is describe_invalid_request
-    assert RemoteFileError not in handlers
+
+    def _raise(**_: object) -> NoReturn:
+        """Fail the retrieval.
+
+        Args:
+            **_: Arguments of the retrieval.
+
+        Raises:
+            RemoteFileError: Always.
+        """
+        raise RemoteFileError("reason-not-for-clients")
+
+    monkeypatch.setattr(
+        "trs_filer.ga4gh.trs.endpoints.register_objects.fetch_remote_file", _raise
+    )
+    data = deepcopy(MOCK_TOOL_VERSION_ID)
+    wrapper = data["versions"][0]["files"][0]["file_wrapper"]
+    del wrapper["content"]
+    wrapper["url"] = "https://user:hidden@example.org/main.cwl"
+    response = client.post(f"{BASE_PATH}/tools", json=data)
+    assert response.status_code == 400
+    assert "retrieved from its URL" in response.get_json()["detail"]
+    text = response.get_data(as_text=True)
+    assert "reason-not-for-clients" not in text
+    assert "hidden" not in text

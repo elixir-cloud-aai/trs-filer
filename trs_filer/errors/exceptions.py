@@ -33,7 +33,9 @@ class InvalidRequest(BadRequest):
     E.g., a tool whose files break a rule of the app, or a query that the
     app doesn't support. The description says why and is sent to clients as
     `detail` (cf. `describe_invalid_request()`), so it must not contain
-    submitted values, which may hold credentials (e.g., URLs).
+    submitted values, which may hold credentials (e.g., URLs). Unlike FOCA's
+    error handler, `describe_invalid_request()` doesn't log: log the reason
+    (with identifiers, if useful) where it is raised.
     """
 
 

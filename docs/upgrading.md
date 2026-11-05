@@ -91,7 +91,10 @@ Errors are problem details (`title`, `status`, `detail`), sent as
 specification rejects get the reason as `detail` (e.g., `'FOO' is not one
 of ['CWL', ...]`), no longer the generic `The request is malformed.`; set
 `exceptions.validation_details: false` to keep the generic one (see
-[Errors](configuration.md#errors)).
+[Errors](configuration.md#errors)). Requests that TRS-Filer itself refuses
+(e.g., `limit=0`, deleting the last version of a tool, or a tool class that
+tools use) get their reason as `detail`, too (see [Errors](api.md#errors));
+before, the reason was only logged.
 
 ## Database
 

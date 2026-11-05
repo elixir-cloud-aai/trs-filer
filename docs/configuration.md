@@ -235,5 +235,8 @@ reason as `detail`, shortened to `exceptions.max_detail_length` characters
 generic `detail` instead (see FOCA's
 [documentation](https://foca.readthedocs.io/en/latest/configuration/exceptions/)).
 Requests that TRS-Filer itself refuses (e.g., deleting the last version of
-a tool) get their reason as `detail` regardless of this setting; it names
-the rule, not the values sent (see [Errors](api.md#errors)).
+a tool) get their reason as `detail` whatever `exceptions.validation_details`
+is set to; it names the rule, not the values sent (see
+[Errors](api.md#errors)). Like all `detail`s, it is shortened to
+`exceptions.max_detail_length` characters, and not sent if
+`exceptions.public_members` doesn't list `detail`.
