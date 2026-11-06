@@ -232,6 +232,37 @@ def test_release_chart_checked() -> None:
     assert 'gh release upload "${TAG}" dist/*' in steps["Create release"]["run"]
 
 
+def test_release_tag_checked_first() -> None:
+    """The release tag is checked before any script of the tagged commit runs.
+
+    The step that checks the tag (annotated, signature verified by GitHub,
+    commit on `main`) holds a token and runs no code of the tagged commit;
+    the scripts run in later steps, the version's without the token.
+    """
+    prepare = _load(WORKFLOWS / "release.yml")["jobs"]["prepare"]
+    steps = {step["name"]: step for step in prepare["steps"]}
+    names = list(steps)
+    # Only the checkout and Python (without reading files of the commit) come
+    # first
+    assert names[:3] == [
+        "Check out repository",
+        "Set up Python",
+        "Check release tag and commit",
+    ]
+    assert set(steps["Set up Python"]["with"]) == {"python-version"}
+    check = steps["Check release tag and commit"]
+    assert check["id"] == "commit"
+    assert "GH_TOKEN" in check["env"]
+    # Neither scripts nor Python nor other files of the commit
+    for code in ("scripts/", "python", "./"):
+        assert code not in check["run"]
+    assert prepare["outputs"]["sha"] == "${{ steps.commit.outputs.sha }}"
+    derive = steps["Derive release version"]
+    assert derive["id"] == "version"
+    assert "GH_TOKEN" not in derive["env"]
+    assert names.index("Derive release version") > 2
+
+
 @pytest.mark.parametrize(
     ("extra", "rename", "tamper", "empty", "file", "sha256", "passes"),
     [
