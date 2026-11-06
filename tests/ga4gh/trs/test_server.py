@@ -831,6 +831,27 @@ def test_type_plain_NotFound(
     assert response.status_code == 404
 
 
+@pytest.mark.parametrize("plain_type", PLAIN_TYPES)
+def test_type_plain_files_BadRequest(
+    client: FlaskClient, tool: dict[str, Any], plain_type: str
+) -> None:
+    """`PLAIN_` types are refused for the files of a version.
+
+    The `{type}` of `{type}/files` is a `DescriptorType` in the specification,
+    without the `PLAIN_` output types.
+
+    Args:
+        client: Test client.
+        tool: Registered tool.
+        plain_type: `PLAIN_` type in the path.
+    """
+    response = client.get(f"{VERSION_PATH}/{plain_type}/files")
+    assert response.status_code == 400
+    assert response.get_json()["detail"].splitlines()[0] == (
+        f"'{plain_type}' is not one of ['CWL', 'WDL', 'NFL', 'GALAXY', 'SMK']"
+    )
+
+
 # GET /tools/{id}/versions/{version_id}/{type}/descriptor/{relative_path}
 @pytest.mark.parametrize("path", sorted(CWL_PATHS))
 def test_toolsIdVersionsVersionIdTypeDescriptorRelativePathGet(
