@@ -242,8 +242,8 @@ def test_release_tag_checked_first() -> None:
     prepare = _load(WORKFLOWS / "release.yml")["jobs"]["prepare"]
     steps = {step["name"]: step for step in prepare["steps"]}
     names = list(steps)
-    # Only the checkout and Python (without reading files of the commit) come
-    # first
+    # Only the checkout and Python come first; Python with a fixed version
+    # only (no `python-version-file` or cache, which read files of the commit)
     assert names[:3] == [
         "Check out repository",
         "Set up Python",
@@ -253,14 +253,16 @@ def test_release_tag_checked_first() -> None:
     check = steps["Check release tag and commit"]
     assert check["id"] == "commit"
     assert "GH_TOKEN" in check["env"]
+    assert ".verification.verified" in check["run"]
     # Neither scripts nor Python nor other files of the commit
     for code in ("scripts/", "python", "./"):
         assert code not in check["run"]
     assert prepare["outputs"]["sha"] == "${{ steps.commit.outputs.sha }}"
     derive = steps["Derive release version"]
     assert derive["id"] == "version"
+    assert "scripts/release_version.py outputs" in derive["run"]
     assert "GH_TOKEN" not in derive["env"]
-    assert names.index("Derive release version") > 2
+    assert "GH_TOKEN" not in prepare.get("env", {})
 
 
 @pytest.mark.parametrize(
