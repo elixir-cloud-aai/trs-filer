@@ -220,9 +220,7 @@ tags
 ########################
 
 # Add any custom additions below
-!.gitkeep
 .vscode/
-*.modified.yaml
 .idea/*
 
 # Local config overrides
