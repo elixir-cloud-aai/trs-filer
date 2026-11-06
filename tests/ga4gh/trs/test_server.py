@@ -808,6 +808,50 @@ def test_type_BadRequest_unsupported(
     )
 
 
+# `PLAIN_` forms of the supported descriptor types (`DescriptorTypeWithPlain`
+# of the specification): output types of the `{type}` paths, not file types
+PLAIN_TYPES = ["PLAIN_CWL", "PLAIN_WDL", "PLAIN_NFL", "PLAIN_GALAXY"]
+
+
+@pytest.mark.parametrize("path", ["descriptor", "descriptor/path_other_cwl", "tests"])
+def test_type_plain_NotFound(
+    client: FlaskClient, tool: dict[str, Any], path: str
+) -> None:
+    """Plain descriptors and tests are not served yet.
+
+    The specification allows `PLAIN_` types in these paths, so they are not
+    refused, but no files are found for them.
+
+    Args:
+        client: Test client.
+        tool: Registered tool.
+        path: Path below the type.
+    """
+    response = client.get(f"{VERSION_PATH}/PLAIN_CWL/{path}")
+    assert response.status_code == 404
+
+
+@pytest.mark.parametrize("plain_type", PLAIN_TYPES)
+def test_type_plain_files_BadRequest(
+    client: FlaskClient, tool: dict[str, Any], plain_type: str
+) -> None:
+    """`PLAIN_` types are refused for the files of a version.
+
+    The `{type}` of `{type}/files` is a `DescriptorType` in the specification,
+    without the `PLAIN_` output types.
+
+    Args:
+        client: Test client.
+        tool: Registered tool.
+        plain_type: `PLAIN_` type in the path.
+    """
+    response = client.get(f"{VERSION_PATH}/{plain_type}/files")
+    assert response.status_code == 400
+    assert response.get_json()["detail"].splitlines()[0] == (
+        f"'{plain_type}' is not one of ['CWL', 'WDL', 'NFL', 'GALAXY', 'SMK']"
+    )
+
+
 # GET /tools/{id}/versions/{version_id}/{type}/descriptor/{relative_path}
 @pytest.mark.parametrize("path", sorted(CWL_PATHS))
 def test_toolsIdVersionsVersionIdTypeDescriptorRelativePathGet(
@@ -1720,6 +1764,64 @@ def test_toolVersion_invalid(
     )
     response = client.open(path, method=method, json={"files": "none"})
     assert response.status_code == 400
+
+
+@pytest.mark.parametrize("plain_type", PLAIN_TYPES)
+@pytest.mark.parametrize("method", ["POST", "PUT"])
+def test_toolVersion_plain_file_type(
+    client: FlaskClient, tool: dict[str, Any], method: str, plain_type: str
+) -> None:
+    """Files with `PLAIN_` types are refused by the specification (#110).
+
+    `PLAIN_` types are output types of the `{type}` paths
+    (`DescriptorTypeWithPlain`); the types of files are descriptor types
+    (`DescriptorType`) or image types (`ImageType`).
+
+    Args:
+        client: Test client.
+        tool: Registered tool.
+        method: Method of the request.
+        plain_type: `PLAIN_` type of the file.
+    """
+    data = deepcopy(MOCK_VERSION_NO_ID)
+    data["files"][0]["type"] = plain_type
+    path = f"{BASE_PATH}/tools/{TOOL_ID}/versions" + (
+        "" if method == "POST" else f"/{VERSION_ID}"
+    )
+    response = client.open(path, method=method, json=data)
+    assert response.status_code == 400
+    assert response.get_json()["detail"].splitlines()[0] == (
+        f"'{plain_type}' is not valid under any of the given schemas - 'files.0.type'"
+    )
+
+
+@pytest.mark.parametrize("plain_type", PLAIN_TYPES)
+@pytest.mark.parametrize("method", ["POST", "PUT"])
+def test_toolVersion_plain_descriptor_type(
+    client: FlaskClient, tool: dict[str, Any], method: str, plain_type: str
+) -> None:
+    """Versions with `PLAIN_` descriptor types are refused by the specification.
+
+    The descriptor types of a version (`descriptor_type`) are `DescriptorType`
+    values, without the `PLAIN_` output types (#110).
+
+    Args:
+        client: Test client.
+        tool: Registered tool.
+        method: Method of the request.
+        plain_type: `PLAIN_` type given as descriptor type.
+    """
+    data = deepcopy(MOCK_VERSION_NO_ID)
+    data["descriptor_type"] = [plain_type]
+    path = f"{BASE_PATH}/tools/{TOOL_ID}/versions" + (
+        "" if method == "POST" else f"/{VERSION_ID}"
+    )
+    response = client.open(path, method=method, json=data)
+    assert response.status_code == 400
+    assert response.get_json()["detail"].splitlines()[0] == (
+        f"'{plain_type}' is not one of ['CWL', 'WDL', 'NFL', 'GALAXY', 'SMK'] - "
+        "'descriptor_type.0'"
+    )
 
 
 # PUT /tools/{id}/versions/{version_id}
