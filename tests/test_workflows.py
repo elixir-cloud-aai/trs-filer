@@ -241,7 +241,9 @@ def test_release_tag_checked_first() -> None:
     """
     prepare = _load(WORKFLOWS / "release.yml")["jobs"]["prepare"]
     steps = {step["name"]: step for step in prepare["steps"]}
-    names = list(steps)
+    # From the list, so that a second step of the same name is seen
+    names = [step["name"] for step in prepare["steps"]]
+    assert len(names) == len(steps)
     # Only the checkout and Python come first; Python with a fixed version
     # only (no `python-version-file` or cache, which read files of the commit)
     assert names[:3] == [
