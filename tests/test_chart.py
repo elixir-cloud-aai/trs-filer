@@ -826,3 +826,8 @@ def test_notes_mongodb_auth_disabled(tmp_path: Path) -> None:
     assert "MongoDB runs without authentication" not in default
     notes = render_notes(tmp_path / "disabled", "--set", "mongodb.auth.enabled=false")
     assert "MongoDB runs without authentication" in notes
+    # A Secret without `enabled` enables authentication (see `mongodbAuth`)
+    secret_only = render_notes(
+        tmp_path / "secret", "--set", "mongodb.auth.enabled=null"
+    )
+    assert "MongoDB runs without authentication" not in secret_only

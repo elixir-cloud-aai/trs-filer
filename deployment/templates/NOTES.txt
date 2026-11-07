@@ -15,7 +15,7 @@ POST, PUT and DELETE only from trusted clients, at the ingress controller
 (`trs_filer.ingress.annotations`), the OpenShift router
 (`trs_filer.route.annotations`) or a proxy in front of them; see "Ingress
 and Route" in the chart's README.
-{{- if not (dig "auth" "enabled" false .Values.mongodb) }}
+{{- if not (include "trs-filer.mongodbAuth" .) }}
 
 WARNING: MongoDB runs without authentication (`mongodb.auth.enabled`):
 every pod that can reach it can read and change the data. See

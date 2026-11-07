@@ -152,10 +152,11 @@ helm template trs-filer deployment -f deployment/ci/test-values.yaml
 ```
 
 CI's job "Chart" (`.github/workflows/ci.yml`) lints the chart as the
-release workflow does (`helm lint deployment --strict -f
-deployment/ci/test-values.yaml`, with the values that users must pass,
-e.g., the name of MongoDB's Secret), and runs the tests
-that render it (`tests/test_chart.py`) and that run the script of its
+release workflow does, with the values that users must pass (e.g., the
+name of MongoDB's Secret):
+`helm lint deployment --strict -f deployment/ci/test-values.yaml`. It
+also runs the tests that render it (`tests/test_chart.py`) and that run
+the script of its
 config Job, `update-config-map.sh`, against a stub of the Kubernetes API
 server (`tests/test_update_config_map.py`; with `jq` and the Python `yq`
 of the image, a dev dependency). They check the rights of the Job's Role,
