@@ -29,12 +29,33 @@ commit.
 | `GET /tools/{id}` | Get a tool. |
 | `GET /tools/{id}/versions` | List the versions of a tool. |
 | `GET /tools/{id}/versions/{version_id}` | Get a version of a tool. |
-| `GET /tools/{id}/versions/{version_id}/{type}/descriptor` | Get the primary descriptor of a version, for descriptor type `type` (e.g., `CWL`, `WDL`, `NFL`, `GALAXY`). |
+| `GET /tools/{id}/versions/{version_id}/{type}/descriptor` | Get the primary descriptor of a version, for descriptor type `type` (see [Descriptor types](#descriptor-types)). |
 | `GET /tools/{id}/versions/{version_id}/{type}/descriptor/{relative_path}` | Get another descriptor file of a version, by its path. |
 | `GET /tools/{id}/versions/{version_id}/{type}/tests` | List the test files of a version. |
 | `GET /tools/{id}/versions/{version_id}/{type}/files` | List the files of a version for descriptor type `type` (descriptors, test files and other files, not container recipe files), or, with `format=zip`, get them as a ZIP archive. |
 | `GET /tools/{id}/versions/{version_id}/containerfile` | List the container recipe files (e.g., Dockerfiles) of a version. |
 | `GET /toolClasses` | List the tool classes. |
+
+## Descriptor types
+
+TRS-Filer supports the descriptor types `CWL`, `WDL`, `NFL` and `GALAXY`;
+`SMK`, also a descriptor type of the specification, gives `400 Bad Request`
+in paths and as the type of files (see [Errors](#errors)).
+
+The specification also defines `PLAIN_` types (`PLAIN_CWL`, `PLAIN_WDL`,
+`PLAIN_NFL`, `PLAIN_GALAXY`, `PLAIN_SMK`). They are not descriptor types of
+files or versions, but output types: values of `{type}` in the paths of the
+descriptor and test endpoints (`{type}/descriptor`,
+`{type}/descriptor/{relative_path}`, `{type}/tests`), which ask for the bare
+files rather than the files wrapped with metadata. So:
+
+- Registering tools or versions with a `PLAIN_` type, as the type of a file
+  (`type`) or a descriptor type of a version (`descriptor_type`), gives
+  `400 Bad Request`; use the descriptor type without the prefix (e.g., `CWL`
+  for `PLAIN_CWL`).
+- TRS-Filer doesn't serve plain files yet: requests with the `PLAIN_` form
+  of a supported type find no files (`404 Not Found`), and `{type}/files`
+  doesn't take `PLAIN_` types (`400 Bad Request`), as in the specification.
 
 ## Listing tools
 
@@ -93,8 +114,10 @@ and a checker tool (`has_checker`, `checker_url`). Each version lists its
 descriptor types (`descriptor_type`), its container images (`images`) and
 its files (`files`). Each file has a path and a file type (`tool_file`:
 `PRIMARY_DESCRIPTOR`, `SECONDARY_DESCRIPTOR`, `TEST_FILE`, `CONTAINERFILE` or
-`OTHER`), its descriptor type or image type (`type`, e.g., `CWL` or
-`Docker`), and its content (`file_wrapper.content`) or a URL that the
+`OTHER`), its descriptor type or image type (`type`: one of the supported
+[descriptor types](#descriptor-types) for descriptors, test files and other
+files, and `Docker`, `Singularity` or `Conda` for containerfiles), and its
+content (`file_wrapper.content`) or a URL that the
 content is retrieved from (`file_wrapper.url`, see [Remote
 files](configuration.md#remote-files)), and optionally its checksums
 (`file_wrapper.checksum`). The schemas (`ToolRegister`,

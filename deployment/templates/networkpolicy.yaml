@@ -1,0 +1,52 @@
+{{- /* NetworkPolicy of the app, if `trs_filer.networkPolicy.enabled`: only
+the peers in `ingressFrom` (e.g., the pods of the ingress controller or
+router; there are no defaults, as they depend on the cluster) may connect to
+the app. Egress is not restricted. As in FOCA's library chart */}}
+{{- $policy := dig "networkPolicy" dict .Values.trs_filer }}
+{{- if $policy.enabled }}
+{{- if not $policy.ingressFrom }}
+{{- fail "trs_filer.networkPolicy.ingressFrom must list at least one NetworkPolicy peer (no peers would allow all sources), e.g., the pods of the ingress controller or router (see the chart's README, Network policies); set trs_filer.networkPolicy.enabled to false to allow all sources" }}
+{{- end }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ .Values.trs_filer.appName }}
+spec:
+  podSelector:
+    matchLabels:
+      app: {{ .Values.trs_filer.appName }}
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+      {{- toYaml $policy.ingressFrom | nindent 4 }}
+    # The app's port, as in its Deployment and Service
+    ports:
+    - port: 8080
+      protocol: TCP
+{{- end }}
+{{- /* NetworkPolicy of MongoDB, if `mongodb.networkPolicy.enabled`: only the
+app's pods may connect to MongoDB (the config Job doesn't). Off if unset
+(`dig`), e.g., for upgrades with `--reuse-values` from charts without the
+value */}}
+{{- if dig "networkPolicy" "enabled" false .Values.mongodb }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: mongodb-{{ .Values.trs_filer.appName }}
+spec:
+  podSelector:
+    matchLabels:
+      app: mongodb-{{ .Values.trs_filer.appName }}
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          app: {{ .Values.trs_filer.appName }}
+    ports:
+    - port: 27017
+      protocol: TCP
+{{- end }}

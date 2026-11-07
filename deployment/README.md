@@ -14,6 +14,20 @@
 Set `host_name` (see [Values](#values)): it is **required**, the chart has no
 useful default, and the configuration Job fails (exit 1) on the empty one.
 
+MongoDB requires authentication: create a Secret with its credentials in the
+namespace first, and pass its name in `mongodb.auth.existingSecret` (see
+[Authentication](#authentication)); otherwise, rendering the chart fails.
+E.g., with random passwords:
+
+```bash
+kubectl create namespace namespace
+kubectl create secret generic trs-filer-mongodb-credentials -n namespace \
+    --from-literal=root-username=root \
+    --from-literal=root-password="$(openssl rand -hex 24)" \
+    --from-literal=username=trs-filer \
+    --from-literal=password="$(openssl rand -hex 24)"
+```
+
 ### Install a release
 
 Install the chart attached to a release (`trs-filer-{{ chart_version }}.tgz`
@@ -36,11 +50,12 @@ If the verification succeeds, install the chart:
 
 ```bash
 helm install trs-filer trs-filer-{{ chart_version }}.tgz -n namespace \
-    --create-namespace --set host_name=trs.example.org
+    --set host_name=trs.example.org \
+    --set mongodb.auth.existingSecret=trs-filer-mongodb-credentials
 ```
 
 `namespace` is the name of the namespace where TRS-Filer should be
-installed (`--create-namespace` creates it if it doesn't exist), and
+installed (created above, with the Secret), and
 `trs-filer` could be any name: it is referenced later for upgrading or
 uninstalling. Set further values with `--set` or with a file
 (`-f my-values.yaml`; `helm show values trs-filer-{{ chart_version }}.tgz`
@@ -53,8 +68,9 @@ whose default image is `elixircloud/trs-filer:latest`), edit `values.yaml` or
 pass your values as above, and run this from the `deployment` folder:
 
 ```bash
-helm install trs-filer . -n namespace --create-namespace \
-    --set host_name=trs.example.org
+helm install trs-filer . -n namespace \
+    --set host_name=trs.example.org \
+    --set mongodb.auth.existingSecret=trs-filer-mongodb-credentials
 ```
 
 ## Values
@@ -66,8 +82,15 @@ The values of `values.yaml`; the sections below describe them.
 | `host_name` | `""` | **Required.** Host name that the app serves (the app advertises `https://<host_name>`, so serve HTTPS: see `trs_filer.ingress.https` and [Ingress and Route](#ingress-and-route)), used by the Ingress, the Route and the configuration Job. |
 | `apiServer` | `kubernetes.default.svc:443` | Address of the Kubernetes API server, which the configuration Job writes the ConfigMap to. |
 | `trs_filer.image` | `elixircloud/trs-filer:latest` | Image of the app (released charts set the release's image). |
+| `trs_filer.imagePullPolicy` | `Always` | Pull policy of the app's image (`Always`, `IfNotPresent` or `Never`), also for the configuration Job; `IfNotPresent` or `Never` for an image loaded into the nodes. |
 | `trs_filer.appName` | `trs-filer` | Name of the app's Deployment and Service; names the other resources (e.g., `mongodb-<appName>`). Don't change it for an installed release (see [Persistence](#persistence)). |
+| `trs_filer.forwardedAllowIps` | `"*"` | Addresses or networks (comma-separated, or a list) whose `X-Forwarded-*` headers the app trusts; `*` for every address (see [Forwarded headers](#forwarded-headers)). |
 | `trs_filer.resources` | 100m CPU; 256Mi memory request, 384Mi limit | CPU and memory of the app (see [Resources](#resources)). |
+| `trs_filer.podSecurityContext` | non-root, `RuntimeDefault` seccomp | Security context of the pods of the app and the configuration Job (see [Security contexts](#security-contexts)). |
+| `trs_filer.securityContext` | no privilege escalation, no capabilities, read-only root file system | Security context of their containers. |
+| `trs_filer.tmpSizeLimit` | `64Mi` | Size limit of their `emptyDir` at `/tmp`; `null` for none. |
+| `trs_filer.networkPolicy.enabled` | `false` | Create a NetworkPolicy that lets only `ingressFrom` connect to the app (see [Network policies](#network-policies)). |
+| `trs_filer.networkPolicy.ingressFrom` | `[]` | NetworkPolicy peers allowed to connect to the app; required if enabled. |
 | `trs_filer.ingress.enabled` | `true` | Create an Ingress (see [Ingress and Route](#ingress-and-route)). |
 | `trs_filer.ingress.className` | `""` | Ingress class; the cluster's default class if empty. |
 | `trs_filer.ingress.annotations` | `{}` | Annotations of the Ingress; `null` removes one of the chart's. |
@@ -78,30 +101,117 @@ The values of `values.yaml`; the sections below describe them.
 | `mongodb.image` | `docker.io/library/mongo:7.0` | MongoDB image (see [MongoDB](#mongodb)). |
 | `mongodb.imagePullPolicy` | `Always` | Pull policy of the MongoDB image. |
 | `mongodb.dbName` | `""` | Name of the app's database; `trs-filer-db` if empty. |
+| `mongodb.auth.enabled` | `true` | Require credentials (see [Authentication](#authentication)). |
+| `mongodb.auth.existingSecret` | `""` | **Required** with authentication: name of the Secret with the keys `root-username`, `root-password`, `username` and `password`. |
 | `mongodb.volumeSize` | `1Gi` | Size of the PersistentVolumeClaim with the data (see [Persistence](#persistence)). |
 | `mongodb.resources` | 200m CPU; 512Mi memory | CPU and memory of MongoDB (request and limit). |
+| `mongodb.podSecurityContext` | non-root user and group 999, `fsGroup` 999 (applied on a mismatch only), `RuntimeDefault` seccomp | Security context of MongoDB's pod (see [Security contexts](#security-contexts)). |
+| `mongodb.securityContext` | no privilege escalation, no capabilities, read-only root file system | Security context of MongoDB's container. |
+| `mongodb.tmpSizeLimit` | `64Mi` | Size limit of MongoDB's `emptyDir` at `/tmp`; `null` for none. |
+| `mongodb.networkPolicy.enabled` | `true` | Create a NetworkPolicy that lets only the app connect to MongoDB (see [Network policies](#network-policies)). |
 
 ## Security notes
 
 - **No authentication in the API**, see the warning at the top.
-- **MongoDB runs without authentication.** It is reachable by every pod in
-  the cluster through its Service (`mongodb-<appName>`, port 27017; the
-  chart exposes it nowhere else). Restrict access to the namespace with
-  NetworkPolicies and don't run untrusted workloads in it.
-- **The configuration Job has namespace admin rights.** Its ServiceAccount
-  (`<appName>-configurer`) is bound to the ClusterRole `admin` in the
-  namespace (RoleBinding `admin-<appName>-configurer`), so that it can write
-  the ConfigMap `app-config-<appName>`. It runs on every install and
-  upgrade; the chart needs permission to create these resources, and the
-  rights exist as long as the release does. This stays until the chart uses
-  FOCA's library chart ([#135](https://github.com/elixir-cloud-aai/trs-filer/issues/135)).
-- **The app trusts `X-Forwarded-*` headers from every address**
-  (`FORWARDED_ALLOW_IPS="*"`), so that links in responses keep `https` behind
-  the ingress or route that terminates TLS. Every workload that can reach the
-  app's Service or pod can forge these headers, and so make responses
-  contain forged URLs. Don't expose the Service or the pod to clients
-  directly, and restrict access to them to the ingress controller or
-  router, e.g., with NetworkPolicies.
+- **MongoDB requires credentials** by default (see
+  [Authentication](#authentication)); the app connects as a user with
+  access to its database only. Its NetworkPolicy (`mongodb.networkPolicy`,
+  see [Network policies](#network-policies)) also lets only the app's pods
+  connect to it, in clusters that enforce NetworkPolicies; otherwise, every
+  pod in the cluster reaches its Service (`mongodb-<appName>`, port 27017;
+  the chart exposes it nowhere else). With `mongodb.auth.enabled: false`,
+  every pod that reaches it can read and change the data.
+- **The configuration Job has a ServiceAccount with rights in the
+  namespace.** Its ServiceAccount (`<appName>-configurer`) is bound
+  (RoleBinding `<appName>-configurer`) to the Role `<appName>-configurer`,
+  which allows only what the Job does: read and patch the ConfigMap
+  `app-config-<appName>`, and list and delete pods, to restart the app. The
+  pod rights cover every pod in the namespace (pod names are generated, so
+  the Role can't name them), though the Job deletes only the app's pods
+  (label `app: <appName>`). It
+  runs on every install and upgrade; the chart needs permission to create
+  these resources, and the rights exist as long as the release does. If
+  reading or patching the ConfigMap or listing pods fails (e.g., the API
+  server refuses it in a copy of the chart that changes the ConfigMap's
+  name), the Job fails (exit code 7, 8 or 9 of `update-config-map.sh`);
+  a failed pod deletion doesn't fail it. This stays until the chart uses FOCA's library
+  chart ([#135](https://github.com/elixir-cloud-aai/trs-filer/issues/135)).
+- **By default, the app trusts `X-Forwarded-*` headers from every address**
+  (`trs_filer.forwardedAllowIps: "*"`), so that links in responses keep
+  `https` behind the ingress or route that terminates TLS. Every workload
+  that can reach the app's Service or pod can then set these headers, and
+  so change the URLs in responses. Narrow the value to the addresses of
+  the ingress controller or router (see [Forwarded
+  headers](#forwarded-headers)), don't expose the Service or the pod to
+  clients directly, and restrict access to them to the ingress controller
+  or router, e.g., with `trs_filer.networkPolicy` (see [Network
+  policies](#network-policies)).
+
+## Security contexts
+
+All pods run as non-root users, without privilege escalation or
+capabilities, with the `RuntimeDefault` seccomp profile and a read-only root
+file system, as the Pod Security Standard "restricted" requires (e.g., for
+namespaces labelled `pod-security.kubernetes.io/enforce: restricted`):
+
+- The app and the configuration Job (`trs_filer.podSecurityContext`,
+  `trs_filer.securityContext`) run as the image's user (1000); MongoDB
+  (`mongodb.podSecurityContext`, `mongodb.securityContext`) runs as the
+  image's user `mongodb` (999), and its data volume belongs to its group
+  (`fsGroup: 999`), so that MongoDB can write to it. This needs storage
+  that applies `fsGroup` (most dynamically provisioned volumes do; e.g.,
+  `hostPath` and some CSI drivers don't): otherwise, MongoDB can't write to
+  a new volume and doesn't start. For such storage, prepare the volume's
+  ownership (user 999) yourself, or let MongoDB's entrypoint start as root
+  and switch to its user, as before (`mongodb.podSecurityContext: null`,
+  `mongodb.securityContext: null`; not allowed under "restricted").
+- Temporary files go to `emptyDir`s at `/tmp`, limited by
+  `trs_filer.tmpSizeLimit` and `mongodb.tmpSizeLimit` (the pod is evicted
+  if it exceeds the limit); MongoDB also gets one at `/data/configdb`.
+- On OpenShift (if the cluster serves `security.openshift.io/v1`), the
+  chart sets no `runAsUser`, `runAsGroup` or `fsGroup`, as OpenShift
+  assigns them from the namespace's range.
+
+The values are maps: values files are merged into them, and `null` removes
+a key (e.g., `mongodb.podSecurityContext.runAsUser: null`).
+
+## Network policies
+
+The chart creates NetworkPolicies, which clusters with a network plugin
+that supports them enforce (others ignore them):
+
+- **MongoDB** (`mongodb-<appName>`, `mongodb.networkPolicy.enabled`, on by
+  default): only the app's pods (label `app: <appName>`) may connect to
+  MongoDB, on port 27017. Disable it if you manage policies yourself, or
+  if other workloads (e.g., backups) must connect.
+- **The app** (`<appName>`, `trs_filer.networkPolicy.enabled`, off by
+  default): only the peers in `trs_filer.networkPolicy.ingressFrom` may
+  connect to the app, on port 8080. The peers depend on the cluster, so
+  there are no defaults, and rendering fails if the policy is enabled
+  without any (which would allow all sources). E.g., for ingress-nginx in
+  the namespace `ingress-nginx`:
+
+    ```yaml
+    trs_filer:
+      networkPolicy:
+        enabled: true
+        ingressFrom:
+          - namespaceSelector:
+              matchLabels:
+                kubernetes.io/metadata.name: ingress-nginx
+    ```
+
+    On OpenShift, the router's pods are in namespaces labelled
+    `policy-group.network.openshift.io/ingress: ""`. The policy also keeps
+    other workloads from setting the forwarded headers that the app trusts
+    (see [Security notes](#security-notes)).
+
+The policies restrict incoming connections only. Kubernetes combines all
+NetworkPolicies that select a pod: if other policies in the namespace
+(e.g., a namespace-wide "allow" policy) select the app's or MongoDB's
+pods, the sources they allow can connect too. Check them with
+`kubectl get networkpolicy -n <namespace>`, and keep their selectors off
+these pods.
 
 ## Resources
 
@@ -214,6 +324,42 @@ balancer or a node. To keep reads public and restrict only writes,
 restrict them at a proxy in front of the router. Check with a `POST` from
 an untrusted address that writes are refused.
 
+### Forwarded headers
+
+The ingress controller or router terminates TLS and forwards requests to
+the app via HTTP, with `X-Forwarded-*` headers. The app trusts these
+headers from the addresses in `trs_filer.forwardedAllowIps` (Gunicorn's
+`FORWARDED_ALLOW_IPS`), so that the links in its responses (e.g., the
+`next_page`, `last_page` and `self_link` headers of tool listings) keep
+`https`. By default (`*`), it trusts them from every address, which works
+with any ingress controller or router, but lets every workload that can
+reach the app's Service or pod set the scheme of these links (and their
+path, via Gunicorn's `SCRIPT_NAME` header). The host of the links comes from the `Host` header, which
+this value doesn't cover: every client that reaches the pod sets it.
+
+Narrow it to the addresses that the ingress controller or router connects
+from, as addresses or networks in CIDR notation (network addresses, e.g.,
+`192.0.2.0/24`, not `192.0.2.1/24`), comma-separated or as a list, e.g.,
+the nodes' subnet if the controller runs in the host network:
+
+```yaml
+trs_filer:
+  forwardedAllowIps:
+    - 192.0.2.0/24
+```
+
+A network trusts every address in it: the pod network of the cluster
+(e.g., `10.128.0.0/14` on OpenShift) contains every pod, so it protects
+little. Pods get new addresses when they are rescheduled, so list
+networks rather than pod addresses, and restrict who can reach the app's
+pods with NetworkPolicies. An invalid entry stops the app (Gunicorn exits
+on startup); an empty value, entries with spaces inside, or a value that
+isn't a string or a list of strings fail rendering. Check afterwards that a
+listing through the Ingress or Route still gives `https` links (e.g.,
+`curl -sI 'https://trs.example.org/ga4gh/trs/v2/tools?limit=1'` and its
+`self_link` header). With an address that doesn't match, the links get
+`http`.
+
 ## Configuration
 
 The chart can't configure the app yet, apart from the public URL
@@ -295,8 +441,16 @@ If you need to change any parameter of the deployment, the procedure is similar 
    `.tgz` of a release instead of `.`. `helm upgrade` applies the chart's
    defaults for values you don't pass again (`host_name` would be empty, and
    the configuration Job fails), so pass the same values as when installing,
-   e.g., your values file (`-f my-values.yaml`) or `--set host_name=...`,
-   or reuse those of the release with `--reuse-values`:
+   e.g., your values file (`-f my-values.yaml`) or `--set host_name=...`.
+   `--reuse-values` reuses the release's values as they are, including the
+   chart's defaults at the time, so values that a newer chart adds or
+   changes (e.g., the [Security contexts](#security-contexts) and [Network
+   policies](#network-policies)) don't take effect; pass your values file
+   instead, or use `--reset-then-reuse-values` (Helm 3.14 or later), which
+   applies the new chart's defaults with your earlier values on top.
+   Charts that enable MongoDB's authentication (`mongodb.auth`) need its
+   Secret; for releases installed without it, create the Secret and the
+   users first (see [Authentication](#authentication)):
 ```
 helm upgrade trs-filer . -n namespace -f my-values.yaml
 ```
@@ -330,8 +484,16 @@ images before 6.0):
 
 ```bash
 kubectl exec deploy/mongodb-trs-filer -n namespace -- sh -c \
-  '"$(command -v mongosh || echo mongo)" --quiet --eval "printjson({version: db.version(), fcv: db.adminCommand({getParameter: 1, featureCompatibilityVersion: 1}).featureCompatibilityVersion})"'
+  '"$(command -v mongosh || echo mongo)" --quiet \
+  -u "$MONGO_INITDB_ROOT_USERNAME" -p "$MONGO_INITDB_ROOT_PASSWORD" \
+  --authenticationDatabase admin \
+  --eval "printjson({version: db.version(), fcv: db.adminCommand({getParameter: 1, featureCompatibilityVersion: 1}).featureCompatibilityVersion})"'
 ```
+
+(Without authentication, leave out `-u`, `-p` and
+`--authenticationDatabase`; the same holds for the other `mongosh`,
+`mongodump` and `mongorestore` commands of this page and the upgrade
+notes.)
 
 - **Upgrades** go one major version at a time (e.g., 6.0 → 7.0 → 8.0): set
   the image of the next version, wait for the rollout, then set the FCV to
@@ -347,6 +509,91 @@ kubectl exec deploy/mongodb-trs-filer -n namespace -- sh -c \
 The MongoDB Deployment uses the `Recreate` strategy, as the data volume can
 only be used by one pod: changing the image stops MongoDB, and an image that
 cannot read the data leaves it down until the image is changed back.
+
+### Authentication
+
+MongoDB requires credentials (`mongodb.auth.enabled`, by default `true`).
+The commands below use the default names (`trs_filer.appName`
+`trs-filer`, database `trs-filer-db`, Secret
+`trs-filer-mongodb-credentials`) and the namespace `namespace`; replace
+them with yours.
+They come from an existing Secret in the release's namespace, named by
+`mongodb.auth.existingSecret`, with four keys:
+
+- `root-username` and `root-password`: MongoDB's root user (in the
+  database `admin`), for administration (e.g., the commands in
+  [Version](#version)).
+- `username` and `password`: the app user, with the role `readWrite` on
+  the app's database (`mongodb.dbName`, by default `trs-filer-db`) only, in
+  which it is created; the app connects as this user (FOCA's
+  `MONGO_USERNAME` and `MONGO_PASSWORD`).
+
+Create the Secret before installing (see [Quick start](#quick-start));
+without a Secret name, rendering the chart fails. Values without
+`mongodb.auth.enabled` (e.g., upgrades with `--reuse-values` from older
+charts) enable authentication if they name a Secret. To run MongoDB without
+authentication, set `mongodb.auth.enabled: false` explicitly. Credentials
+never appear in values files or ConfigMaps.
+
+MongoDB creates both users when it starts with an empty volume (the root
+user by its image's entrypoint, the app user by the init script
+`create-app-user.js` of the ConfigMap `mongo-init-script-<appName>`), and
+enforces authentication on every start. Changing the Secret doesn't change
+the users: to change a password, change it in MongoDB first (e.g.,
+`db.getSiblingDB("trs-filer-db").changeUserPassword("trs-filer", "<new
+password>")` as the root user), then update the Secret and restart the app
+(`kubectl rollout restart deploy/trs-filer -n namespace`); its requests to
+the database fail until then. After changing the root user's password,
+also restart MongoDB (`kubectl rollout restart deploy/mongodb-trs-filer -n
+namespace`), whose environment the commands in this README use for the
+root user's credentials. Changing `mongodb.dbName` of an installed
+release needs a user in the new database too.
+
+**Existing databases without authentication** (installed by earlier
+charts, or with `mongodb.auth.enabled: false`): MongoDB enforces
+authentication as soon as the chart enables it, but creates no users on
+the existing volume, so the app can't connect. Create the users first,
+while authentication is still off:
+
+1. Create the Secret (see [Quick start](#quick-start)).
+2. Create the users in the running MongoDB, with the credentials of the
+   Secret; the commands read them from the Secret, so that they don't
+   appear in the shell's history. If the database has users already
+   (e.g., it ran with authentication before), check them instead (see
+   below) and create only missing ones, with the commands for a missing
+   app user below:
+
+    ```bash
+    kubectl get secret trs-filer-mongodb-credentials -n namespace -o json \
+      | jq -r '.data | map_values(@base64d)
+          | "db.getSiblingDB(\"admin\").createUser({user: \(."root-username" | tojson), pwd: \(."root-password" | tojson), roles: [\"root\"]});
+             db.getSiblingDB(\"trs-filer-db\").createUser({user: \(.username | tojson), pwd: \(.password | tojson), roles: [{role: \"readWrite\", db: \"trs-filer-db\"}]});"' \
+      | kubectl exec -i deploy/mongodb-trs-filer -n namespace -- mongosh --quiet
+    ```
+
+    Check that the app user exists (the list shows `trs-filer`):
+
+    ```bash
+    kubectl exec deploy/mongodb-trs-filer -n namespace -- mongosh --quiet \
+      --eval 'printjson(db.getSiblingDB("trs-filer-db").getUsers().users.map(u => u.user))'
+    ```
+
+3. Upgrade the release with `mongodb.auth.existingSecret` set (and
+   `mongodb.auth.enabled` not set to `false`).
+
+If the root user exists but the app user is missing (e.g., because the
+first start was interrupted), log in as the root user and create only the
+app user:
+
+```bash
+kubectl exec -it deploy/mongodb-trs-filer -n namespace -- sh -c 'mongosh \
+  -u "$MONGO_INITDB_ROOT_USERNAME" -p "$MONGO_INITDB_ROOT_PASSWORD" \
+  --authenticationDatabase admin'
+```
+
+```javascript
+db.getSiblingDB("trs-filer-db").createUser({user: "trs-filer", pwd: "<password>", roles: [{role: "readWrite", db: "trs-filer-db"}]})
+```
 
 ### Persistence
 

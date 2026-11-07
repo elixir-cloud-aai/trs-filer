@@ -6,15 +6,8 @@ from typing import Any
 # Base path of the API
 BASE_PATH = "/ga4gh/trs/v2"
 MOCK_ID = "mock_id"
-MOCK_ID_2 = "mock_id2"
 MOCK_ID_ONE_CHAR = "A"
 MOCK_CHARSET = "0123456789"
-TEST_LIMIT = 1
-TEST_LIMIT_2 = -1
-DEFAULT_LIMIT = 1000
-DEFAULT_OFFSET = "0"
-TEST_OFFSET = "1"
-TEST_OFFSET_2 = "-1"
 INDEX_CONFIG: dict[str, Any] = {"keys": [("id", 1)]}
 COLLECTION_CONFIG: dict[str, Any] = {
     "indexes": [INDEX_CONFIG],
@@ -68,13 +61,6 @@ CUSTOM_CONFIG_ONE_ID["tool"] = TOOL_VERSION_CONFIG_ONE_ID
 CUSTOM_CONFIG_ONE_ID["version"] = TOOL_VERSION_CONFIG_ONE_ID
 CUSTOM_CONFIG_TOOL_CLASS_VALIDATION = deepcopy(CUSTOM_CONFIG)
 CUSTOM_CONFIG_TOOL_CLASS_VALIDATION["toolclass"]["validation"] = True
-HEADERS_PAGINATION: dict[str, Any] = {
-    "next_page": None,
-    "last_page": None,
-    "self_link": None,
-    "current_offset": None,
-    "current_limit": None,
-}
 MOCK_TEST_FILE: dict[str, Any] = {
     "file_wrapper": {
         "checksum": [
@@ -166,12 +152,6 @@ MOCK_FILES: list[dict[str, Any]] = [
     MOCK_CONTAINER_FILE,
     MOCK_DESCRIPTOR_FILE,
     MOCK_DESCRIPTOR_SEC_FILE,
-]
-MOCK_FILES_LIST: list[dict[str, Any]] = [
-    MOCK_TEST_FILE["tool_file"],
-    MOCK_OTHER_FILE["tool_file"],
-    MOCK_DESCRIPTOR_FILE["tool_file"],
-    MOCK_DESCRIPTOR_SEC_FILE["tool_file"],
 ]
 MOCK_FILES_CONTENT_URL_MISSING = deepcopy(MOCK_FILES)
 del MOCK_FILES_CONTENT_URL_MISSING[0]["file_wrapper"]["content"]

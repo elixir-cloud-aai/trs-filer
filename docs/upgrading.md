@@ -40,6 +40,44 @@ clients and custom configs:
   that run `pip install` must install with uv instead, mounted from a
   pinned stage (see FOCA's migration guide for 0.20). The image installs
   the locked versions of its dependencies (`uv.lock`), with hash checks.
+- Helm chart, security contexts: all pods run as non-root users with a
+  read-only root file system ([Security
+  contexts](deployment.md#security-contexts)). MongoDB runs as user and
+  group 999 from the start (before, its entrypoint started as root and
+  switched to that user); the data that it wrote belongs to that user
+  already, and `fsGroup` keeps the volume writable for it (with storage
+  that applies `fsGroup`).
+- Helm chart, NetworkPolicy: only the app may connect to MongoDB ([Network
+  policies](deployment.md#network-policies)). Other workloads that connect
+  to MongoDB (e.g., backups) need a policy of their own, or set
+  `mongodb.networkPolicy.enabled: false`.
+- Helm chart, **MongoDB authentication (breaking):** MongoDB requires
+  credentials from an existing Secret (`mongodb.auth.existingSecret`), and
+  rendering fails without it. Existing databases have no users, and
+  MongoDB creates none on an existing volume: create the Secret and the
+  users **before** the upgrade, as described in
+  [Authentication](deployment.md#authentication), or set
+  `mongodb.auth.enabled: false` to keep MongoDB without authentication.
+- Helm chart, upgrades with `--reuse-values` keep the earlier settings (no
+  security contexts, no NetworkPolicy, no authentication unless they
+  name the Secret with `mongodb.auth.existingSecret`): pass your values
+  file instead, or use `--reset-then-reuse-values` (see
+  [Upgrades](deployment.md#upgrades)).
+- Helm chart: the configuration Job's ServiceAccount is bound to a Role
+  with only the rights that the Job uses (Role and RoleBinding
+  `<appName>-configurer`), instead of the ClusterRole `admin` (RoleBinding
+  `admin-<appName>-configurer`, which the upgrade removes). The Job finds
+  the app's base config through the installed package, instead of a path
+  that depended on the image's Python version, and works with older images
+  too. With images of this release or later, it fails if the API server
+  refuses reading or patching the ConfigMap or listing pods (before, it
+  reported success): copies of the chart that add their own steps to the
+  Job may need more rights in the Role. The Job restarts the pods with the
+  label `app: <appName>` (the app's), no longer all pods whose names start
+  with `<appName>-`.
+- Helm chart: `trs_filer.imagePullPolicy` sets the pull policy of the app's
+  image (app and configuration Job); the default, `Always`, is the earlier
+  behaviour, also for upgrades with `--reuse-values`.
 
 ## Configuration
 
@@ -161,7 +199,9 @@ version at a time. For the Helm chart, see [Helm chart](#helm-chart).
 - Forwarded headers (`X-Forwarded-*`) are trusted from Gunicorn's default
   (`127.0.0.1`) only, no longer from every client: behind a proxy that
   terminates TLS, set `FORWARDED_ALLOW_IPS` to its addresses (the Helm
-  chart sets it).
+  chart sets it, by default to `*`; narrow it with the value
+  `trs_filer.forwardedAllowIps`, see [Forwarded
+  headers](deployment.md#forwarded-headers)).
 - The image runs as user 1000 (also with a read-only root file system and a
   writable `/tmp`) and reports its version (e.g., in the service info) from
   the build argument `SETUPTOOLS_SCM_PRETEND_VERSION`.
@@ -281,8 +321,11 @@ of the cluster, or in a maintenance window).
       retained), so that the upgrade creates them anew, with an empty volume:
       `kubectl delete deploy/mongodb-trs-filer pvc/mongodb-trs-filer -n <namespace>`.
 
-4. Update the values file (see [Values](#values)) and upgrade the release
-   with the chart of the release, e.g.:
+4. Create the Secret with MongoDB's credentials (see
+   [Authentication](deployment.md#authentication); MongoDB creates the users
+   on the new, empty volume), update the values file (see
+   [Values](#values); with `mongodb.auth.existingSecret`) and upgrade the
+   release with the chart of the release, e.g.:
 
     ```bash
     helm upgrade trs-filer trs-filer-{{ chart_version }}.tgz -n <namespace> -f values.yaml
@@ -318,11 +361,19 @@ of the cluster, or in a maintenance window).
    and count the documents again:
 
     ```bash
-    kubectl exec -i deploy/mongodb-trs-filer -n <namespace> -- \
-      mongorestore --quiet --drop --archive < trs-filer-db.archive \
-    && kubectl exec deploy/mongodb-trs-filer -n <namespace> -- \
-      mongosh --quiet trs-filer-db --eval 'db.getCollectionNames().forEach(c => print(c, db[c].countDocuments ? db[c].countDocuments({}) : db[c].count()))'
+    kubectl exec -i deploy/mongodb-trs-filer -n <namespace> -- sh -c \
+      'mongorestore --quiet --drop --archive \
+        -u "$MONGO_INITDB_ROOT_USERNAME" -p "$MONGO_INITDB_ROOT_PASSWORD" \
+        --authenticationDatabase admin' < trs-filer-db.archive \
+    && kubectl exec deploy/mongodb-trs-filer -n <namespace> -- sh -c \
+      'mongosh --quiet trs-filer-db \
+        -u "$MONGO_INITDB_ROOT_USERNAME" -p "$MONGO_INITDB_ROOT_PASSWORD" \
+        --authenticationDatabase admin \
+        --eval "db.getCollectionNames().forEach(c => print(c, db[c].countDocuments({})))"'
     ```
+
+    (With `mongodb.auth.enabled: false`, leave out `-u`, `-p` and
+    `--authenticationDatabase`.)
 
     If the restore fails on the options of an index, restore with
     `--noIndexRestore`: the app creates its indexes on startup. The restore
@@ -360,6 +411,10 @@ Since the chart of `v0.3.0`, the values changed:
   release's image), no longer `lvarin/trs-filer:0.1.0`.
 - `trs_filer.resources` and `mongodb.resources` set the requests and limits
   of the app and of MongoDB.
+- `trs_filer.forwardedAllowIps` (by default `*`, as before; also kept by
+  upgrades with `--reuse-values`) sets the addresses whose `X-Forwarded-*`
+  headers the app trusts; narrow it (see [Forwarded
+  headers](deployment.md#forwarded-headers)).
 - `mongodb.image` is `docker.io/library/mongo:7.0` (was `mongo:3.6`, and
   `mongo:noble` on `dev`), pulled as `mongodb.imagePullPolicy` says;
   `mongodb.dbName` sets the app's database (`trs-filer-db` if empty).

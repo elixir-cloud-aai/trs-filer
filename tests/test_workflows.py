@@ -232,6 +232,41 @@ def test_release_chart_checked() -> None:
     assert 'gh release upload "${TAG}" dist/*' in steps["Create release"]["run"]
 
 
+def test_release_tag_checked_first() -> None:
+    """The release tag is checked before any script of the tagged commit runs.
+
+    The step that checks the tag (annotated, signature verified by GitHub,
+    commit on `main`) holds a token and runs no code of the tagged commit;
+    the scripts run in later steps, the version's without the token.
+    """
+    prepare = _load(WORKFLOWS / "release.yml")["jobs"]["prepare"]
+    steps = {step["name"]: step for step in prepare["steps"]}
+    # From the list, so that a second step of the same name is seen
+    names = [step["name"] for step in prepare["steps"]]
+    assert len(names) == len(steps)
+    # Only the checkout and Python come first; Python with a fixed version
+    # only (no `python-version-file` or cache, which read files of the commit)
+    assert names[:3] == [
+        "Check out repository",
+        "Set up Python",
+        "Check release tag and commit",
+    ]
+    assert set(steps["Set up Python"]["with"]) == {"python-version"}
+    check = steps["Check release tag and commit"]
+    assert check["id"] == "commit"
+    assert "GH_TOKEN" in check["env"]
+    assert ".verification.verified" in check["run"]
+    # Neither scripts nor Python nor other files of the commit
+    for code in ("scripts/", "python", "./"):
+        assert code not in check["run"]
+    assert prepare["outputs"]["sha"] == "${{ steps.commit.outputs.sha }}"
+    derive = steps["Derive release version"]
+    assert derive["id"] == "version"
+    assert "scripts/release_version.py outputs" in derive["run"]
+    assert "GH_TOKEN" not in derive["env"]
+    assert "GH_TOKEN" not in prepare.get("env", {})
+
+
 @pytest.mark.parametrize(
     ("extra", "rename", "tamper", "empty", "file", "sha256", "passes"),
     [
@@ -798,7 +833,86 @@ def test_chart_job() -> None:
     assert "chart" in ci["passed"]["needs"]
     assert "chart" in ci["publish"]["needs"]
     steps = {step.get("name"): step for step in ci["chart"]["steps"]}
-    assert "helm lint deployment --strict" in _commands(steps["Lint chart"])
+    lint = _commands(steps["Lint chart"])
+    assert any(
+        command.startswith(
+            "helm lint deployment --strict -f deployment/ci/test-values.yaml"
+        )
+        for command in lint
+    )
+    # Also without authentication and a host name (the defaults otherwise
+    # needed for rendering)
+    assert any(
+        command.startswith("helm lint deployment --strict ")
+        and "--set mongodb.auth.enabled=false" in command
+        and "--set host_name=" in command
+        for command in lint
+    )
+    # The release lints with the same values
+    release_commands = [
+        command for step in release["prepare"]["steps"] for command in _commands(step)
+    ]
+    assert any(
+        command.startswith("helm lint ")
+        and command.endswith("-f deployment/ci/test-values.yaml")
+        for command in release_commands
+    )
     tests = _commands(steps["Test chart"])
     assert any("tests/test_update_config_map.py" in command for command in tests)
     assert any("tests/test_chart.py" in command for command in tests)
+
+
+def test_chart_install_job() -> None:
+    """CI installs the chart on kind with the image of the commit.
+
+    The job builds the image and loads it into the cluster (it pushes
+    nothing), so it holds no credentials and runs for pull requests from
+    forks too. It uses the Helm version of the release, and the gate and
+    `publish` need it, so that a chart that doesn't install fails CI and
+    holds back the `dev` image.
+    """
+    workflow = _load(WORKFLOWS / "ci.yml")
+    ci = workflow["jobs"]
+    release = _load(WORKFLOWS / "release.yml")["jobs"]
+    job = ci["chart-install"]
+    assert job["name"] == "Chart install"
+    assert "chart-install" in ci["passed"]["needs"]
+    assert "chart-install" in ci["publish"]["needs"]
+    # Only the workflow's `contents: read`, no environment and no secrets
+    assert "permissions" not in job
+    assert workflow["permissions"] == {"contents": "read"}
+    assert "environment" not in job
+    assert "secrets." not in yaml.safe_dump(job)
+    (helm,) = _steps(job, "azure/setup-helm")
+    (release_helm,) = _steps(release["prepare"], "azure/setup-helm")
+    assert helm == release_helm
+    # The image built, loaded into the cluster and installed is the same
+    (kind,) = _steps(job, "helm/kind-action")
+    assert kind["with"]["cluster_name"] == "${{ env.CLUSTER }}"
+    commands = [command for step in job["steps"] for command in _commands(step)]
+    assert any(
+        command.startswith("docker build ") and '--tag "${IMAGE}"' in command
+        for command in commands
+    )
+    assert 'kind load docker-image "${IMAGE}" --name "${CLUSTER}"' in commands
+    assert not any(command.startswith("docker push") for command in commands)
+    (install,) = [c for c in commands if c.startswith("helm install ")]
+    for option in [
+        "-f deployment/ci/test-values.yaml",
+        '--set trs_filer.image="${IMAGE}"',
+        "--set trs_filer.imagePullPolicy=Never",
+        "--wait",
+        "--wait-for-jobs",
+    ]:
+        assert option in install, option
+    # The Secret and the host name of the test values
+    values = yaml.safe_load((ROOT / "deployment/ci/test-values.yaml").read_text())
+    secret = values["mongodb"]["auth"]["existingSecret"]
+    assert any(
+        c.startswith(f"kubectl create secret generic {secret} ") for c in commands
+    )
+    steps = {step.get("name"): step for step in job["steps"]}
+    assert steps["Check API"]["env"]["HOST"] == values["host_name"]
+    assert "${HOST}" in steps["Check API"]["run"]
+    # Torn down also after failures
+    assert steps["Tear down cluster"]["if"] == "always()"

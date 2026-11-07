@@ -17,6 +17,7 @@ import re
 import shutil
 import subprocess
 import sys
+import textwrap
 from typing import Any
 
 import pytest
@@ -27,6 +28,8 @@ SCRIPT = ROOT / "update-config-map.sh"
 CONFIG = ROOT / "trs_filer" / "config.yaml"
 JOB = ROOT / "deployment" / "templates" / "trs-filer-configmap-job.yaml"
 SERVICE_ACCOUNT = "/var/run/secrets/kubernetes.io/serviceaccount"
+# The script's path in the image, which the Job runs
+SCRIPT_IN_IMAGE = "/app/update-config-map.sh"
 # The script's directory for temporary files, moved by the tests
 SCRIPT_TMP = "/tmp/"  # noqa: S108 (a path in the script, not used here)
 NAMESPACE = "trs"
@@ -37,16 +40,32 @@ CONFIG_MAP_URL = (
     f"https://{APISERVER}/api/v1/namespaces/{NAMESPACE}/configmaps/{CONFIG_MAP}"
 )
 PODS_URL = f"https://{APISERVER}/api/v1/namespaces/{NAMESPACE}/pods/"
-PODS = ["trs-filer-5d9c-x1", "trs-filer-5d9c-x2", "mongodb-trs-filer-0", "other-1"]
+APP_PODS_URL = (
+    f"https://{APISERVER}/api/v1/namespaces/{NAMESPACE}/pods?labelSelector=app%3D"
+    "trs-filer"
+)
+# Pods of the namespace and their label `app`: the app's, MongoDB's, and
+# those of other workloads, one of them with a name that starts with the
+# app's
+PODS = {
+    "trs-filer-5d9c-x1": "trs-filer",
+    "trs-filer-5d9c-x2": "trs-filer",
+    "mongodb-trs-filer-0": "mongodb-trs-filer",
+    "trs-filer-tools-7f8d-y1": "trs-filer-tools",
+    "other-1": "other",
+}
 # Stub of `curl`: records each request (method, URL, headers, body) as a
-# JSON line in `$CURL_LOG`, and answers like the API server
+# JSON line in `$CURL_LOG`, and answers like the API server; it refuses
+# (`403`) requests whose method and URL end with `$CURL_REFUSE` (e.g.,
+# `PATCH /configmaps/app-config-trs-filer`), and then exits as `curl
+# --fail` does
 CURL_STUB = """\
 import json
 import os
 import sys
 
 args = sys.argv[1:]
-request = {"method": "GET", "headers": [], "body": None, "url": None}
+request = {"method": "GET", "headers": [], "body": None, "url": None, "flags": []}
 output = None
 index = 0
 while index < len(args):
@@ -64,20 +83,38 @@ while index < len(args):
             with open(value.removeprefix("@"), encoding="utf-8") as body:
                 request["body"] = json.load(body)
         continue
-    if not arg.startswith("-"):
+    if arg.startswith("-"):
+        request["flags"].append(arg)
+    else:
         request["url"] = arg
     index += 1
 with open(os.environ["CURL_LOG"], "a", encoding="utf-8") as log:
     log.write(json.dumps(request) + "\\n")
+refuse = os.environ.get("CURL_REFUSE", "").split(" ", 1)
 answer = ""
-if request["method"] == "GET" and "/configmaps/" in request["url"]:
+if len(refuse) == 2 and request["method"] == refuse[0] and request["url"].endswith(
+    refuse[1]
+):
+    if "--fail" in request["flags"]:
+        sys.stderr.write("curl: (22) The requested URL returned error: 403\\n")
+        sys.exit(22)
+    answer = json.dumps({"kind": "Status", "code": 403})
+elif request["method"] == "GET" and "/configmaps/" in request["url"]:
     answer = json.dumps(
         {"kind": "ConfigMap", "metadata": {"name": "app-config-trs-filer"},
          "data": {"config.yaml": "# Empty"}}
     )
-elif request["method"] == "GET" and request["url"].endswith("/pods/"):
+elif request["method"] == "GET" and "/pods?labelSelector=app%3D" in request["url"]:
+    app = request["url"].split("labelSelector=app%3D", 1)[1]
+    pods = dict(pod.split("=") for pod in os.environ["PODS"].split())
     answer = json.dumps(
-        {"items": [{"metadata": {"name": name}} for name in os.environ["PODS"].split()]}
+        {
+            "items": [
+                {"metadata": {"name": name, "labels": {"app": label}}}
+                for name, label in pods.items()
+                if label == app
+            ]
+        }
     )
 if output is not None and output != "/dev/null":
     with open(output, "w", encoding="utf-8") as file:
@@ -110,21 +147,48 @@ TOOLS = pytest.mark.skipif(
 )
 
 
+def _job_command() -> str:
+    """Get the shell command of the config Job, which runs the script.
+
+    Returns:
+        The command (`/bin/sh -c`), from the Job's template.
+    """
+    command = re.search(
+        r"^ *- \|\n(?P<command>(?: {10}.*\n)+)",
+        JOB.read_text(encoding="utf-8"),
+        flags=re.MULTILINE,
+    )
+    assert command, "No shell command in the config Job"
+    return textwrap.dedent(command["command"])
+
+
 def _run(
-    tmp_path: Path, env: dict[str, str]
+    tmp_path: Path,
+    env: dict[str, str],
+    namespace: str = NAMESPACE,
+    job: bool = False,
+    bare_python: bool = False,
 ) -> tuple[subprocess.CompletedProcess[str], list[dict[str, Any]]]:
     """Run the script against the stub API server.
+
+    It runs in `tmp_path`, so that Python doesn't find the package in the
+    working directory.
 
     Args:
         tmp_path: Temporary directory.
         env: Environment variables of the script, besides `PATH`.
+        namespace: Content of the service account's namespace file.
+        job: Whether to run the script through the Job's command, which sets
+            `APP_CONFIG_PATH`.
+        bare_python: Whether `python3` runs without `site-packages` (`-S`),
+            where the dev environment has the package.
 
     Returns:
         The completed process, and the requests to the API server.
     """
     account = tmp_path / "serviceaccount"
     account.mkdir()
-    (account / "namespace").write_text(NAMESPACE, encoding="utf-8")
+    (account / "namespace").write_text(namespace, encoding="utf-8")
     (account / "token").write_text(TOKEN, encoding="utf-8")
     work = tmp_path / "work"
     work.mkdir()
@@ -141,16 +205,30 @@ def _run(
     curl = stubs / "curl"
     curl.write_text(f"#!{sys.executable}\n{CURL_STUB}", encoding="utf-8")
     curl.chmod(0o755)
+    if bare_python:
+        python = stubs / "python3"
+        python.write_text(
+            f'#!/bin/sh\nexec "{sys.executable}" -S "$@"\n', encoding="utf-8"
+        )
+        python.chmod(0o755)
     log = tmp_path / "curl.jsonl"
+    command = ["/bin/sh", str(script)]
+    if job:
+        command = [
+            "/bin/sh",
+            "-c",
+            _job_command().replace(SCRIPT_IN_IMAGE, f"/bin/sh {script}"),
+        ]
     result = subprocess.run(  # noqa: S603 (fixed executable, no shell)
-        ["/bin/sh", str(script)],
+        command,
         capture_output=True,
         check=False,
+        cwd=tmp_path,
         text=True,
         env={
             "PATH": f"{stubs}{os.pathsep}{os.environ['PATH']}",
             "CURL_LOG": str(log),
-            "PODS": " ".join(PODS),
+            "PODS": " ".join(f"{name}={label}" for name, label in PODS.items()),
             **env,
         },
     )
@@ -198,7 +276,7 @@ def test_update_config_map(tmp_path: Path) -> None:
     assert [(r["method"], r["url"]) for r in requests] == [
         ("GET", CONFIG_MAP_URL),
         ("PATCH", CONFIG_MAP_URL),
-        ("GET", PODS_URL),
+        ("GET", APP_PODS_URL),
         ("DELETE", f"{PODS_URL}trs-filer-5d9c-x1"),
         ("DELETE", f"{PODS_URL}trs-filer-5d9c-x2"),
     ]
@@ -232,8 +310,6 @@ def test_update_config_map_default_mongo_host(tmp_path: Path) -> None:
 def test_update_config_map_no_config(tmp_path: Path) -> None:
     """A missing config fails the script before any change (exit code 4).
 
-    As when `APP_CONFIG_PATH` doesn't match the image's Python version.
-
     Args:
         tmp_path: Temporary directory.
     """
@@ -257,23 +333,83 @@ def test_update_config_map_required(tmp_path: Path, name: str) -> None:
     assert requests == []
 
 
-def test_config_path_python_version() -> None:
-    """The Job's config path is in the site-packages of the image's Python.
+@TOOLS
+def test_job_command(tmp_path: Path) -> None:
+    """The Job's command runs the script with the installed package's config.
 
-    The base image's Python changes every year (see "Python versions" in
-    `docs/development.md`); a stale path fails the Job (exit code 4).
+    So the Job needs no path with the image's Python version in it (the
+    base image's Python changes every year). The package is found via
+    `PYTHONPATH`, as in the image via `site-packages`.
+
+    Args:
+        tmp_path: Temporary directory.
     """
-    image = re.search(
-        r"^FROM elixircloud/foca:[^-@\s]+-py(?P<version>3\.\d+)@",
-        (ROOT / "Dockerfile").read_text(encoding="utf-8"),
-        flags=re.MULTILINE,
+    result, requests = _run(
+        tmp_path, _env(APP_CONFIG_PATH=None, PYTHONPATH=str(ROOT)), job=True
     )
-    assert image, "No Python version in the base image tag of the Dockerfile"
-    path = re.search(
-        r"name: APP_CONFIG_PATH\s+value: (?P<path>\S+)",
-        JOB.read_text(encoding="utf-8"),
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert f"APP CONFIG PATH: {CONFIG}" in result.stdout
+    config = yaml.safe_load(requests[1]["body"]["data"]["config.yaml"])
+    assert config["custom"]["service"]["external_host"] == "trs.example.org"
+
+
+def test_job_command_no_package(tmp_path: Path) -> None:
+    """Without the package, the Job's command fails before the script (exit 4).
+
+    Args:
+        tmp_path: Temporary directory.
+    """
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    result, requests = _run(
+        tmp_path,
+        _env(APP_CONFIG_PATH=None, PYTHONPATH=str(empty), PYTHONNOUSERSITE="1"),
+        job=True,
+        bare_python=True,
     )
-    assert path, "No APP_CONFIG_PATH in the config Job"
-    assert path["path"] == (
-        f"/usr/local/lib/python{image['version']}/site-packages/trs_filer/config.yaml"
-    )
+    assert result.returncode == 4, result.stdout + result.stderr
+    assert "Cannot find the package trs_filer" in result.stderr
+    assert "Inputs:" not in result.stdout
+    assert requests == []
+
+
+def test_update_config_map_no_namespace(tmp_path: Path) -> None:
+    """Without the service account's namespace, the script fails (exit 6).
+
+    It fails before any request.
+
+    Args:
+        tmp_path: Temporary directory.
+    """
+    result, requests = _run(tmp_path, _env(), namespace="")
+    assert result.returncode == 6, result.stdout + result.stderr
+    assert requests == []
+
+
+@TOOLS
+@pytest.mark.parametrize(
+    ("refused", "code", "count"),
+    [
+        (f"GET /configmaps/{CONFIG_MAP}", 7, 1),
+        (f"PATCH /configmaps/{CONFIG_MAP}", 8, 2),
+        ("GET /pods?labelSelector=app%3Dtrs-filer", 9, 3),
+    ],
+)
+def test_update_config_map_refused(
+    tmp_path: Path, refused: str, code: int, count: int
+) -> None:
+    """A request that the API server refuses fails the script.
+
+    E.g., if the Job's Role lacks a right; the script stops at the refused
+    request, so it deletes no pods.
+
+    Args:
+        tmp_path: Temporary directory.
+        refused: Method and end of the URL of the refused request.
+        code: Expected exit code.
+        count: Expected number of requests, including the refused one.
+    """
+    result, requests = _run(tmp_path, {**_env(), "CURL_REFUSE": refused})
+    assert result.returncode == code, result.stdout + result.stderr
+    assert len(requests) == count
+    assert "All Done" not in result.stdout

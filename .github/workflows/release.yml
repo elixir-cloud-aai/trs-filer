@@ -60,7 +60,7 @@ jobs:
     outputs:
       version: ${{ steps.version.outputs.version }}
       prerelease: ${{ steps.version.outputs.prerelease }}
-      sha: ${{ steps.version.outputs.sha }}
+      sha: ${{ steps.commit.outputs.sha }}
       chart_file: ${{ steps.chart.outputs.file }}
       chart_sha256: ${{ steps.chart.outputs.sha256 }}
     steps:
@@ -78,19 +78,18 @@ jobs:
         uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.13"
+      # Guards against accidental releases, e.g., of unmerged commits; the
+      # `release` environment's protection rules (required reviewer) are
+      # what actually control publishing. Runs no code of the tagged commit,
+      # so that its scripts (below) only run once the tag is verified and the
+      # commit is on `main`, and never next to this step's token
       - name: Check release tag and commit
-        id: version
-        # Guards against accidental releases, e.g., of unmerged commits; the
-        # `release` environment's protection rules (required reviewer) are
-        # what actually control publishing
+        id: commit
         env:
           TAG: ${{ github.ref_name }}
           GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
         run: |
-          # Fails unless the tag is a release version; version, chart version
-          # and kind of release (see `scripts/release_version.py`)
-          python scripts/release_version.py outputs "${TAG}" >> "${GITHUB_OUTPUT}"
           # Annotated, with a signature that GitHub verified
           if [[ "$(git cat-file -t "refs/tags/${TAG}")" != "tag" ]]; then
               echo "::error::Tag '${TAG}' is not annotated (git tag -s)"
@@ -111,6 +110,13 @@ jobs:
               exit 1
           fi
           echo "sha=$(git rev-parse HEAD)" >> "${GITHUB_OUTPUT}"
+      # Fails unless the tag is a release version; version, chart version
+      # and kind of release (see `scripts/release_version.py`)
+      - name: Derive release version
+        id: version
+        env:
+          TAG: ${{ github.ref_name }}
+        run: python scripts/release_version.py outputs "${TAG}" >> "${GITHUB_OUTPUT}"
       # Zenodo archives the release with the citation metadata of the tagged
       # commit, so they must have the release version (see "Versioning and
       # releases" in `docs/development.md`)
@@ -146,7 +152,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
-          SHA: ${{ steps.version.outputs.sha }}
+          SHA: ${{ steps.commit.outputs.sha }}
         run: |
           runs="$(gh api "repos/${REPOSITORY}/actions/workflows/ci.yml/runs?head_sha=${SHA}&event=push&status=success&per_page=1" \
               --jq .total_count)"
@@ -154,7 +160,8 @@ jobs:
               echo "::error::No successful run of the CI workflow (ci.yml) for a push of ${SHA}; once CI passed for it (re-run it if it failed or was cancelled), re-run this workflow"
               exit 1
           fi
-      # Dependabot updates the action, but not this version: bump it by hand
+      # Dependabot updates the action, but not this version: bump it by hand,
+      # also in the jobs `chart` and `chart-install` of `ci.yml`
       - name: Set up Helm
         uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
         with:
@@ -178,7 +185,10 @@ jobs:
           image="${IMAGE_NAME#docker.io/}:${VERSION}"
           IMAGE="${image}" yq -i '.trs_filer.image = strenv(IMAGE)' "${chart}/values.yaml"
           python scripts/chart_readme.py "${chart}/README.md" "v${VERSION}"
-          helm lint "${chart}" --strict
+          # With the values that users must pass (e.g., the Secret of
+          # MongoDB's credentials), so that the templates render as
+          # installed (left out of the package by `.helmignore`)
+          helm lint "${chart}" --strict -f deployment/ci/test-values.yaml
           helm package "${chart}" \
               --version "${CHART_VERSION}" --app-version "${VERSION}" -d dist
           package="dist/trs-filer-${CHART_VERSION}.tgz"

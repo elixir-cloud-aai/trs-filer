@@ -147,21 +147,72 @@ The [Helm chart](deployment.md) is in `deployment/`. Check changes with
 [Helm](https://helm.sh/docs/intro/install/), e.g.:
 
 ```bash
-helm lint deployment --set host_name=trs.example.org
-helm template trs-filer deployment --set host_name=trs.example.org
+helm lint deployment --strict -f deployment/ci/test-values.yaml
+helm template trs-filer deployment -f deployment/ci/test-values.yaml
 ```
 
 CI's job "Chart" (`.github/workflows/ci.yml`) lints the chart as the
-release workflow does (`helm lint deployment --strict`), and runs the tests
-that render it (`tests/test_chart.py`) and that run the script of its
+release workflow does, with the values that users must pass (e.g., the
+name of MongoDB's Secret):
+`helm lint deployment --strict -f deployment/ci/test-values.yaml`. It
+also runs the tests that render it (`tests/test_chart.py`) and that run
+the script of its
 config Job, `update-config-map.sh`, against a stub of the Kubernetes API
 server (`tests/test_update_config_map.py`; with `jq` and the Python `yq`
-of the image, a dev dependency). Locally, these tests are skipped without
-Helm, `jq` or that `yq`:
+of the image, a dev dependency). They check the rights of the Job's Role,
+run the script also through the Job's command (which finds the installed
+base config), and check its exit codes, also for requests that the API
+server refuses. Locally, these tests are skipped without Helm, `jq` or
+that `yq`:
 
 ```bash
 pytest tests/test_chart.py tests/test_update_config_map.py
 ```
+
+CI's job "Chart install" installs the chart in a cluster: on
+[kind](https://kind.sigs.k8s.io/), with the image built from the commit
+(loaded into the cluster's node, so that nothing is pushed), the values of
+`deployment/ci/test-values.yaml` and a Secret with MongoDB's credentials. It
+waits for the config Job, then checks the API through a port forward: the
+service info, and the registration and retrieval of a tool, whose URL must
+have the host name that the config Job writes to the app's config. To do the
+same locally, with Docker, kind, `kubectl` and Helm (in Bash):
+
+```bash
+kind create cluster --name trs-filer
+docker build --build-arg SETUPTOOLS_SCM_PRETEND_VERSION=0.0.0+kind \
+    --tag trs-filer:ci .
+kind load docker-image trs-filer:ci --name trs-filer
+kubectl create namespace trs-filer
+kubectl create secret generic trs-filer-mongodb-credentials -n trs-filer \
+    --from-literal=root-username=root \
+    --from-literal=root-password="$(openssl rand -hex 24)" \
+    --from-literal=username=trs-filer \
+    --from-literal=password="$(openssl rand -hex 24)"
+helm install trs-filer deployment -n trs-filer \
+    -f deployment/ci/test-values.yaml \
+    --set trs_filer.image=trs-filer:ci \
+    --set trs_filer.imagePullPolicy=Never \
+    --wait --wait-for-jobs --timeout 600s
+# Wait until the pods that the config Job deleted are gone
+until ! kubectl get pods -n trs-filer -l app=trs-filer \
+    -o jsonpath='{.items[*].metadata.deletionTimestamp}' | grep -q .; do
+  sleep 2
+done
+kubectl rollout status deployment/trs-filer -n trs-filer
+kubectl port-forward -n trs-filer service/trs-filer 8080:8080 &
+until curl --fail http://localhost:8080/ga4gh/trs/v2/service-info; do
+  sleep 2  # the app may still be starting
+done
+kind delete cluster --name trs-filer  # tear down
+```
+
+`trs_filer.imagePullPolicy=Never` makes the cluster use the loaded image
+(with the chart's default, `Always`, it would pull it from a registry). The
+config Job restarts the app after the install, so the recipe waits for the
+old pods to go and for the app to answer; if the port forward stops (e.g.,
+on a refused connection while the app starts), start it again. Send further requests as in the job's step "Check API"
+(`.github/workflows/ci.yml`).
 
 ## Documentation
 
@@ -266,7 +317,7 @@ python scripts/check_release_pins.py
 [ ! -f docs/releases/X.Y.Z.md ] || python scripts/release_notes.py check docs/releases/X.Y.Z.md
 readme="$(mktemp -d)/README.md" && cp deployment/README.md "${readme}"
 python scripts/chart_readme.py "${readme}" vX.Y.Z  # links of the chart
-helm lint deployment --strict  # as `prepare` lints and packages the chart
+helm lint deployment --strict -f deployment/ci/test-values.yaml  # as `prepare`
 helm package deployment --version X.Y.Z --app-version X.Y.Z -d "$(mktemp -d)"
 git push origin <sha>:main  # fails unless it is a fast-forward
 git tag -s vX.Y.Z <sha> -m "vX.Y.Z"
@@ -483,6 +534,8 @@ from the first release on, and the default branch is left empty, so that
 rule activates the versions of tags (`v*`), so that the docs linked from
 packaged charts exist.
 
-The release workflow and CI's job "Chart" install a fixed Helm version
-(`version:` of `azure/setup-helm` in `release.yml` and `ci.yml`).
-Dependabot updates the action, but not that version: bump both by hand.
+The release workflow and CI's jobs "Chart" and "Chart install" install a
+fixed Helm version (`version:` of `azure/setup-helm` in `release.yml` and
+`ci.yml`), and "Chart install" a fixed kind version (`version:` of
+`helm/kind-action`). Dependabot updates the actions, but not these
+versions: bump them by hand, Helm in all three places.

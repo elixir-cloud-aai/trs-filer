@@ -21,3 +21,5 @@
 .idea/
 *.tmproj
 .vscode/
+# Values for linting and testing (CI, `tests/test_chart.py`)
+ci/
