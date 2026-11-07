@@ -44,10 +44,11 @@ clients and custom configs:
   with only the rights that the Job uses (Role and RoleBinding
   `<appName>-configurer`), instead of the ClusterRole `admin` (RoleBinding
   `admin-<appName>-configurer`, which the upgrade removes). The Job finds
-  the app's base config through the installed package, so it no longer
-  sets `APP_CONFIG_PATH`, whose path depended on the image's Python
-  version. Copies of the chart that add their own steps to the Job may
-  need more rights in the Role.
+  the app's base config through the installed package, instead of a path
+  that depended on the image's Python version, and works with older images
+  too. It fails if the API server refuses one of its requests (before, it
+  reported success): copies of the chart that add their own steps to the
+  Job may need more rights in the Role.
 
 ## Configuration
 

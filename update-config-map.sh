@@ -4,19 +4,16 @@
 #
 ###############################################################################
 
-if [ -z "$CONFIG_MAP_NAME" -o -z "$APISERVER" -o -z "$HOST_NAME" -o -z "$APP_NAME" ];
+# Exit codes: 1 a required variable is missing; 2 and 3 invalid JSON; 4
+# the config can't be read; 5 the patch can't be created; 6 no namespace;
+# 7, 8 and 9 the API server refused reading or patching the ConfigMap or
+# listing pods (e.g., missing rights)
+
+if [ -z "$CONFIG_MAP_NAME" -o -z "$APISERVER" -o -z "$APP_CONFIG_PATH" -o -z "$HOST_NAME" -o -z "$APP_NAME" ];
 then
-	echo "CONFIG_MAP_NAME, APISERVER, HOST_NAME, and APP_NAME env vars required"
+	echo "CONFIG_MAP_NAME, APISERVER, APP_CONFIG_PATH, HOST_NAME, and APP_NAME env vars required"
 	env
 	exit 1
-fi
-
-# The base config, installed with the package; found via the package, so
-# that no path depends on the image's Python version. An empty path, if the
-# package isn't installed, fails below (exit 4)
-if [ -z "$APP_CONFIG_PATH" ];
-then
-  APP_CONFIG_PATH=$(python3 -c 'import importlib.util, os; spec = importlib.util.find_spec("trs_filer"); print(os.path.join(spec.submodule_search_locations[0], "config.yaml") if spec else "")')
 fi
 
 if [ -z "$MONGO_HOST" ];
@@ -54,14 +51,14 @@ APP_CONFIG=$(yq --arg HOST_NAME "$HOST_NAME" \
     "$APP_CONFIG_PATH") || exit 4
 
 echo " * Getting current configMap"
-curl -s \
+curl -s --fail \
   --cacert /var/run/secrets/kubernetes.io/serviceaccount/ca.crt \
   -H "Authorization: Bearer $(cat /var/run/secrets/kubernetes.io/serviceaccount/token)" \
   -X GET \
   -H "Accept: application/json, */*" \
   -o /tmp/configmap.json \
   -w "Return HTTP/code: %{http_code}\n\n" \
-"https://$APISERVER/api/v1/namespaces/${NAMESPACE}/configmaps/${CONFIG_MAP_NAME}"
+"https://$APISERVER/api/v1/namespaces/${NAMESPACE}/configmaps/${CONFIG_MAP_NAME}" || exit 7
 
 echo " * Validating JSON file recevied:"; echo
 jq . /tmp/configmap.json || exit 2
@@ -78,23 +75,24 @@ echo " JSON file is valid";echo
 
 # Update Config map
 echo " * Updating config map"
-curl -s \
+curl -s --fail \
   --cacert /var/run/secrets/kubernetes.io/serviceaccount/ca.crt \
   -H "Authorization: Bearer $(cat /var/run/secrets/kubernetes.io/serviceaccount/token)" \
   -X PATCH \
   -H "Accept: application/json, */*" \
   -H "Content-Type: application/strategic-merge-patch+json" \
   -d @/tmp/configmap-patch.json "https://$APISERVER/api/v1/namespaces/${NAMESPACE}/configmaps/${CONFIG_MAP_NAME}" \
-  -o /dev/null
+  -o /dev/null || exit 8
 
 echo " * Deleting current $APP_NAME pod"
-curl -s \
+curl -s --fail \
   --cacert /var/run/secrets/kubernetes.io/serviceaccount/ca.crt \
   -H "Authorization: Bearer $(cat /var/run/secrets/kubernetes.io/serviceaccount/token)" \
   -X GET \
   -H "Accept: application/json, */*" \
-  "https://$APISERVER/api/v1/namespaces/${NAMESPACE}/pods/" | \
-jq '.items | .[] | .metadata.name ' -r | grep "^${APP_NAME}-" | \
+  -o /tmp/pods.json \
+  "https://$APISERVER/api/v1/namespaces/${NAMESPACE}/pods/" || exit 9
+jq '.items | .[] | .metadata.name ' -r /tmp/pods.json | grep "^${APP_NAME}-" | \
 while read pod;
 do
   echo "   - Deleting: $pod"

@@ -17,6 +17,7 @@ import re
 import shutil
 import subprocess
 import sys
+import textwrap
 from typing import Any
 
 import pytest
@@ -27,6 +28,8 @@ SCRIPT = ROOT / "update-config-map.sh"
 CONFIG = ROOT / "trs_filer" / "config.yaml"
 JOB = ROOT / "deployment" / "templates" / "trs-filer-configmap-job.yaml"
 SERVICE_ACCOUNT = "/var/run/secrets/kubernetes.io/serviceaccount"
+# The script's path in the image, which the Job runs
+SCRIPT_IN_IMAGE = "/app/update-config-map.sh"
 # The script's directory for temporary files, moved by the tests
 SCRIPT_TMP = "/tmp/"  # noqa: S108 (a path in the script, not used here)
 NAMESPACE = "trs"
@@ -39,14 +42,17 @@ CONFIG_MAP_URL = (
 PODS_URL = f"https://{APISERVER}/api/v1/namespaces/{NAMESPACE}/pods/"
 PODS = ["trs-filer-5d9c-x1", "trs-filer-5d9c-x2", "mongodb-trs-filer-0", "other-1"]
 # Stub of `curl`: records each request (method, URL, headers, body) as a
-# JSON line in `$CURL_LOG`, and answers like the API server
+# JSON line in `$CURL_LOG`, and answers like the API server; it refuses
+# (`403`) requests whose method and URL end with `$CURL_REFUSE` (e.g.,
+# `PATCH /configmaps/app-config-trs-filer`), and then exits as `curl
+# --fail` does
 CURL_STUB = """\
 import json
 import os
 import sys
 
 args = sys.argv[1:]
-request = {"method": "GET", "headers": [], "body": None, "url": None}
+request = {"method": "GET", "headers": [], "body": None, "url": None, "flags": []}
 output = None
 index = 0
 while index < len(args):
@@ -64,13 +70,23 @@ while index < len(args):
             with open(value.removeprefix("@"), encoding="utf-8") as body:
                 request["body"] = json.load(body)
         continue
-    if not arg.startswith("-"):
+    if arg.startswith("-"):
+        request["flags"].append(arg)
+    else:
         request["url"] = arg
     index += 1
 with open(os.environ["CURL_LOG"], "a", encoding="utf-8") as log:
     log.write(json.dumps(request) + "\\n")
+refuse = os.environ.get("CURL_REFUSE", "").split(" ", 1)
 answer = ""
-if request["method"] == "GET" and "/configmaps/" in request["url"]:
+if len(refuse) == 2 and request["method"] == refuse[0] and request["url"].endswith(
+    refuse[1]
+):
+    if "--fail" in request["flags"]:
+        sys.stderr.write("curl: (22) The requested URL returned error: 403\\n")
+        sys.exit(22)
+    answer = json.dumps({"kind": "Status", "code": 403})
+elif request["method"] == "GET" and "/configmaps/" in request["url"]:
     answer = json.dumps(
         {"kind": "ConfigMap", "metadata": {"name": "app-config-trs-filer"},
          "data": {"config.yaml": "# Empty"}}
@@ -110,10 +126,26 @@ TOOLS = pytest.mark.skipif(
 )
 
 
+def _job_command() -> str:
+    """Get the shell command of the config Job, which runs the script.
+
+    Returns:
+        The command (`/bin/sh -c`), from the Job's template.
+    """
+    command = re.search(
+        r"^ *- \|\n(?P<command>(?: {10}.*\n)+)",
+        JOB.read_text(encoding="utf-8"),
+        flags=re.MULTILINE,
+    )
+    assert command, "No shell command in the config Job"
+    return textwrap.dedent(command["command"])
+
+
 def _run(
     tmp_path: Path,
     env: dict[str, str],
     namespace: str = NAMESPACE,
+    job: bool = False,
     bare_python: bool = False,
 ) -> tuple[subprocess.CompletedProcess[str], list[dict[str, Any]]]:
     """Run the script against the stub API server.
@@ -125,7 +157,10 @@ def _run(
         tmp_path: Temporary directory.
         env: Environment variables of the script, besides `PATH`.
         namespace: Content of the service account's namespace file.
-        bare_python: Whether `python3` runs without `site-packages` (`-S`).
+        job: Whether to run the script through the Job's command, which sets
+            `APP_CONFIG_PATH`.
+        bare_python: Whether `python3` runs without `site-packages` (`-S`),
+            where the dev environment has the package.
 
     Returns:
         The completed process, and the requests to the API server.
@@ -156,8 +191,15 @@ def _run(
         )
         python.chmod(0o755)
     log = tmp_path / "curl.jsonl"
+    command = ["/bin/sh", str(script)]
+    if job:
+        command = [
+            "/bin/sh",
+            "-c",
+            _job_command().replace(SCRIPT_IN_IMAGE, f"/bin/sh {script}"),
+        ]
     result = subprocess.run(  # noqa: S603 (fixed executable, no shell)
-        ["/bin/sh", str(script)],
+        command,
         capture_output=True,
         check=False,
         cwd=tmp_path,
@@ -247,8 +289,6 @@ def test_update_config_map_default_mongo_host(tmp_path: Path) -> None:
 def test_update_config_map_no_config(tmp_path: Path) -> None:
     """A missing config fails the script before any change (exit code 4).
 
-    As when `APP_CONFIG_PATH` doesn't match the image's Python version.
-
     Args:
         tmp_path: Temporary directory.
     """
@@ -258,7 +298,7 @@ def test_update_config_map_no_config(tmp_path: Path) -> None:
 
 
 @pytest.mark.parametrize(
-    "name", ["CONFIG_MAP_NAME", "APISERVER", "HOST_NAME", "APP_NAME"]
+    "name", ["CONFIG_MAP_NAME", "APISERVER", "APP_CONFIG_PATH", "HOST_NAME", "APP_NAME"]
 )
 def test_update_config_map_required(tmp_path: Path, name: str) -> None:
     """Each required variable missing fails the script before any request.
@@ -273,28 +313,27 @@ def test_update_config_map_required(tmp_path: Path, name: str) -> None:
 
 
 @TOOLS
-def test_update_config_map_installed_config(tmp_path: Path) -> None:
-    """Without `APP_CONFIG_PATH`, the script uses the installed package's config.
+def test_job_command(tmp_path: Path) -> None:
+    """The Job's command runs the script with the installed package's config.
 
-    So the Job needs no path with the image's Python version in it. The
-    package is found via `PYTHONPATH`, as in the image via `site-packages`.
+    So the Job needs no path with the image's Python version in it (the
+    base image's Python changes every year). The package is found via
+    `PYTHONPATH`, as in the image via `site-packages`.
 
     Args:
         tmp_path: Temporary directory.
     """
-    result, requests = _run(tmp_path, _env(APP_CONFIG_PATH=None, PYTHONPATH=str(ROOT)))
+    result, requests = _run(
+        tmp_path, _env(APP_CONFIG_PATH=None, PYTHONPATH=str(ROOT)), job=True
+    )
     assert result.returncode == 0, result.stdout + result.stderr
     assert f"APP CONFIG PATH: {CONFIG}" in result.stdout
     config = yaml.safe_load(requests[1]["body"]["data"]["config.yaml"])
     assert config["custom"]["service"]["external_host"] == "trs.example.org"
 
 
-@TOOLS
-def test_update_config_map_no_package(tmp_path: Path) -> None:
-    """Without `APP_CONFIG_PATH` and the package, the script fails (exit 4).
-
-    It fails before any request. Python runs without `site-packages`, where
-    the dev environment has the package.
+def test_job_command_no_package(tmp_path: Path) -> None:
+    """Without the package, the Job's command fails before the script (exit 4).
 
     Args:
         tmp_path: Temporary directory.
@@ -304,9 +343,12 @@ def test_update_config_map_no_package(tmp_path: Path) -> None:
     result, requests = _run(
         tmp_path,
         _env(APP_CONFIG_PATH=None, PYTHONPATH=str(empty), PYTHONNOUSERSITE="1"),
+        job=True,
         bare_python=True,
     )
     assert result.returncode == 4, result.stdout + result.stderr
+    assert "Cannot find the package trs_filer" in result.stderr
+    assert "Inputs:" not in result.stdout
     assert requests == []
 
 
@@ -323,11 +365,30 @@ def test_update_config_map_no_namespace(tmp_path: Path) -> None:
     assert requests == []
 
 
-def test_job_sets_no_config_path() -> None:
-    """The Job leaves the config path to the script.
+@TOOLS
+@pytest.mark.parametrize(
+    ("refused", "code", "count"),
+    [
+        (f"GET /configmaps/{CONFIG_MAP}", 7, 1),
+        (f"PATCH /configmaps/{CONFIG_MAP}", 8, 2),
+        ("GET /pods/", 9, 3),
+    ],
+)
+def test_update_config_map_refused(
+    tmp_path: Path, refused: str, code: int, count: int
+) -> None:
+    """A request that the API server refuses fails the script.
 
-    A path with the image's Python version in it (`site-packages`) would
-    break the Job with the yearly rotation of the base image's Python (see
-    "Python versions" in `docs/development.md`).
+    E.g., if the Job's Role lacks a right; the script stops at the refused
+    request, so it deletes no pods.
+
+    Args:
+        tmp_path: Temporary directory.
+        refused: Method and end of the URL of the refused request.
+        code: Expected exit code.
+        count: Expected number of requests, including the refused one.
     """
-    assert "APP_CONFIG_PATH" not in JOB.read_text(encoding="utf-8")
+    result, requests = _run(tmp_path, {**_env(), "CURL_REFUSE": refused})
+    assert result.returncode == code, result.stdout + result.stderr
+    assert len(requests) == count
+    assert "All Done" not in result.stdout
