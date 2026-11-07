@@ -21,6 +21,11 @@ Route for the OpenShift router (see [Ingress and
 Route](deployment.md#ingress-and-route), with examples for ingress-nginx and
 the router).
 
+Who may add tool classes is configured (see [Adding tool
+classes](configuration.md#adding-tool-classes)); until TRS-Filer has users
+and admins, it supports only mode `open`, in which anybody who may register
+tools may add tool classes, too.
+
 Access tokens for writes and ownership of tools are planned (see the [issue
 tracker](https://github.com/elixir-cloud-aai/trs-filer/issues)); this page
 will describe them.

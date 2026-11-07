@@ -374,7 +374,8 @@ for the config, and changes to the ConfigMap are lost on the next upgrade.
 So chart deployments serve the **placeholder service info** of the base
 config (`id: org.example.trs-filer`, organization `Example Organization`),
 and FOCA warns of it on startup; other settings (e.g., `custom.remote_files`,
-the identifier character sets or `custom.toolclass.validation`, see
+the identifier character sets, `custom.toolclass.validation` or
+`custom.access_control.tool_classes`, see
 [Configuration](https://trs-filer.readthedocs.io/en/latest/configuration/))
 keep their defaults. The chart will take an overlay as a value once it uses
 FOCA's library chart

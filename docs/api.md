@@ -130,9 +130,11 @@ it, also with identical content. Tools store a copy of their tool class: of
 the stored tool class, if one with the identifier of `toolclass.id` exists
 (the tool class is not changed), or else of the one sent, which is then
 created, unless tool classes are validated (see [Tool
-classes](configuration.md#tool-classes)). Replacing tools and versions
-increments their `meta_version`, and adding, replacing or deleting a version
-increments that of its tool, by default (see [Meta
+classes](configuration.md#tool-classes)). Who may add tool classes is
+configured (see [Adding tool
+classes](configuration.md#adding-tool-classes)). Replacing tools and
+versions increments their `meta_version`, and adding, replacing or
+deleting a version increments that of its tool, by default (see [Meta
 versions](configuration.md#meta-versions)).
 
 Anybody who can reach the API can use these endpoints (see [Access

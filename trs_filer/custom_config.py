@@ -385,6 +385,63 @@ class RemoteFilesConfig(FOCABaseConfig):
         return [network for network in networks if network is not None]
 
 
+ToolClassesMode = Literal["open", "controlled", "moderated"]
+
+
+class AccessControlConfig(FOCABaseConfig):
+    """Model for access control settings of the app.
+
+    Modelled on the service types of Cloud Registry
+    (`custom.access_control.service_types`), with the same modes and the
+    same default.
+
+    Args:
+        tool_classes: Who may add tool classes: `open` (the default), any
+            user who may register tools, explicitly (`POST /toolClasses`) or
+            by registering a tool with a new tool class (unless
+            `custom.toolclass.validation` is set). `controlled` (only admins
+            add tool classes) and `moderated` (tool classes of users other
+            than admins are pending until an admin approves them) need
+            authenticated writes and are not supported yet.
+
+    Attributes:
+        tool_classes: Who may add tool classes.
+
+    Raises:
+        pydantic.ValidationError: `tool_classes` is not `open`, `controlled`
+            or `moderated`, or is a mode that is not supported yet.
+
+    Example:
+        >>> AccessControlConfig(tool_classes='open')
+        AccessControlConfig(tool_classes='open')
+    """
+
+    tool_classes: ToolClassesMode = "open"
+
+    @field_validator("tool_classes")
+    @classmethod
+    def check_tool_classes(cls, value: ToolClassesMode) -> ToolClassesMode:
+        """Check that the mode of adding tool classes is supported.
+
+        The message doesn't name the mode, so that FOCA shows it on startup
+        (FOCA leaves out messages that quote the invalid value).
+
+        Args:
+            value: Mode of adding tool classes.
+
+        Returns:
+            The mode of adding tool classes.
+
+        Raises:
+            ValueError: The mode is not supported yet.
+        """
+        if value != "open":
+            raise ValueError(
+                "only the mode 'open' of adding tool classes is supported yet"
+            )
+        return value
+
+
 class CustomConfig(FOCABaseConfig):
     """Model for custom configuration parameters.
 
@@ -397,6 +454,7 @@ class CustomConfig(FOCABaseConfig):
         version: Version config parameters.
         toolclass: Tool Class config parameters.
         remote_files: Parameters for retrieving files from their URLs.
+        access_control: Access control settings of the app.
 
     Attributes:
         service: Service config parameters.
@@ -404,6 +462,7 @@ class CustomConfig(FOCABaseConfig):
         version: Version config parameters.
         toolclass: Tool Class config parameters.
         remote_files: Parameters for retrieving files from their URLs.
+        access_control: Access control settings of the app.
     """
 
     service: ServiceConfig
@@ -411,3 +470,4 @@ class CustomConfig(FOCABaseConfig):
     version: VersionConfig = Field(default_factory=VersionConfig)
     toolclass: ToolClassConfig = Field(default_factory=ToolClassConfig)
     remote_files: RemoteFilesConfig = Field(default_factory=RemoteFilesConfig)
+    access_control: AccessControlConfig = Field(default_factory=AccessControlConfig)
