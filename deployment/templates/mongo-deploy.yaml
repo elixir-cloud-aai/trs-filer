@@ -26,6 +26,8 @@ spec:
         - containerPort: 27017
           protocol: TCP
         resources: {{- toYaml .Values.mongodb.resources | nindent 10 }}
+        securityContext:
+          {{- include "trs-filer.securityContext" (dict "root" . "context" .Values.mongodb.securityContext) | nindent 10 }}
         terminationMessagePath: /dev/termination-log
         terminationMessagePolicy: File
         volumeMounts:
@@ -34,15 +36,27 @@ spec:
         - name: init-script
           mountPath: /docker-entrypoint-initdb.d/init-script.js
           subPath: init-script.js
+        # Writable, as the root file system is read-only by default: the
+        # socket and the files of the entrypoint's first start (`/tmp`) and
+        # the config database directory declared by the image
+        - mountPath: /tmp
+          name: tmp
+        - mountPath: /data/configdb
+          name: configdb
       dnsPolicy: ClusterFirst
       restartPolicy: Always
       schedulerName: default-scheduler
-      securityContext: {}
+      securityContext:
+        {{- include "trs-filer.securityContext" (dict "root" . "context" .Values.mongodb.podSecurityContext) | nindent 8 }}
       terminationGracePeriodSeconds: 30
       volumes:
       - name: mongodb-{{ .Values.trs_filer.appName }}
         persistentVolumeClaim:
           claimName: mongodb-{{ .Values.trs_filer.appName }}
+      - name: tmp
+        emptyDir: {{ include "trs-filer.emptyDir" .Values.mongodb.tmpSizeLimit }}
+      - name: configdb
+        emptyDir: {}
       - name: init-script
         configMap:
           name: mongo-init-script-{{ .Values.trs_filer.appName }}

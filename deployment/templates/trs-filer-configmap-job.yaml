@@ -40,8 +40,20 @@ spec:
           value:  {{ .Values.host_name }}
         - name: MONGO_HOST
           value: mongodb-{{ .Values.trs_filer.appName }}
+        # The app's security contexts (same image); the script writes to
+        # `/tmp`, writable, as the root file system is read-only by default
+        securityContext:
+          {{- include "trs-filer.securityContext" (dict "root" . "context" .Values.trs_filer.securityContext) | nindent 10 }}
+        volumeMounts:
+        - mountPath: /tmp
+          name: tmp
       restartPolicy: Never
+      securityContext:
+        {{- include "trs-filer.securityContext" (dict "root" . "context" .Values.trs_filer.podSecurityContext) | nindent 8 }}
       serviceAccountName: {{ .Values.trs_filer.appName }}-configurer
+      volumes:
+      - name: tmp
+        emptyDir: {{ include "trs-filer.emptyDir" .Values.trs_filer.tmpSizeLimit }}
 status: {}
 ---
 apiVersion: v1

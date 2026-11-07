@@ -48,6 +48,34 @@ trs_filer:
     requests:
       cpu: 100m
       memory: 256Mi
+  # Security contexts of the pods and containers of the app and the config
+  # Job (same image), as for the Pod Security Standard "restricted": the
+  # image runs as user 1000, and with a read-only root file system,
+  # temporary files go to an `emptyDir` at `/tmp`. On OpenShift,
+  # `runAsUser`, `runAsGroup` and `fsGroup` are omitted, as OpenShift
+  # assigns them
+  podSecurityContext:
+    runAsNonRoot: true
+    seccompProfile:
+      type: RuntimeDefault
+  securityContext:
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop: ["ALL"]
+    readOnlyRootFilesystem: true
+  # Size limit of the `emptyDir` at `/tmp` (the pod is evicted if it is
+  # exceeded): a quantity (e.g., `64Mi`) or a number of bytes; `null` for none
+  tmpSizeLimit: 64Mi
+  # NetworkPolicy of the app: only the peers in `ingressFrom` may connect to
+  # it, e.g., the ingress controller or router
+  networkPolicy:
+    enabled: false
+    # NetworkPolicy peers (`spec.ingress[].from`) allowed to connect to the
+    # app, e.g., the namespace of the ingress controller (see
+    # deployment/README.md, Network policies, for examples). None by
+    # default, as they depend on the cluster; rendering fails if the policy
+    # is enabled without any (which would allow all sources)
+    ingressFrom: []
 
 apiServer: kubernetes.default.svc:443 # address of k8s API server
 
@@ -74,3 +102,31 @@ mongodb:
     requests:
       cpu: 200m
       memory: 512Mi
+  # Security contexts of MongoDB's pod and container: the image's user
+  # `mongodb` (999), which owns the data volume via `fsGroup`, and a
+  # read-only root file system with `emptyDir`s at `/tmp` and
+  # `/data/configdb`. On OpenShift, `runAsUser`, `runAsGroup` and `fsGroup`
+  # are omitted, as OpenShift assigns them
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 999
+    runAsGroup: 999
+    fsGroup: 999
+    # Change the volume's ownership only if its root doesn't match, not on
+    # every start (which walks the whole database)
+    fsGroupChangePolicy: OnRootMismatch
+    seccompProfile:
+      type: RuntimeDefault
+  securityContext:
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop: ["ALL"]
+    readOnlyRootFilesystem: true
+  # Size limit of the `emptyDir` at `/tmp` (the pod is evicted if it is
+  # exceeded): a quantity (e.g., `64Mi`) or a number of bytes; `null` for none
+  tmpSizeLimit: 64Mi
+  # NetworkPolicy of MongoDB: only the app's pods may connect to it (other
+  # pods of the namespace, and of other namespaces, may not, unless other
+  # policies allow it); clusters without NetworkPolicy support ignore it
+  networkPolicy:
+    enabled: true
