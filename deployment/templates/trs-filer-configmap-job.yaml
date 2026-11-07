@@ -18,16 +18,22 @@ spec:
       - name: certbot
         image: {{ .Values.trs_filer.image }}
         imagePullPolicy: Always
-        command: [ "/app/update-config-map.sh" ]
+        # The base config, installed with the package: found via the
+        # package, so that no path depends on the image's Python version
+        # (exit 4 if it isn't installed); set here, not in the script, so
+        # that images with older scripts work too
+        command:
+        - /bin/sh
+        - -c
+        - |
+          APP_CONFIG_PATH="$(python3 -c 'import importlib.util, os, sys; spec = importlib.util.find_spec("trs_filer"); spec or sys.exit("ERROR: Cannot find the package trs_filer"); print(os.path.join(spec.submodule_search_locations[0], "config.yaml"))')" || exit 4
+          export APP_CONFIG_PATH
+          exec /app/update-config-map.sh
         env:
         - name: APISERVER
           value: {{ .Values.apiServer }}
         - name: CONFIG_MAP_NAME
           value: app-config-{{ .Values.trs_filer.appName }}
-        # The base config, installed with the package (TEMPORARY, with the
-        # Job, until the chart uses the FOCA library chart: #135)
-        - name: APP_CONFIG_PATH
-          value: /usr/local/lib/python3.13/site-packages/trs_filer/config.yaml
         - name: APP_NAME
           value: {{ .Values.trs_filer.appName }}
         - name: HOST_NAME
@@ -56,13 +62,31 @@ metadata:
   creationTimestamp: null
   name: {{ .Values.trs_filer.appName }}-configurer
 ---
+# Only the rights that `update-config-map.sh` uses: read and patch the app's
+# ConfigMap, and list and delete pods to restart the app (TEMPORARY, with the
+# Job, until the chart uses the FOCA library chart: #135)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ .Values.trs_filer.appName }}-configurer
+rules:
+- apiGroups: [""]
+  resources: ["configmaps"]
+  resourceNames: ["app-config-{{ .Values.trs_filer.appName }}"]
+  verbs: ["get", "patch"]
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["list", "delete"]
+---
+# Was `admin-<appName>-configurer` (bound to the ClusterRole `admin`); a new
+# name, as `roleRef` can't be changed: upgrades replace the binding
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: admin-{{ .Values.trs_filer.appName }}-configurer
+  name: {{ .Values.trs_filer.appName }}-configurer
 roleRef:
-  name: admin
-  kind: ClusterRole
+  name: {{ .Values.trs_filer.appName }}-configurer
+  kind: Role
   apiGroup: rbac.authorization.k8s.io
 subjects:
 - kind: ServiceAccount

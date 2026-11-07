@@ -228,12 +228,6 @@ def test_python_version() -> None:
                 if "actions/setup-python@" in step.get("uses", ""):
                     version = step["with"]["python-version"]
                     assert version == image, f"{workflow.name}: {name}"
-    # TEMPORARY: the chart's config Job reads the installed base config
-    # (#135)
-    job = (
-        ROOT / "deployment" / "templates" / "trs-filer-configmap-job.yaml"
-    ).read_text()
-    assert f"/usr/local/lib/python{image}/site-packages/trs_filer/" in job
 
 
 def _ci_gate() -> tuple[dict[str, Any], dict[str, Any]]:

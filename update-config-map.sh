@@ -4,9 +4,14 @@
 #
 ###############################################################################
 
+# Exit codes: 1 a required variable is missing; 2 and 3 invalid JSON; 4
+# the config can't be read; 5 the patch can't be created; 6 no namespace;
+# 7, 8 and 9 reading or patching the ConfigMap or listing pods failed (e.g.,
+# the API server refused it for missing rights)
+
 if [ -z "$CONFIG_MAP_NAME" -o -z "$APISERVER" -o -z "$APP_CONFIG_PATH" -o -z "$HOST_NAME" -o -z "$APP_NAME" ];
 then
-	echo "CONFIG_MAP_NAME, APISERVER, APP_CONFIG_PATH, HOSTNAME, and APP_NAME env vars required"
+	echo "CONFIG_MAP_NAME, APISERVER, APP_CONFIG_PATH, HOST_NAME, and APP_NAME env vars required"
 	env
 	exit 1
 fi
@@ -30,7 +35,7 @@ if [ -z "$NAMESPACE" ];
 then
   echo "ERROR: Cannot get the namespace from '/var/run/secrets/kubernetes.io'" >&2
   echo "This script is meant to be run inside a Kubernetes pod only." >&2
-  exit -1
+  exit 6
 fi
 
 echo "Current Kubernetes namespace: $NAMESPACE"; echo
@@ -46,14 +51,14 @@ APP_CONFIG=$(yq --arg HOST_NAME "$HOST_NAME" \
     "$APP_CONFIG_PATH") || exit 4
 
 echo " * Getting current configMap"
-curl -s \
+curl -sS --fail \
   --cacert /var/run/secrets/kubernetes.io/serviceaccount/ca.crt \
   -H "Authorization: Bearer $(cat /var/run/secrets/kubernetes.io/serviceaccount/token)" \
   -X GET \
   -H "Accept: application/json, */*" \
   -o /tmp/configmap.json \
   -w "Return HTTP/code: %{http_code}\n\n" \
-"https://$APISERVER/api/v1/namespaces/${NAMESPACE}/configmaps/${CONFIG_MAP_NAME}"
+"https://$APISERVER/api/v1/namespaces/${NAMESPACE}/configmaps/${CONFIG_MAP_NAME}" || exit 7
 
 echo " * Validating JSON file recevied:"; echo
 jq . /tmp/configmap.json || exit 2
@@ -70,23 +75,27 @@ echo " JSON file is valid";echo
 
 # Update Config map
 echo " * Updating config map"
-curl -s \
+curl -sS --fail \
   --cacert /var/run/secrets/kubernetes.io/serviceaccount/ca.crt \
   -H "Authorization: Bearer $(cat /var/run/secrets/kubernetes.io/serviceaccount/token)" \
   -X PATCH \
   -H "Accept: application/json, */*" \
   -H "Content-Type: application/strategic-merge-patch+json" \
   -d @/tmp/configmap-patch.json "https://$APISERVER/api/v1/namespaces/${NAMESPACE}/configmaps/${CONFIG_MAP_NAME}" \
-  -o /dev/null
+  -o /dev/null || exit 8
 
+# The app's pods, selected by their label `app` (set by the app's
+# Deployment), not by name, so that pods of other workloads whose names
+# start with the app's name are kept
 echo " * Deleting current $APP_NAME pod"
-curl -s \
+curl -sS --fail \
   --cacert /var/run/secrets/kubernetes.io/serviceaccount/ca.crt \
   -H "Authorization: Bearer $(cat /var/run/secrets/kubernetes.io/serviceaccount/token)" \
   -X GET \
   -H "Accept: application/json, */*" \
-  "https://$APISERVER/api/v1/namespaces/${NAMESPACE}/pods/" | \
-jq '.items | .[] | .metadata.name ' -r | grep "^${APP_NAME}-" | \
+  -o /tmp/pods.json \
+  "https://$APISERVER/api/v1/namespaces/${NAMESPACE}/pods?labelSelector=app%3D${APP_NAME}" || exit 9
+jq '.items | .[] | .metadata.name ' -r /tmp/pods.json | \
 while read pod;
 do
   echo "   - Deleting: $pod"

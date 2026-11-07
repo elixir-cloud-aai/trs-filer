@@ -156,8 +156,11 @@ release workflow does (`helm lint deployment --strict`), and runs the tests
 that render it (`tests/test_chart.py`) and that run the script of its
 config Job, `update-config-map.sh`, against a stub of the Kubernetes API
 server (`tests/test_update_config_map.py`; with `jq` and the Python `yq`
-of the image, a dev dependency). Locally, these tests are skipped without
-Helm, `jq` or that `yq`:
+of the image, a dev dependency). They check the rights of the Job's Role,
+run the script also through the Job's command (which finds the installed
+base config), and check its exit codes, also for requests that the API
+server refuses. Locally, these tests are skipped without Helm, `jq` or
+that `yq`:
 
 ```bash
 pytest tests/test_chart.py tests/test_update_config_map.py

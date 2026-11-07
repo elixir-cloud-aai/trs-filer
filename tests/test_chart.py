@@ -496,3 +496,39 @@ def test_app_network_policy_needs_peers() -> None:
     with pytest.raises(subprocess.CalledProcessError) as error:
         render("--set", "trs_filer.networkPolicy.enabled=true")
     assert "trs_filer.networkPolicy.ingressFrom must list" in error.value.stderr
+
+
+def test_config_job_rights() -> None:
+    """The config Job's ServiceAccount has only the rights that its script uses.
+
+    A namespaced Role allows reading and patching the app's ConfigMap, and
+    listing and deleting pods (to restart the app); no ClusterRole (e.g.,
+    `admin`) is bound.
+    """
+    resources = render()
+    (job,) = of_kind(resources, "Job")
+    account = job["spec"]["template"]["spec"]["serviceAccountName"]
+    assert account == "trs-filer-configurer"
+    (binding,) = of_kind(resources, "RoleBinding")
+    assert binding["subjects"] == [{"kind": "ServiceAccount", "name": account}]
+    assert binding["roleRef"] == {
+        "apiGroup": "rbac.authorization.k8s.io",
+        "kind": "Role",
+        "name": "trs-filer-configurer",
+    }
+    # Renamed from `admin-<appName>-configurer`: `roleRef` is immutable, so
+    # upgrades replace the binding instead of patching it
+    assert binding["metadata"]["name"] == "trs-filer-configurer"
+    (role,) = of_kind(resources, "Role")
+    assert role["metadata"]["name"] == "trs-filer-configurer"
+    assert role["rules"] == [
+        {
+            "apiGroups": [""],
+            "resources": ["configmaps"],
+            "resourceNames": ["app-config-trs-filer"],
+            "verbs": ["get", "patch"],
+        },
+        {"apiGroups": [""], "resources": ["pods"], "verbs": ["list", "delete"]},
+    ]
+    assert of_kind(resources, "ClusterRole") == []
+    assert of_kind(resources, "ClusterRoleBinding") == []
