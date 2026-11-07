@@ -240,3 +240,46 @@ def test_notes_nothing_exposed(tmp_path: Path) -> None:
     assert "The chart exposes the app neither via an Ingress" in notes
     assert "kubectl port-forward svc/trs-filer 8080:8080 -n trs" in notes
     assert "trs.example.org" not in notes
+
+
+def _app_env(resources: list[dict[str, Any]]) -> dict[str, str]:
+    """Get the environment variables of the app's container.
+
+    Args:
+        resources: Rendered resources.
+
+    Returns:
+        The variables, by name.
+    """
+    (deployment,) = (
+        resource
+        for resource in of_kind(resources, "Deployment")
+        if resource["metadata"]["name"] == "trs-filer"
+    )
+    (container,) = deployment["spec"]["template"]["spec"]["containers"]
+    return {variable["name"]: variable["value"] for variable in container["env"]}
+
+
+def test_forwarded_allow_ips_default() -> None:
+    """By default, the app trusts forwarded headers from every address.
+
+    So that links keep `https` behind any ingress controller or router.
+    """
+    assert _app_env(render())["FORWARDED_ALLOW_IPS"] == "*"
+
+
+def test_forwarded_allow_ips() -> None:
+    """`trs_filer.forwardedAllowIps` sets the addresses of trusted proxies."""
+    env = _app_env(
+        render("--set-string", "trs_filer.forwardedAllowIps=10.0.0.0/8\\,192.0.2.1")
+    )
+    assert env["FORWARDED_ALLOW_IPS"] == "10.0.0.0/8,192.0.2.1"
+
+
+def test_forwarded_allow_ips_without_value() -> None:
+    """Values without `trs_filer.forwardedAllowIps` keep trusting every address.
+
+    E.g., upgrades with `--reuse-values` from charts without the value.
+    """
+    env = _app_env(render("--set", "trs_filer.forwardedAllowIps=null"))
+    assert env["FORWARDED_ALLOW_IPS"] == "*"

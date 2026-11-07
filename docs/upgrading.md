@@ -161,7 +161,9 @@ version at a time. For the Helm chart, see [Helm chart](#helm-chart).
 - Forwarded headers (`X-Forwarded-*`) are trusted from Gunicorn's default
   (`127.0.0.1`) only, no longer from every client: behind a proxy that
   terminates TLS, set `FORWARDED_ALLOW_IPS` to its addresses (the Helm
-  chart sets it).
+  chart sets it, by default to `*`; narrow it with the value
+  `trs_filer.forwardedAllowIps`, see [Forwarded
+  headers](deployment.md#forwarded-headers)).
 - The image runs as user 1000 (also with a read-only root file system and a
   writable `/tmp`) and reports its version (e.g., in the service info) from
   the build argument `SETUPTOOLS_SCM_PRETEND_VERSION`.
