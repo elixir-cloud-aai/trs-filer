@@ -71,18 +71,20 @@ the size */}}
 {{- end -}}
 {{- end -}}
 
-{{- /* "true" if MongoDB requires credentials (`mongodb.auth.enabled`), else
-empty; off if unset (`dig`), e.g., for upgrades with `--reuse-values` from
-charts without the value, whose MongoDB has no users */}}
+{{- /* "true" if MongoDB requires credentials (`mongodb.auth.enabled`);
+without the key, if a Secret is named (e.g., upgrades with `--reuse-values`
+from charts without `mongodb.auth` and `--set mongodb.auth.existingSecret`),
+otherwise not (values of older charts keep MongoDB as it was) */}}
 {{- define "trs-filer.mongodbAuth" -}}
-{{- if dig "auth" "enabled" false .Values.mongodb -}}
+{{- $secret := dig "auth" "existingSecret" "" .Values.mongodb -}}
+{{- if dig "auth" "enabled" (not (empty $secret)) .Values.mongodb -}}
 true
 {{- end -}}
 {{- end -}}
 
 {{- /* Name of the existing Secret with MongoDB's credentials; fails if unset */}}
 {{- define "trs-filer.mongodbSecret" -}}
-{{- required "mongodb.auth.existingSecret must be set if mongodb.auth.enabled (the name of a Secret with the keys root-username, root-password, username and password; see the chart's README, Authentication); for existing databases without authentication, create the users first" (dig "auth" "existingSecret" "" .Values.mongodb) -}}
+{{- required "mongodb.auth.existingSecret must be set if mongodb.auth.enabled (see the chart's README, Authentication)" (dig "auth" "existingSecret" "" .Values.mongodb) -}}
 {{- end -}}
 
 {{- /* Environment variables from keys of the Secret with MongoDB's

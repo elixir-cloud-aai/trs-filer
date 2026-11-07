@@ -59,8 +59,9 @@ clients and custom configs:
   [Authentication](deployment.md#authentication), or set
   `mongodb.auth.enabled: false` to keep MongoDB without authentication.
 - Helm chart, upgrades with `--reuse-values` keep the earlier settings (no
-  security contexts, no NetworkPolicy, no authentication): pass your
-  values file instead, or use `--reset-then-reuse-values` (see
+  security contexts, no NetworkPolicy, no authentication unless they
+  name the Secret with `mongodb.auth.existingSecret`): pass your values
+  file instead, or use `--reset-then-reuse-values` (see
   [Upgrades](deployment.md#upgrades)).
 - Helm chart: the configuration Job's ServiceAccount is bound to a Role
   with only the rights that the Job uses (Role and RoleBinding

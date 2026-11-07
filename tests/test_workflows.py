@@ -840,6 +840,14 @@ def test_chart_job() -> None:
         )
         for command in lint
     )
+    # Also without authentication and a host name (the defaults otherwise
+    # needed for rendering)
+    assert any(
+        command.startswith("helm lint deployment --strict ")
+        and "--set mongodb.auth.enabled=false" in command
+        and "--set host_name=" in command
+        for command in lint
+    )
     # The release lints with the same values
     release_commands = [
         command for step in release["prepare"]["steps"] for command in _commands(step)

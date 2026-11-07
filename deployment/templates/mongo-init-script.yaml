@@ -9,10 +9,10 @@ data:
     // Runs on MongoDB's first start with an empty volume, as the root user:
     // the app user, with access to the app's database only, in which FOCA
     // authenticates it (the database of the connection string)
-    db.getSiblingDB({{ $db | squote }}).createUser({
+    db.getSiblingDB({{ $db | toJson }}).createUser({
       user: process.env.MONGO_APP_USERNAME,
       pwd: process.env.MONGO_APP_PASSWORD,
-      roles: [{ role: 'readWrite', db: {{ $db | squote }} }],
+      roles: [{ role: 'readWrite', db: {{ $db | toJson }} }],
     });
   {{- end }}
   init-script.js: |
@@ -20,7 +20,7 @@ data:
     // indexes of the app's database (`MONGO_DBNAME`, `mongodb.dbName`), as
     // configured in `trs_filer/config.yaml` (`db.dbs.trsStore`; the app also
     // creates them on startup)
-    db = db.getSiblingDB('{{ tpl (default "trs-filer-db" .Values.mongodb.dbName) . }}');
+    db = db.getSiblingDB({{ tpl (default "trs-filer-db" .Values.mongodb.dbName) . | toJson }});
 
     db.createCollection('tools');
     db.tools.createIndex(

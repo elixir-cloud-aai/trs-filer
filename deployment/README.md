@@ -446,7 +446,10 @@ If you need to change any parameter of the deployment, the procedure is similar 
    changes (e.g., the [Security contexts](#security-contexts) and [Network
    policies](#network-policies)) don't take effect; pass your values file
    instead, or use `--reset-then-reuse-values` (Helm 3.14 or later), which
-   applies the new chart's defaults with your earlier values on top:
+   applies the new chart's defaults with your earlier values on top.
+   Charts that enable MongoDB's authentication (`mongodb.auth`) need its
+   Secret; for releases installed without it, create the Secret and the
+   users first (see [Authentication](#authentication)):
 ```
 helm upgrade trs-filer . -n namespace -f my-values.yaml
 ```
@@ -509,6 +512,10 @@ cannot read the data leaves it down until the image is changed back.
 ### Authentication
 
 MongoDB requires credentials (`mongodb.auth.enabled`, by default `true`).
+The commands below use the default names (`trs_filer.appName`
+`trs-filer`, database `trs-filer-db`, Secret
+`trs-filer-mongodb-credentials`) and the namespace `namespace`; replace
+them with yours.
 They come from an existing Secret in the release's namespace, named by
 `mongodb.auth.existingSecret`, with four keys:
 
@@ -521,7 +528,9 @@ They come from an existing Secret in the release's namespace, named by
   `MONGO_USERNAME` and `MONGO_PASSWORD`).
 
 Create the Secret before installing (see [Quick start](#quick-start));
-without a Secret name, rendering the chart fails. To run MongoDB without
+without a Secret name, rendering the chart fails. Values without
+`mongodb.auth.enabled` (e.g., upgrades with `--reuse-values` from older
+charts) enable authentication if they name a Secret. To run MongoDB without
 authentication, set `mongodb.auth.enabled: false` explicitly. Credentials
 never appear in values files or ConfigMaps.
 
@@ -555,7 +564,13 @@ while authentication is still off:
       | kubectl exec -i deploy/mongodb-trs-filer -n namespace -- mongosh --quiet
     ```
 
-    (With another `mongodb.dbName`, replace `trs-filer-db`.)
+    Check that the app user exists (the list shows `trs-filer`):
+
+    ```bash
+    kubectl exec deploy/mongodb-trs-filer -n namespace -- mongosh --quiet \
+      --eval 'printjson(db.getSiblingDB("trs-filer-db").getUsers().users.map(u => u.user))'
+    ```
+
 3. Upgrade the release with `mongodb.auth.existingSecret` set (and
    `mongodb.auth.enabled` not set to `false`).
 

@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import tarfile
 from typing import Any
 
 import pytest
@@ -251,7 +252,7 @@ def _app_env(resources: list[dict[str, Any]]) -> dict[str, str]:
         resources: Rendered resources.
 
     Returns:
-        The variables, by name.
+        The variables with values, by name (not those from Secrets).
     """
     (deployment,) = (
         resource
@@ -259,7 +260,11 @@ def _app_env(resources: list[dict[str, Any]]) -> dict[str, str]:
         if resource["metadata"]["name"] == "trs-filer"
     )
     (container,) = deployment["spec"]["template"]["spec"]["containers"]
-    return {variable["name"]: variable["value"] for variable in container["env"]}
+    return {
+        variable["name"]: variable["value"]
+        for variable in container["env"]
+        if "value" in variable
+    }
 
 
 def test_forwarded_allow_ips_default() -> None:
@@ -675,6 +680,24 @@ def _env_from_secrets(container: dict[str, Any]) -> dict[str, tuple[str, str]]:
     }
 
 
+def _init_scripts(resources: list[dict[str, Any]]) -> dict[str, str]:
+    """Get MongoDB's init scripts.
+
+    Args:
+        resources: Rendered resources.
+
+    Returns:
+        The scripts of the ConfigMap `mongo-init-script-<appName>`, by name.
+    """
+    (init,) = (
+        resource
+        for resource in of_kind(resources, "ConfigMap")
+        if resource["metadata"]["name"] == "mongo-init-script-trs-filer"
+    )
+    scripts: dict[str, str] = init["data"]
+    return scripts
+
+
 def test_mongodb_auth_needs_secret() -> None:
     """By default, MongoDB requires credentials: without a Secret, rendering fails."""
     with pytest.raises(subprocess.CalledProcessError) as error:
@@ -703,16 +726,11 @@ def test_mongodb_auth() -> None:
         "MONGO_USERNAME": (SECRET, "username"),
         "MONGO_PASSWORD": (SECRET, "password"),
     }
-    (init,) = (
-        resource
-        for resource in of_kind(resources, "ConfigMap")
-        if resource["metadata"]["name"] == "mongo-init-script-trs-filer"
-    )
-    script = init["data"]["create-app-user.js"]
-    assert "db.getSiblingDB('trs-filer-db').createUser(" in script
+    script = _init_scripts(resources)["create-app-user.js"]
+    assert 'db.getSiblingDB("trs-filer-db").createUser(' in script
     assert "user: process.env.MONGO_APP_USERNAME" in script
     assert "pwd: process.env.MONGO_APP_PASSWORD" in script
-    assert "roles: [{ role: 'readWrite', db: 'trs-filer-db' }]" in script
+    assert "roles: [{ role: 'readWrite', db: \"trs-filer-db\" }]" in script
     # Both scripts of the ConfigMap run on the first start
     (mount,) = (m for m in container["volumeMounts"] if m["name"] == "init-script")
     assert mount == {
@@ -725,14 +743,19 @@ def test_mongodb_auth() -> None:
 def test_mongodb_auth_database_name() -> None:
     """The app user gets access to the database of `mongodb.dbName`."""
     resources = render("--set", "mongodb.dbName=trs")
-    (init,) = (
-        resource
-        for resource in of_kind(resources, "ConfigMap")
-        if resource["metadata"]["name"] == "mongo-init-script-trs-filer"
-    )
-    script = init["data"]["create-app-user.js"]
-    assert "db.getSiblingDB('trs').createUser(" in script
-    assert "roles: [{ role: 'readWrite', db: 'trs' }]" in script
+    script = _init_scripts(resources)["create-app-user.js"]
+    assert 'db.getSiblingDB("trs").createUser(' in script
+    assert "roles: [{ role: 'readWrite', db: \"trs\" }]" in script
+
+
+def test_mongodb_database_name_quoted() -> None:
+    """The database name is a JavaScript string in the init scripts.
+
+    Quotes in `mongodb.dbName` stay inside the string.
+    """
+    scripts = _init_scripts(render("--set-string", "mongodb.dbName=a'b\"c"))
+    assert 'db.getSiblingDB("a\'b\\"c").createUser(' in scripts["create-app-user.js"]
+    assert 'db = db.getSiblingDB("a\'b\\"c");' in scripts["init-script.js"]
 
 
 def test_mongodb_auth_disabled() -> None:
@@ -742,19 +765,29 @@ def test_mongodb_auth_disabled() -> None:
     assert _env_from_secrets(mongodb["containers"][0]) == {}
     app = _pod(resources, "Deployment", "trs-filer")
     assert _env_from_secrets(app["containers"][0]) == {}
-    (init,) = (
-        resource
-        for resource in of_kind(resources, "ConfigMap")
-        if resource["metadata"]["name"] == "mongo-init-script-trs-filer"
+    assert "create-app-user.js" not in _init_scripts(resources)
+
+
+def test_mongodb_auth_secret_without_enabled() -> None:
+    """A Secret's name without `mongodb.auth.enabled` enables authentication.
+
+    E.g., upgrades with `--reuse-values` from older charts and
+    `--set mongodb.auth.existingSecret=...`, whose values lack `enabled`.
+    """
+    resources = render("--set", "mongodb.auth.enabled=null")
+    mongodb = _pod(resources, "Deployment", "mongodb-trs-filer")
+    assert _env_from_secrets(mongodb["containers"][0])["MONGO_APP_USERNAME"] == (
+        SECRET,
+        "username",
     )
-    assert "create-app-user.js" not in init["data"]
+    assert "create-app-user.js" in _init_scripts(resources)
 
 
 def test_mongodb_auth_without_values() -> None:
     """Values without `mongodb.auth` (e.g., of older charts) keep MongoDB as it was.
 
-    So do upgrades with `--reuse-values`; `null` removes the key from the
-    chart's defaults.
+    Simulates the values of upgrades with `--reuse-values` from older
+    charts: `null` removes the key from the chart's defaults.
     """
     resources = render("--set", "mongodb.auth=null")
     mongodb = _pod(resources, "Deployment", "mongodb-trs-filer")
@@ -763,6 +796,33 @@ def test_mongodb_auth_without_values() -> None:
     assert _env_from_secrets(app["containers"][0]) == {}
 
 
-def test_test_values_not_packaged() -> None:
-    """The test values are left out of the packaged chart."""
-    assert "ci/" in (CHART / ".helmignore").read_text(encoding="utf-8").split()
+def test_test_values_not_packaged(tmp_path: Path) -> None:
+    """The test values are left out of the packaged chart.
+
+    Args:
+        tmp_path: Directory for the package.
+    """
+    assert HELM
+    subprocess.run(  # noqa: S603 (fixed executable, no shell)
+        [HELM, "package", str(CHART), "--destination", str(tmp_path)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    (package,) = tmp_path.glob("*.tgz")
+    with tarfile.open(package) as archive:
+        names = archive.getnames()
+    assert "trs-filer/values.yaml" in names
+    assert not [name for name in names if name.startswith("trs-filer/ci/")]
+
+
+def test_notes_mongodb_auth_disabled(tmp_path: Path) -> None:
+    """Without MongoDB authentication, the notes say so.
+
+    Args:
+        tmp_path: Directory for the copy of the chart.
+    """
+    default = render_notes(tmp_path / "default")
+    assert "MongoDB runs without authentication" not in default
+    notes = render_notes(tmp_path / "disabled", "--set", "mongodb.auth.enabled=false")
+    assert "MongoDB runs without authentication" in notes
