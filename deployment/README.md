@@ -182,7 +182,12 @@ that supports them enforce (others ignore them):
     other workloads from setting the forwarded headers that the app trusts
     (see [Security notes](#security-notes)).
 
-The policies restrict incoming connections only.
+The policies restrict incoming connections only. Kubernetes combines all
+NetworkPolicies that select a pod: if other policies in the namespace
+(e.g., a namespace-wide "allow" policy) select the app's or MongoDB's
+pods, the sources they allow can connect too. Check them with
+`kubectl get networkpolicy -n <namespace>`, and keep their selectors off
+these pods.
 
 ## Resources
 
