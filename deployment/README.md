@@ -226,8 +226,8 @@ headers from the addresses in `trs_filer.forwardedAllowIps` (Gunicorn's
 `next_page`, `last_page` and `self_link` headers of tool listings) keep
 `https`. By default (`*`), it trusts them from every address, which works
 with any ingress controller or router, but lets every workload that can
-reach the app's Service or pod set the scheme (and the path prefix) of
-these links. The host of the links comes from the `Host` header, which
+reach the app's Service or pod set the scheme of these links (and their
+path, via Gunicorn's `SCRIPT_NAME` header). The host of the links comes from the `Host` header, which
 this value doesn't cover: every client that reaches the pod sets it.
 
 Narrow it to the addresses that the ingress controller or router connects
@@ -246,7 +246,8 @@ A network trusts every address in it: the pod network of the cluster
 little. Pods get new addresses when they are rescheduled, so list
 networks rather than pod addresses, and restrict who can reach the app's
 pods with NetworkPolicies. An invalid entry stops the app (Gunicorn exits
-on startup); an empty value, or one that isn't a string or a list of strings, fails rendering. Check afterwards that a
+on startup); an empty value, entries with spaces inside, or a value that
+isn't a string or a list of strings fail rendering. Check afterwards that a
 listing through the Ingress or Route still gives `https` links (e.g.,
 `curl -sI 'https://trs.example.org/ga4gh/trs/v2/tools?limit=1'` and its
 `self_link` header). With an address that doesn't match, the links get

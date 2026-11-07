@@ -9,22 +9,40 @@ true
 {{- end -}}
 
 {{- /* Addresses whose `X-Forwarded-*` headers the app trusts (Gunicorn's
-`FORWARDED_ALLOW_IPS`), from `trs_filer.forwardedAllowIps`: a string or a
-list, joined with commas, without spaces and empty entries; every address (`*`) if unset (`dig`, so that
-upgrades with `--reuse-values` from charts without the value keep the
-earlier behaviour). Fails if empty, as Gunicorn would trust no address */}}
+`FORWARDED_ALLOW_IPS`), from `trs_filer.forwardedAllowIps`: a string of
+comma-separated entries or a list of strings, joined with commas; every
+address (`*`) if unset (`dig`, so that upgrades with `--reuse-values` from
+charts without the value keep the earlier behaviour). Spaces around entries
+and empty entries are dropped, as Gunicorn ignores them; fails on entries
+with spaces inside (which Gunicorn would reject), on other types, and if
+nothing is left, as Gunicorn would trust no address */}}
 {{- define "trs-filer.forwardedAllowIps" -}}
-{{- $ips := dig "forwardedAllowIps" "*" .Values.trs_filer -}}
-{{- if kindIs "slice" $ips -}}
-{{- $ips = join "," $ips -}}
-{{- end -}}
-{{- if not (kindIs "string" $ips) -}}
+{{- $value := dig "forwardedAllowIps" "*" .Values.trs_filer -}}
+{{- $items := list -}}
+{{- if kindIs "string" $value -}}
+{{- $items = splitList "," $value -}}
+{{- else if kindIs "slice" $value -}}
+{{- range $value -}}
+{{- if not (kindIs "string" .) -}}
 {{- fail "trs_filer.forwardedAllowIps must be a string or a list of strings" -}}
 {{- end -}}
-{{- /* Without spaces and empty entries, which Gunicorn ignores */ -}}
-{{- $ips = join "," (compact (splitList "," (nospace $ips))) -}}
+{{- $items = concat $items (splitList "," .) -}}
+{{- end -}}
+{{- else -}}
+{{- fail "trs_filer.forwardedAllowIps must be a string or a list of strings" -}}
+{{- end -}}
+{{- $ips := list -}}
+{{- range $items -}}
+{{- $ip := trim . -}}
+{{- if regexMatch `\s` $ip -}}
+{{- fail (printf "trs_filer.forwardedAllowIps: %q must not contain spaces" $ip) -}}
+{{- end -}}
+{{- if $ip -}}
+{{- $ips = append $ips $ip -}}
+{{- end -}}
+{{- end -}}
 {{- if not $ips -}}
 {{- fail "trs_filer.forwardedAllowIps must not be empty: set the addresses of the ingress controller or router, or \"*\" for every address" -}}
 {{- end -}}
-{{- $ips -}}
+{{- join "," $ips -}}
 {{- end -}}

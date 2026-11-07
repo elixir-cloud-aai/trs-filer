@@ -312,16 +312,33 @@ def test_forwarded_allow_ips_empty(tmp_path: Path, value: str) -> None:
     assert "trs_filer.forwardedAllowIps must not be empty" in error.value.stderr
 
 
-@pytest.mark.parametrize("value", ["false", "5"])
+@pytest.mark.parametrize("value", ["false", "5", "{10.0.0.0/8,5}"])
 def test_forwarded_allow_ips_type(value: str) -> None:
-    """`trs_filer.forwardedAllowIps` other than a string or a list fails rendering.
+    """`trs_filer.forwardedAllowIps` other than strings fails rendering.
+
+    Also lists with other members.
 
     Args:
-        value: The value, as `--set` parses it (a boolean or a number).
+        value: The value, as `--set` parses it (a boolean, a number, or a
+            list with a number).
     """
     with pytest.raises(subprocess.CalledProcessError) as error:
         render("--set", f"trs_filer.forwardedAllowIps={value}")
     assert "must be a string or a list of strings" in error.value.stderr
+
+
+@pytest.mark.parametrize("value", ["10.0.0.0 /8", "10.0.0.0/8\\,192.0.2. 1"])
+def test_forwarded_allow_ips_inner_spaces(value: str) -> None:
+    """Entries with spaces inside fail rendering, instead of being joined.
+
+    E.g., `10.0.0.0 /8` would otherwise become `10.0.0.0/8`.
+
+    Args:
+        value: The value, as `--set-string` parses it.
+    """
+    with pytest.raises(subprocess.CalledProcessError) as error:
+        render("--set-string", f"trs_filer.forwardedAllowIps={value}")
+    assert "must not contain spaces" in error.value.stderr
 
 
 def test_forwarded_allow_ips_spaces() -> None:
