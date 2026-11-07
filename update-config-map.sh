@@ -6,8 +6,8 @@
 
 # Exit codes: 1 a required variable is missing; 2 and 3 invalid JSON; 4
 # the config can't be read; 5 the patch can't be created; 6 no namespace;
-# 7, 8 and 9 the API server refused reading or patching the ConfigMap or
-# listing pods (e.g., missing rights)
+# 7, 8 and 9 reading or patching the ConfigMap or listing pods failed (e.g.,
+# the API server refused it for missing rights)
 
 if [ -z "$CONFIG_MAP_NAME" -o -z "$APISERVER" -o -z "$APP_CONFIG_PATH" -o -z "$HOST_NAME" -o -z "$APP_NAME" ];
 then
@@ -51,7 +51,7 @@ APP_CONFIG=$(yq --arg HOST_NAME "$HOST_NAME" \
     "$APP_CONFIG_PATH") || exit 4
 
 echo " * Getting current configMap"
-curl -s --fail \
+curl -sS --fail \
   --cacert /var/run/secrets/kubernetes.io/serviceaccount/ca.crt \
   -H "Authorization: Bearer $(cat /var/run/secrets/kubernetes.io/serviceaccount/token)" \
   -X GET \
@@ -75,7 +75,7 @@ echo " JSON file is valid";echo
 
 # Update Config map
 echo " * Updating config map"
-curl -s --fail \
+curl -sS --fail \
   --cacert /var/run/secrets/kubernetes.io/serviceaccount/ca.crt \
   -H "Authorization: Bearer $(cat /var/run/secrets/kubernetes.io/serviceaccount/token)" \
   -X PATCH \
@@ -85,7 +85,7 @@ curl -s --fail \
   -o /dev/null || exit 8
 
 echo " * Deleting current $APP_NAME pod"
-curl -s --fail \
+curl -sS --fail \
   --cacert /var/run/secrets/kubernetes.io/serviceaccount/ca.crt \
   -H "Authorization: Bearer $(cat /var/run/secrets/kubernetes.io/serviceaccount/token)" \
   -X GET \

@@ -97,9 +97,10 @@ The values of `values.yaml`; the sections below describe them.
   the Role can't name them), though the Job deletes only the app's pods. It
   runs on every install and upgrade; the chart needs permission to create
   these resources, and the rights exist as long as the release does. If
-  the API server refuses a request (e.g., in a copy of the chart that
-  changes the ConfigMap's name), the Job fails (exit code 7, 8 or 9 of
-  `update-config-map.sh`). This stays until the chart uses FOCA's library
+  reading or patching the ConfigMap or listing pods fails (e.g., the API
+  server refuses it in a copy of the chart that changes the ConfigMap's
+  name), the Job fails (exit code 7, 8 or 9 of `update-config-map.sh`);
+  a failed pod deletion doesn't fail it. This stays until the chart uses FOCA's library
   chart ([#135](https://github.com/elixir-cloud-aai/trs-filer/issues/135)).
 - **The app trusts `X-Forwarded-*` headers from every address**
   (`FORWARDED_ALLOW_IPS="*"`), so that links in responses keep `https` behind

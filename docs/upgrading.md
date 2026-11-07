@@ -46,7 +46,8 @@ clients and custom configs:
   `admin-<appName>-configurer`, which the upgrade removes). The Job finds
   the app's base config through the installed package, instead of a path
   that depended on the image's Python version, and works with older images
-  too. It fails if the API server refuses one of its requests (before, it
+  too. With images of this release or later, it fails if the API server
+  refuses reading or patching the ConfigMap or listing pods (before, it
   reported success): copies of the chart that add their own steps to the
   Job may need more rights in the Role.
 
