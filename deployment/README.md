@@ -246,7 +246,7 @@ A network trusts every address in it: the pod network of the cluster
 little. Pods get new addresses when they are rescheduled, so list
 networks rather than pod addresses, and restrict who can reach the app's
 pods with NetworkPolicies. An invalid entry stops the app (Gunicorn exits
-on startup); an empty value fails rendering. Check afterwards that a
+on startup); an empty value, or one that isn't a string or a list of strings, fails rendering. Check afterwards that a
 listing through the Ingress or Route still gives `https` links (e.g.,
 `curl -sI 'https://trs.example.org/ga4gh/trs/v2/tools?limit=1'` and its
 `self_link` header). With an address that doesn't match, the links get

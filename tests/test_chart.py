@@ -293,7 +293,7 @@ def test_forwarded_allow_ips_list(tmp_path: Path) -> None:
     assert env["FORWARDED_ALLOW_IPS"] == "10.0.0.0/8,192.0.2.1"
 
 
-@pytest.mark.parametrize("value", ["", "[]"])
+@pytest.mark.parametrize("value", ["", "[]", "' '", "','", "['', ' ']"])
 def test_forwarded_allow_ips_empty(tmp_path: Path, value: str) -> None:
     """An empty `trs_filer.forwardedAllowIps` fails rendering.
 
@@ -310,6 +310,26 @@ def test_forwarded_allow_ips_empty(tmp_path: Path, value: str) -> None:
     with pytest.raises(subprocess.CalledProcessError) as error:
         render("--values", str(values))
     assert "trs_filer.forwardedAllowIps must not be empty" in error.value.stderr
+
+
+@pytest.mark.parametrize("value", ["false", "5"])
+def test_forwarded_allow_ips_type(value: str) -> None:
+    """`trs_filer.forwardedAllowIps` other than a string or a list fails rendering.
+
+    Args:
+        value: The value, as `--set` parses it (a boolean or a number).
+    """
+    with pytest.raises(subprocess.CalledProcessError) as error:
+        render("--set", f"trs_filer.forwardedAllowIps={value}")
+    assert "must be a string or a list of strings" in error.value.stderr
+
+
+def test_forwarded_allow_ips_spaces() -> None:
+    """Spaces and empty entries are dropped from `trs_filer.forwardedAllowIps`."""
+    env = _app_env(
+        render("--set-string", "trs_filer.forwardedAllowIps=10.0.0.0/8\\, \\,192.0.2.1")
+    )
+    assert env["FORWARDED_ALLOW_IPS"] == "10.0.0.0/8,192.0.2.1"
 
 
 def test_forwarded_allow_ips_without_value() -> None:

@@ -10,7 +10,7 @@ true
 
 {{- /* Addresses whose `X-Forwarded-*` headers the app trusts (Gunicorn's
 `FORWARDED_ALLOW_IPS`), from `trs_filer.forwardedAllowIps`: a string or a
-list, joined with commas; every address (`*`) if unset (`dig`, so that
+list, joined with commas, without spaces and empty entries; every address (`*`) if unset (`dig`, so that
 upgrades with `--reuse-values` from charts without the value keep the
 earlier behaviour). Fails if empty, as Gunicorn would trust no address */}}
 {{- define "trs-filer.forwardedAllowIps" -}}
@@ -18,6 +18,11 @@ earlier behaviour). Fails if empty, as Gunicorn would trust no address */}}
 {{- if kindIs "slice" $ips -}}
 {{- $ips = join "," $ips -}}
 {{- end -}}
+{{- if not (kindIs "string" $ips) -}}
+{{- fail "trs_filer.forwardedAllowIps must be a string or a list of strings" -}}
+{{- end -}}
+{{- /* Without spaces and empty entries, which Gunicorn ignores */ -}}
+{{- $ips = join "," (compact (splitList "," (nospace $ips))) -}}
 {{- if not $ips -}}
 {{- fail "trs_filer.forwardedAllowIps must not be empty: set the addresses of the ingress controller or router, or \"*\" for every address" -}}
 {{- end -}}
