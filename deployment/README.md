@@ -542,7 +542,10 @@ the users: to change a password, change it in MongoDB first (e.g.,
 `db.getSiblingDB("trs-filer-db").changeUserPassword("trs-filer", "<new
 password>")` as the root user), then update the Secret and restart the app
 (`kubectl rollout restart deploy/trs-filer -n namespace`); its requests to
-the database fail until then. Changing `mongodb.dbName` of an installed
+the database fail until then. After changing the root user's password,
+also restart MongoDB (`kubectl rollout restart deploy/mongodb-trs-filer -n
+namespace`), whose environment the commands in this README use for the
+root user's credentials. Changing `mongodb.dbName` of an installed
 release needs a user in the new database too.
 
 **Existing databases without authentication** (installed by earlier
@@ -554,7 +557,10 @@ while authentication is still off:
 1. Create the Secret (see [Quick start](#quick-start)).
 2. Create the users in the running MongoDB, with the credentials of the
    Secret; the commands read them from the Secret, so that they don't
-   appear in the shell's history:
+   appear in the shell's history. If the database has users already
+   (e.g., it ran with authentication before), check them instead (see
+   below) and create only missing ones, with the commands for a missing
+   app user below:
 
     ```bash
     kubectl get secret trs-filer-mongodb-credentials -n namespace -o json \
