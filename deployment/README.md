@@ -69,6 +69,11 @@ The values of `values.yaml`; the sections below describe them.
 | `trs_filer.appName` | `trs-filer` | Name of the app's Deployment and Service; names the other resources (e.g., `mongodb-<appName>`). Don't change it for an installed release (see [Persistence](#persistence)). |
 | `trs_filer.forwardedAllowIps` | `"*"` | Addresses or networks (comma-separated, or a list) whose `X-Forwarded-*` headers the app trusts; `*` for every address (see [Forwarded headers](#forwarded-headers)). |
 | `trs_filer.resources` | 100m CPU; 256Mi memory request, 384Mi limit | CPU and memory of the app (see [Resources](#resources)). |
+| `trs_filer.podSecurityContext` | non-root, `RuntimeDefault` seccomp | Security context of the pods of the app and the configuration Job (see [Security contexts](#security-contexts)). |
+| `trs_filer.securityContext` | no privilege escalation, no capabilities, read-only root file system | Security context of their containers. |
+| `trs_filer.tmpSizeLimit` | `64Mi` | Size limit of their `emptyDir` at `/tmp`; `null` for none. |
+| `trs_filer.networkPolicy.enabled` | `false` | Create a NetworkPolicy that lets only `ingressFrom` connect to the app (see [Network policies](#network-policies)). |
+| `trs_filer.networkPolicy.ingressFrom` | `[]` | NetworkPolicy peers allowed to connect to the app; required if enabled. |
 | `trs_filer.ingress.enabled` | `true` | Create an Ingress (see [Ingress and Route](#ingress-and-route)). |
 | `trs_filer.ingress.className` | `""` | Ingress class; the cluster's default class if empty. |
 | `trs_filer.ingress.annotations` | `{}` | Annotations of the Ingress; `null` removes one of the chart's. |
@@ -81,14 +86,20 @@ The values of `values.yaml`; the sections below describe them.
 | `mongodb.dbName` | `""` | Name of the app's database; `trs-filer-db` if empty. |
 | `mongodb.volumeSize` | `1Gi` | Size of the PersistentVolumeClaim with the data (see [Persistence](#persistence)). |
 | `mongodb.resources` | 200m CPU; 512Mi memory | CPU and memory of MongoDB (request and limit). |
+| `mongodb.podSecurityContext` | non-root user and group 999, `fsGroup` 999 (applied on a mismatch only), `RuntimeDefault` seccomp | Security context of MongoDB's pod (see [Security contexts](#security-contexts)). |
+| `mongodb.securityContext` | no privilege escalation, no capabilities, read-only root file system | Security context of MongoDB's container. |
+| `mongodb.tmpSizeLimit` | `64Mi` | Size limit of MongoDB's `emptyDir` at `/tmp`; `null` for none. |
+| `mongodb.networkPolicy.enabled` | `true` | Create a NetworkPolicy that lets only the app connect to MongoDB (see [Network policies](#network-policies)). |
 
 ## Security notes
 
 - **No authentication in the API**, see the warning at the top.
-- **MongoDB runs without authentication.** It is reachable by every pod in
-  the cluster through its Service (`mongodb-<appName>`, port 27017; the
-  chart exposes it nowhere else). Restrict access to the namespace with
-  NetworkPolicies and don't run untrusted workloads in it.
+- **MongoDB runs without authentication.** Its NetworkPolicy
+  (`mongodb.networkPolicy`, see [Network policies](#network-policies)) lets
+  only the app's pods connect to it, in clusters that enforce
+  NetworkPolicies; otherwise, every pod in the cluster reaches it through
+  its Service (`mongodb-<appName>`, port 27017; the chart exposes it nowhere
+  else). Don't run untrusted workloads in the namespace.
 - **The configuration Job has a ServiceAccount with rights in the
   namespace.** Its ServiceAccount (`<appName>-configurer`) is bound
   (RoleBinding `<appName>-configurer`) to the Role `<appName>-configurer`,
@@ -112,7 +123,74 @@ The values of `values.yaml`; the sections below describe them.
   the ingress controller or router (see [Forwarded
   headers](#forwarded-headers)), don't expose the Service or the pod to
   clients directly, and restrict access to them to the ingress controller
-  or router, e.g., with NetworkPolicies.
+  or router, e.g., with `trs_filer.networkPolicy` (see [Network
+  policies](#network-policies)).
+
+## Security contexts
+
+All pods run as non-root users, without privilege escalation or
+capabilities, with the `RuntimeDefault` seccomp profile and a read-only root
+file system, as the Pod Security Standard "restricted" requires (e.g., for
+namespaces labelled `pod-security.kubernetes.io/enforce: restricted`):
+
+- The app and the configuration Job (`trs_filer.podSecurityContext`,
+  `trs_filer.securityContext`) run as the image's user (1000); MongoDB
+  (`mongodb.podSecurityContext`, `mongodb.securityContext`) runs as the
+  image's user `mongodb` (999), and its data volume belongs to its group
+  (`fsGroup: 999`), so that MongoDB can write to it. This needs storage
+  that applies `fsGroup` (most dynamically provisioned volumes do; e.g.,
+  `hostPath` and some CSI drivers don't): otherwise, MongoDB can't write to
+  a new volume and doesn't start. For such storage, prepare the volume's
+  ownership (user 999) yourself, or let MongoDB's entrypoint start as root
+  and switch to its user, as before (`mongodb.podSecurityContext: null`,
+  `mongodb.securityContext: null`; not allowed under "restricted").
+- Temporary files go to `emptyDir`s at `/tmp`, limited by
+  `trs_filer.tmpSizeLimit` and `mongodb.tmpSizeLimit` (the pod is evicted
+  if it exceeds the limit); MongoDB also gets one at `/data/configdb`.
+- On OpenShift (if the cluster serves `security.openshift.io/v1`), the
+  chart sets no `runAsUser`, `runAsGroup` or `fsGroup`, as OpenShift
+  assigns them from the namespace's range.
+
+The values are maps: values files are merged into them, and `null` removes
+a key (e.g., `mongodb.podSecurityContext.runAsUser: null`).
+
+## Network policies
+
+The chart creates NetworkPolicies, which clusters with a network plugin
+that supports them enforce (others ignore them):
+
+- **MongoDB** (`mongodb-<appName>`, `mongodb.networkPolicy.enabled`, on by
+  default): only the app's pods (label `app: <appName>`) may connect to
+  MongoDB, on port 27017. Disable it if you manage policies yourself, or
+  if other workloads (e.g., backups) must connect.
+- **The app** (`<appName>`, `trs_filer.networkPolicy.enabled`, off by
+  default): only the peers in `trs_filer.networkPolicy.ingressFrom` may
+  connect to the app, on port 8080. The peers depend on the cluster, so
+  there are no defaults, and rendering fails if the policy is enabled
+  without any (which would allow all sources). E.g., for ingress-nginx in
+  the namespace `ingress-nginx`:
+
+    ```yaml
+    trs_filer:
+      networkPolicy:
+        enabled: true
+        ingressFrom:
+          - namespaceSelector:
+              matchLabels:
+                kubernetes.io/metadata.name: ingress-nginx
+    ```
+
+    On OpenShift, the router's pods are in namespaces labelled
+    `policy-group.network.openshift.io/ingress: ""`. The policy also keeps
+    other workloads from setting the forwarded headers that the app trusts
+    (see [Security notes](#security-notes)).
+
+The policies restrict incoming connections only. Kubernetes combines all
+NetworkPolicies that select a pod: if other policies in the namespace
+(e.g., a namespace-wide "allow" policy) select the app's or MongoDB's
+pods, the sources they allow can connect too. Check them with
+`kubectl get networkpolicy -n <namespace>`, and keep their selectors off
+these pods.
 
 ## Resources
 
@@ -342,8 +420,13 @@ If you need to change any parameter of the deployment, the procedure is similar 
    `.tgz` of a release instead of `.`. `helm upgrade` applies the chart's
    defaults for values you don't pass again (`host_name` would be empty, and
    the configuration Job fails), so pass the same values as when installing,
-   e.g., your values file (`-f my-values.yaml`) or `--set host_name=...`,
-   or reuse those of the release with `--reuse-values`:
+   e.g., your values file (`-f my-values.yaml`) or `--set host_name=...`.
+   `--reuse-values` reuses the release's values as they are, including the
+   chart's defaults at the time, so values that a newer chart adds or
+   changes (e.g., the [Security contexts](#security-contexts) and [Network
+   policies](#network-policies)) don't take effect; pass your values file
+   instead, or use `--reset-then-reuse-values` (Helm 3.14 or later), which
+   applies the new chart's defaults with your earlier values on top:
 ```
 helm upgrade trs-filer . -n namespace -f my-values.yaml
 ```

@@ -45,18 +45,26 @@ spec:
         - containerPort: 8080
           protocol: TCP
         resources: {{- toYaml .Values.trs_filer.resources | nindent 10 }}
+        securityContext:
+          {{- include "trs-filer.securityContext" (dict "root" . "context" .Values.trs_filer.securityContext) | nindent 10 }}
         terminationMessagePath: /dev/termination-log
         terminationMessagePolicy: File
         volumeMounts:
         - mountPath: /etc/trs-filer/config.yaml
           name: config-yaml
           subPath: config.yaml
+        # Writable, as the root file system is read-only by default
+        - mountPath: /tmp
+          name: tmp
       dnsPolicy: ClusterFirst
       restartPolicy: Always
       schedulerName: default-scheduler
-      securityContext: {}
+      securityContext:
+        {{- include "trs-filer.securityContext" (dict "root" . "context" .Values.trs_filer.podSecurityContext) | nindent 8 }}
       terminationGracePeriodSeconds: 30
       volumes:
+      - name: tmp
+        emptyDir: {{ include "trs-filer.emptyDir" .Values.trs_filer.tmpSizeLimit }}
       - configMap:
           defaultMode: 420
           items:
