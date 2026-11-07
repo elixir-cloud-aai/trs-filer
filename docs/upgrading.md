@@ -40,6 +40,18 @@ clients and custom configs:
   that run `pip install` must install with uv instead, mounted from a
   pinned stage (see FOCA's migration guide for 0.20). The image installs
   the locked versions of its dependencies (`uv.lock`), with hash checks.
+- Helm chart: the configuration Job's ServiceAccount is bound to a Role
+  with only the rights that the Job uses (Role and RoleBinding
+  `<appName>-configurer`), instead of the ClusterRole `admin` (RoleBinding
+  `admin-<appName>-configurer`, which the upgrade removes). The Job finds
+  the app's base config through the installed package, instead of a path
+  that depended on the image's Python version, and works with older images
+  too. With images of this release or later, it fails if the API server
+  refuses reading or patching the ConfigMap or listing pods (before, it
+  reported success): copies of the chart that add their own steps to the
+  Job may need more rights in the Role. The Job restarts the pods with the
+  label `app: <appName>` (the app's), no longer all pods whose names start
+  with `<appName>-`.
 
 ## Configuration
 
