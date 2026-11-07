@@ -194,16 +194,24 @@ helm install trs-filer deployment -n trs-filer \
     --set trs_filer.image=trs-filer:ci \
     --set trs_filer.imagePullPolicy=Never \
     --wait --wait-for-jobs --timeout 600s
+# Wait until the pods that the config Job deleted are gone
+until ! kubectl get pods -n trs-filer -l app=trs-filer \
+    -o jsonpath='{.items[*].metadata.deletionTimestamp}' | grep -q .; do
+  sleep 2
+done
 kubectl rollout status deployment/trs-filer -n trs-filer
 kubectl port-forward -n trs-filer service/trs-filer 8080:8080 &
-curl http://localhost:8080/ga4gh/trs/v2/service-info
+until curl --fail http://localhost:8080/ga4gh/trs/v2/service-info; do
+  sleep 2  # the app may still be starting
+done
 kind delete cluster --name trs-filer  # tear down
 ```
 
 `trs_filer.imagePullPolicy=Never` makes the cluster use the loaded image
 (with the chart's default, `Always`, it would pull it from a registry). The
-config Job restarts the app after the install; if the port forward stops,
-start it again. Send further requests as in the job's step "Check API"
+config Job restarts the app after the install, so the recipe waits for the
+old pods to go and for the app to answer; if the port forward stops (e.g.,
+on a refused connection while the app starts), start it again. Send further requests as in the job's step "Check API"
 (`.github/workflows/ci.yml`).
 
 ## Documentation

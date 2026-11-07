@@ -886,13 +886,20 @@ def test_chart_install_job() -> None:
     (helm,) = _steps(job, "azure/setup-helm")
     (release_helm,) = _steps(release["prepare"], "azure/setup-helm")
     assert helm == release_helm
-    assert _steps(job, "helm/kind-action")
+    # The image built, loaded into the cluster and installed is the same
+    (kind,) = _steps(job, "helm/kind-action")
+    assert kind["with"]["cluster_name"] == "${{ env.CLUSTER }}"
     commands = [command for step in job["steps"] for command in _commands(step)]
-    assert any(command.startswith("kind load docker-image ") for command in commands)
+    assert any(
+        command.startswith("docker build ") and '--tag "${IMAGE}"' in command
+        for command in commands
+    )
+    assert 'kind load docker-image "${IMAGE}" --name "${CLUSTER}"' in commands
     assert not any(command.startswith("docker push") for command in commands)
     (install,) = [c for c in commands if c.startswith("helm install ")]
     for option in [
         "-f deployment/ci/test-values.yaml",
+        '--set trs_filer.image="${IMAGE}"',
         "--set trs_filer.imagePullPolicy=Never",
         "--wait",
         "--wait-for-jobs",
