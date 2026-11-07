@@ -36,6 +36,11 @@ trs_filer:
     # be written in exponent form
     annotations: {}
   image: elixircloud/trs-filer:latest
+  # Pull policy of the image (`Always`, `IfNotPresent` or `Never`), for the
+  # app and the config Job; `Always`, so that restarts get the image that
+  # the tag points to (e.g., `latest`). `IfNotPresent` or `Never` for an
+  # image loaded into the nodes (e.g., with `kind load docker-image`)
+  imagePullPolicy: Always
   appName: trs-filer
   # Addresses (or networks in CIDR notation), comma-separated or as a list,
   # whose `X-Forwarded-*` headers the app trusts (Gunicorn's

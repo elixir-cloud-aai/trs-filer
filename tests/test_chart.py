@@ -831,3 +831,34 @@ def test_notes_mongodb_auth_disabled(tmp_path: Path) -> None:
         tmp_path / "secret", "--set", "mongodb.auth.enabled=null"
     )
     assert "MongoDB runs without authentication" not in secret_only
+
+
+@pytest.mark.parametrize(
+    ("args", "expected"),
+    [
+        pytest.param((), "Always", id="default"),
+        pytest.param(
+            ("--set", "trs_filer.imagePullPolicy=IfNotPresent"),
+            "IfNotPresent",
+            id="set",
+        ),
+        # Values without the setting (e.g., `--reuse-values` with older ones)
+        pytest.param(
+            ("--set", "trs_filer.imagePullPolicy=null"), "Always", id="without"
+        ),
+    ],
+)
+def test_app_image_pull_policy(args: tuple[str, ...], expected: str) -> None:
+    """The app and the config Job pull the app's image as the value says.
+
+    E.g., `IfNotPresent` or `Never` for an image loaded into the cluster's
+    nodes (CI's job "Chart install" loads the image into kind).
+
+    Args:
+        args: Further arguments of `helm template`.
+        expected: The expected pull policy.
+    """
+    resources = render(*args)
+    for kind, name in [("Deployment", "trs-filer"), ("Job", "configmap-job-")]:
+        (container,) = _pod(resources, kind, name)["containers"]
+        assert container["imagePullPolicy"] == expected, kind
