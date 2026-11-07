@@ -45,10 +45,10 @@ spec:
           - name: FOCA_CONFIG_OVERLAY
             value: /etc/trs-filer/config.yaml
           # Trust `X-Forwarded-*` of the ingress (or route), which terminates
-          # TLS, so that links in responses keep `https`; the pod is reached
-          # through its Service only (TEMPORARY, until #135)
+          # TLS, so that links in responses keep `https` (see
+          # `trs-filer.forwardedAllowIps`)
           - name: FORWARDED_ALLOW_IPS
-            value: "*"
+            value: {{ include "trs-filer.forwardedAllowIps" . | quote }}
         ports:
         - containerPort: 8080
           protocol: TCP

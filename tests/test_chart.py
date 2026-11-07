@@ -244,6 +244,123 @@ def test_notes_nothing_exposed(tmp_path: Path) -> None:
     assert "trs.example.org" not in notes
 
 
+def _app_env(resources: list[dict[str, Any]]) -> dict[str, str]:
+    """Get the environment variables of the app's container.
+
+    Args:
+        resources: Rendered resources.
+
+    Returns:
+        The variables, by name.
+    """
+    (deployment,) = (
+        resource
+        for resource in of_kind(resources, "Deployment")
+        if resource["metadata"]["name"] == "trs-filer"
+    )
+    (container,) = deployment["spec"]["template"]["spec"]["containers"]
+    return {variable["name"]: variable["value"] for variable in container["env"]}
+
+
+def test_forwarded_allow_ips_default() -> None:
+    """By default, the app trusts forwarded headers from every address.
+
+    So that links keep `https` behind any ingress controller or router.
+    """
+    assert _app_env(render())["FORWARDED_ALLOW_IPS"] == "*"
+
+
+def test_forwarded_allow_ips() -> None:
+    """`trs_filer.forwardedAllowIps` sets the addresses of trusted proxies."""
+    env = _app_env(
+        render("--set-string", "trs_filer.forwardedAllowIps=10.0.0.0/8\\,192.0.2.1")
+    )
+    assert env["FORWARDED_ALLOW_IPS"] == "10.0.0.0/8,192.0.2.1"
+
+
+def test_forwarded_allow_ips_list(tmp_path: Path) -> None:
+    """`trs_filer.forwardedAllowIps` may be a list.
+
+    Args:
+        tmp_path: Directory for the values file.
+    """
+    values = tmp_path / "values.yaml"
+    values.write_text(
+        yaml.safe_dump(
+            {"trs_filer": {"forwardedAllowIps": ["10.0.0.0/8", "192.0.2.1"]}}
+        ),
+        encoding="utf-8",
+    )
+    env = _app_env(render("--values", str(values)))
+    assert env["FORWARDED_ALLOW_IPS"] == "10.0.0.0/8,192.0.2.1"
+
+
+@pytest.mark.parametrize("value", ["", "[]", "' '", "','", "['', ' ']"])
+def test_forwarded_allow_ips_empty(tmp_path: Path, value: str) -> None:
+    """An empty `trs_filer.forwardedAllowIps` fails rendering.
+
+    Gunicorn would trust no address, so links would get `http`.
+
+    Args:
+        tmp_path: Directory for the values file.
+        value: The empty value, as YAML.
+    """
+    values = tmp_path / "values.yaml"
+    values.write_text(
+        f"trs_filer:\n  forwardedAllowIps: {value or "''"}\n", encoding="utf-8"
+    )
+    with pytest.raises(subprocess.CalledProcessError) as error:
+        render("--values", str(values))
+    assert "trs_filer.forwardedAllowIps must not be empty" in error.value.stderr
+
+
+@pytest.mark.parametrize("value", ["false", "5", "{10.0.0.0/8,5}"])
+def test_forwarded_allow_ips_type(value: str) -> None:
+    """`trs_filer.forwardedAllowIps` other than strings fails rendering.
+
+    Also lists with other members.
+
+    Args:
+        value: The value, as `--set` parses it (a boolean, a number, or a
+            list with a number).
+    """
+    with pytest.raises(subprocess.CalledProcessError) as error:
+        render("--set", f"trs_filer.forwardedAllowIps={value}")
+    assert "must be a string or a list of strings" in error.value.stderr
+
+
+@pytest.mark.parametrize("value", ["10.0.0.0 /8", "10.0.0.0/8\\,192.0.2. 1"])
+def test_forwarded_allow_ips_inner_spaces(value: str) -> None:
+    """Entries with spaces inside fail rendering, instead of being joined.
+
+    E.g., `10.0.0.0 /8` would otherwise become `10.0.0.0/8`.
+
+    Args:
+        value: The value, as `--set-string` parses it.
+    """
+    with pytest.raises(subprocess.CalledProcessError) as error:
+        render("--set-string", f"trs_filer.forwardedAllowIps={value}")
+    assert "must not contain spaces" in error.value.stderr
+
+
+def test_forwarded_allow_ips_spaces() -> None:
+    """Spaces and empty entries are dropped from `trs_filer.forwardedAllowIps`."""
+    env = _app_env(
+        render("--set-string", "trs_filer.forwardedAllowIps=10.0.0.0/8\\, \\,192.0.2.1")
+    )
+    assert env["FORWARDED_ALLOW_IPS"] == "10.0.0.0/8,192.0.2.1"
+
+
+def test_forwarded_allow_ips_without_value() -> None:
+    """Values without `trs_filer.forwardedAllowIps` keep trusting every address.
+
+    E.g., upgrades with `--reuse-values` from charts without the value;
+    `null` removes the key from the chart's defaults, as such values lack it.
+    """
+    env = _app_env(render("--set", "trs_filer.forwardedAllowIps=null"))
+    assert env["FORWARDED_ALLOW_IPS"] == "*"
+
+
 OPENSHIFT_SECURITY_API = "security.openshift.io/v1"
 RESTRICTED_CONTAINER = {
     "allowPrivilegeEscalation": False,
