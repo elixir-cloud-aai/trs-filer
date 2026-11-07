@@ -122,6 +122,39 @@ If tools with the same new tool class identifier but different tool classes
 are registered at the same time, the tool class of the first one is
 created, and the others store a copy of it, too.
 
+### Adding tool classes
+
+`custom.access_control.tool_classes` sets who may add tool classes, with
+the modes of the service types of [Cloud
+Registry](https://cloud-registry.readthedocs.io/en/latest/configuration/#service-types):
+
+- `open` (the default): any user who may register tools, explicitly (`POST
+  /toolClasses`, `PUT /toolClasses/{id}`) or by registering a tool with a
+  new tool class (see above; not with `custom.toolclass.validation: true`,
+  which leaves only the explicit way);
+- `controlled`: only admins add tool classes; tools must have a registered
+  tool class;
+- `moderated`: tool classes added by users other than admins are pending
+  until an admin approves them, and so are the tools that have them.
+
+TRS-Filer has no users and admins yet (see [Access
+control](access-control.md)), so `open` is the only mode it supports for
+now: the app refuses to start with `controlled` or `moderated`, with an
+error that names the setting (`custom.access_control.tool_classes: Value
+error, this mode of adding tool classes is not supported yet; only 'open'
+is`). For the same reason, it doesn't limit the number of tool classes that
+no tool has per user, as Cloud Registry does for service types: anybody who
+may write can add tool classes without bound, so restrict writes in front of
+the app, and delete unwanted tool classes (`DELETE /toolClasses/{id}`).
+
+For example, in a config overlay:
+
+```yaml
+custom:
+    access_control:
+        tool_classes: open
+```
+
 ## Remote files
 
 Files of tool versions are registered with their content (`content`) or a

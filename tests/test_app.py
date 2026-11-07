@@ -301,8 +301,25 @@ def test_no_request_body_size_limit(
             "custom:\n  toolclass:\n    id:\n      length: 0\n",
             r"toolclass\.id\.length: Input should be greater than 0",
         ),
+        (
+            "custom:\n  access_control:\n    tool_classes: controlled\n",
+            r"access_control\.tool_classes: Value error, this mode of adding "
+            r"tool classes is not supported yet; only 'open' is",
+        ),
+        (
+            "custom:\n  access_control:\n    tool_classes: moderated\n",
+            r"access_control\.tool_classes: Value error, this mode of adding "
+            r"tool classes is not supported yet; only 'open' is",
+        ),
     ],
-    ids=["service-info", "expression", "empty-charset", "zero-length"],
+    ids=[
+        "service-info",
+        "expression",
+        "empty-charset",
+        "zero-length",
+        "controlled",
+        "moderated",
+    ],
 )
 def test_invalid_custom_config(
     mongo_client: MongoClient[dict[str, Any]],
@@ -395,6 +412,24 @@ def test_register_tool_class(client: FlaskClient) -> None:
     tool_class_id = response.get_json()
     assert len(tool_class_id) == 6
     assert set(tool_class_id) <= set("abcdefghijklmnopqrstuvwxyz0123456789")
+
+
+def test_tool_classes_open(app: App, client: FlaskClient) -> None:
+    """In mode `open` (the default), registering tools adds new tool classes.
+
+    Args:
+        app: FOCA app.
+        client: Test client.
+    """
+    with app.app.app_context():
+        assert get_custom_config().access_control.tool_classes == "open"
+    tool = deepcopy(MOCK_TOOL)
+    tool["toolclass"] = {"id": "newclass", "name": "New", "description": "New."}
+    response = client.post(f"{BASE_PATH}/tools", json=tool)
+    assert response.status_code == 200
+    response = client.get(f"{BASE_PATH}/toolClasses")
+    assert response.status_code == 200
+    assert tool["toolclass"] in response.get_json()
 
 
 # Methods of operations in OpenAPI path items

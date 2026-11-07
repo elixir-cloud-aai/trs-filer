@@ -166,6 +166,13 @@ custom:
         # Whether tools may only be registered with existing tool classes;
         # if false, unknown tool classes are created
         validation: False
+    # Who may add tool classes (as `custom.access_control.service_types` of
+    # Cloud Registry): `open`, any user who may register tools, explicitly
+    # (`POST /toolClasses`) or by registering a tool with a new tool class
+    # (unless `toolclass.validation` is true). `controlled` and `moderated`
+    # need authenticated writes and are rejected on startup until supported
+    access_control:
+        tool_classes: open
     # Retrieval of file content from URLs: on registration, for files with a
     # `url` but no `content`, and for zip archives of files without stored
     # content. Only `https` is allowed (add `http` if needed); hosts must
