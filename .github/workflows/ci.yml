@@ -296,8 +296,8 @@ jobs:
         uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
         with:
           version: v3.22.1
-      # kind version as in TESK's and FOCA's chart installs (not bumped by
-      # Dependabot; update manually)
+      # Dependabot updates the action, but not the kind version: bump it by
+      # hand (see "Versioning and releases" in `docs/development.md`)
       - name: Create kind cluster
         uses: helm/kind-action@1544676c07bb3570fcb70166beaa07c4528fd4aa # v1.15.1
         with:
@@ -333,8 +333,10 @@ jobs:
         run: |
           body="${RUNNER_TEMP}/body.json"
           log="${RUNNER_TEMP}/port-forward.log"
-          # Wait until the pods that the config Job deleted are gone, so that
-          # the port forward reaches the restarted app
+          # The config Job deletes the app's pods to restart the app with its
+          # config, and completes without waiting for them to go: wait until
+          # they are gone, so that the port forward (which picks a pod of the
+          # Service once) doesn't reach a terminating pod with the old config
           for _ in $(seq 60); do
             if ! kubectl get pods -n "${NAMESPACE}" -l app=trs-filer -o json \
                 | jq -e 'any(.items[]; .metadata.deletionTimestamp)' > /dev/null; then
@@ -363,7 +365,9 @@ jobs:
             sleep 5
           done
           # Request a path, with an optional JSON body; check the status and
-          # that the JSON response matches a jq filter (as in `smoke`)
+          # that the JSON response matches a jq filter. As in `smoke` (keep
+          # both alike), plus a time limit, as the port forward may hang, and
+          # the port forward's log on failures
           check() {
             local method="$1" path="$2" status="$3" filter="$4" data="${5:-}" actual
             local args=(--silent --show-error --max-time 30 --output "${body}"
@@ -411,10 +415,11 @@ jobs:
           kubectl describe pods -n "${NAMESPACE}" || true
           kubectl logs -n "${NAMESPACE}" --all-containers --prefix \
             -l app=trs-filer --tail=100 || true
+          # The pods of all jobs (the config Job's) and of MongoDB
           kubectl logs -n "${NAMESPACE}" --all-containers --prefix \
-            job/configmap-job-trs-filer-1 --tail=100 || true
+            -l job-name --tail=100 || true
           kubectl logs -n "${NAMESPACE}" --all-containers --prefix \
-            deployment/mongodb-trs-filer --tail=100 || true
+            -l app=mongodb-trs-filer --tail=100 || true
       - name: Tear down cluster
         if: always()
         run: kind delete cluster --name "${CLUSTER}"

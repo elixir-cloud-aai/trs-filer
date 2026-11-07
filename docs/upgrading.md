@@ -75,6 +75,9 @@ clients and custom configs:
   Job may need more rights in the Role. The Job restarts the pods with the
   label `app: <appName>` (the app's), no longer all pods whose names start
   with `<appName>-`.
+- Helm chart: `trs_filer.imagePullPolicy` sets the pull policy of the app's
+  image (app and configuration Job); the default, `Always`, is the earlier
+  behaviour, also for upgrades with `--reuse-values`.
 
 ## Configuration
 

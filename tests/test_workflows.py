@@ -890,9 +890,22 @@ def test_chart_install_job() -> None:
     commands = [command for step in job["steps"] for command in _commands(step)]
     assert any(command.startswith("kind load docker-image ") for command in commands)
     assert not any(command.startswith("docker push") for command in commands)
+    (install,) = [c for c in commands if c.startswith("helm install ")]
+    for option in [
+        "-f deployment/ci/test-values.yaml",
+        "--set trs_filer.imagePullPolicy=Never",
+        "--wait",
+        "--wait-for-jobs",
+    ]:
+        assert option in install, option
+    # The Secret and the host name of the test values
+    values = yaml.safe_load((ROOT / "deployment/ci/test-values.yaml").read_text())
+    secret = values["mongodb"]["auth"]["existingSecret"]
     assert any(
-        command.startswith("helm install ")
-        and "--wait" in command
-        and "trs_filer.imagePullPolicy=Never" in command
-        for command in commands
+        c.startswith(f"kubectl create secret generic {secret} ") for c in commands
     )
+    steps = {step.get("name"): step for step in job["steps"]}
+    assert steps["Check API"]["env"]["HOST"] == values["host_name"]
+    assert "${HOST}" in steps["Check API"]["run"]
+    # Torn down also after failures
+    assert steps["Tear down cluster"]["if"] == "always()"
