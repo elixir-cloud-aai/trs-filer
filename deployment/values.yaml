@@ -91,6 +91,18 @@ mongodb:
   imagePullPolicy: Always
   # The app's database (`MONGO_DBNAME` of the app); `trs-filer-db` if empty
   dbName: ""
+  auth:
+    # Require credentials (set `existingSecret`); enforced on every start,
+    # but users are only created when MongoDB starts with an empty volume,
+    # so create them first for existing databases (see deployment/README.md,
+    # Authentication). Without authentication, any pod that can reach
+    # MongoDB's Service can read and change the data (see `networkPolicy`),
+    # so disable it explicitly only if that is acceptable
+    enabled: true
+    # Name of an existing Secret with the keys `root-username` and
+    # `root-password` (MongoDB's root user) and `username` and `password`
+    # (the app user, created with access to the app's database)
+    existingSecret: ""
   # Size of the PersistentVolumeClaim `mongodb-<appName>` with the data;
   # Helm keeps the claim (`helm.sh/resource-policy: keep`) when the release
   # is uninstalled (see deployment/README.md, MongoDB)

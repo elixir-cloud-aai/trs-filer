@@ -15,6 +15,8 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 CHART = ROOT / "deployment"
+# Values of CI's lint, e.g., the Secret of MongoDB's credentials
+TEST_VALUES = CHART / "ci" / "test-values.yaml"
 HELM = shutil.which("helm")
 ROUTE_API = "route.openshift.io/v1"
 ALLOWLIST = "haproxy.router.openshift.io/ip_allowlist"
@@ -43,8 +45,8 @@ def helm_template(chart: Path, *args: str) -> str:
             str(chart),
             "--namespace",
             "trs",
-            "--set",
-            "host_name=trs.example.org",
+            "--values",
+            str(TEST_VALUES),
             *args,
         ],
         capture_output=True,
@@ -532,3 +534,118 @@ def test_config_job_rights() -> None:
     ]
     assert of_kind(resources, "ClusterRole") == []
     assert of_kind(resources, "ClusterRoleBinding") == []
+
+
+SECRET = "trs-filer-mongodb-credentials"  # noqa: S105 (a Secret's name)
+
+
+def _env_from_secrets(container: dict[str, Any]) -> dict[str, tuple[str, str]]:
+    """Get the environment variables of a container that come from Secrets.
+
+    Args:
+        container: Container spec.
+
+    Returns:
+        The Secret's name and key of each variable, by variable name.
+    """
+    return {
+        variable["name"]: (
+            variable["valueFrom"]["secretKeyRef"]["name"],
+            variable["valueFrom"]["secretKeyRef"]["key"],
+        )
+        for variable in container.get("env", [])
+        if "secretKeyRef" in variable.get("valueFrom", {})
+    }
+
+
+def test_mongodb_auth_needs_secret() -> None:
+    """By default, MongoDB requires credentials: without a Secret, rendering fails."""
+    with pytest.raises(subprocess.CalledProcessError) as error:
+        render("--set", "mongodb.auth.existingSecret=")
+    assert "mongodb.auth.existingSecret must be set" in error.value.stderr
+
+
+def test_mongodb_auth() -> None:
+    """With authentication, MongoDB and the app get their credentials.
+
+    MongoDB gets the root user's and the app user's credentials from the
+    Secret, and an init script that creates the app user in the app's
+    database; the app connects as the app user.
+    """
+    resources = render()
+    mongodb = _pod(resources, "Deployment", "mongodb-trs-filer")
+    (container,) = mongodb["containers"]
+    assert _env_from_secrets(container) == {
+        "MONGO_INITDB_ROOT_USERNAME": (SECRET, "root-username"),
+        "MONGO_INITDB_ROOT_PASSWORD": (SECRET, "root-password"),
+        "MONGO_APP_USERNAME": (SECRET, "username"),
+        "MONGO_APP_PASSWORD": (SECRET, "password"),
+    }
+    app = _pod(resources, "Deployment", "trs-filer")
+    assert _env_from_secrets(app["containers"][0]) == {
+        "MONGO_USERNAME": (SECRET, "username"),
+        "MONGO_PASSWORD": (SECRET, "password"),
+    }
+    (init,) = (
+        resource
+        for resource in of_kind(resources, "ConfigMap")
+        if resource["metadata"]["name"] == "mongo-init-script-trs-filer"
+    )
+    script = init["data"]["create-app-user.js"]
+    assert "db.getSiblingDB('trs-filer-db').createUser(" in script
+    assert "user: process.env.MONGO_APP_USERNAME" in script
+    assert "pwd: process.env.MONGO_APP_PASSWORD" in script
+    assert "roles: [{ role: 'readWrite', db: 'trs-filer-db' }]" in script
+    # Both scripts of the ConfigMap run on the first start
+    (mount,) = (m for m in container["volumeMounts"] if m["name"] == "init-script")
+    assert mount == {
+        "name": "init-script",
+        "mountPath": "/docker-entrypoint-initdb.d",
+        "readOnly": True,
+    }
+
+
+def test_mongodb_auth_database_name() -> None:
+    """The app user gets access to the database of `mongodb.dbName`."""
+    resources = render("--set", "mongodb.dbName=trs")
+    (init,) = (
+        resource
+        for resource in of_kind(resources, "ConfigMap")
+        if resource["metadata"]["name"] == "mongo-init-script-trs-filer"
+    )
+    script = init["data"]["create-app-user.js"]
+    assert "db.getSiblingDB('trs').createUser(" in script
+    assert "roles: [{ role: 'readWrite', db: 'trs' }]" in script
+
+
+def test_mongodb_auth_disabled() -> None:
+    """`mongodb.auth.enabled: false` runs MongoDB without credentials."""
+    resources = render("--set", "mongodb.auth.enabled=false")
+    mongodb = _pod(resources, "Deployment", "mongodb-trs-filer")
+    assert _env_from_secrets(mongodb["containers"][0]) == {}
+    app = _pod(resources, "Deployment", "trs-filer")
+    assert _env_from_secrets(app["containers"][0]) == {}
+    (init,) = (
+        resource
+        for resource in of_kind(resources, "ConfigMap")
+        if resource["metadata"]["name"] == "mongo-init-script-trs-filer"
+    )
+    assert "create-app-user.js" not in init["data"]
+
+
+def test_mongodb_auth_without_values() -> None:
+    """Values without `mongodb.auth` (e.g., of older charts) keep MongoDB as it was.
+
+    So do upgrades with `--reuse-values`; `null` removes the key from the
+    chart's defaults.
+    """
+    resources = render("--set", "mongodb.auth=null")
+    mongodb = _pod(resources, "Deployment", "mongodb-trs-filer")
+    assert _env_from_secrets(mongodb["containers"][0]) == {}
+    app = _pod(resources, "Deployment", "trs-filer")
+    assert _env_from_secrets(app["containers"][0]) == {}
+
+
+def test_test_values_not_packaged() -> None:
+    """The test values are left out of the packaged chart."""
+    assert "ci/" in (CHART / ".helmignore").read_text(encoding="utf-8").split()

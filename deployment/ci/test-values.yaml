@@ -1,0 +1,8 @@
+# Values for linting and testing the chart (CI, `release.yml`,
+# `tests/test_chart.py`): the name of a Secret with MongoDB's credentials,
+# which rendering requires with authentication (the default), and a host
+# name. Not part of the packaged chart (`.helmignore`)
+host_name: trs.example.org
+mongodb:
+  auth:
+    existingSecret: trs-filer-mongodb-credentials

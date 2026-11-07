@@ -22,6 +22,18 @@ spec:
       - image: {{ .Values.mongodb.image }}
         imagePullPolicy: {{ .Values.mongodb.imagePullPolicy }}
         name: mongodb-{{ .Values.trs_filer.appName }}
+        {{- if include "trs-filer.mongodbAuth" . }}
+        # The root user's credentials, with which the image's entrypoint
+        # requires authentication (`--auth`) and creates the root user on the
+        # first start; the app user's, for the init script
+        env:
+        {{- include "trs-filer.mongodbSecretEnv" (dict "root" . "vars" (dict
+          "MONGO_INITDB_ROOT_USERNAME" "root-username"
+          "MONGO_INITDB_ROOT_PASSWORD" "root-password"
+          "MONGO_APP_USERNAME" "username"
+          "MONGO_APP_PASSWORD" "password"
+        )) | trim | nindent 8 }}
+        {{- end }}
         ports:
         - containerPort: 27017
           protocol: TCP
@@ -33,9 +45,10 @@ spec:
         volumeMounts:
         - mountPath: /data/db/
           name: mongodb-{{ .Values.trs_filer.appName }}
+        # The init scripts, run on the first start with an empty volume
         - name: init-script
-          mountPath: /docker-entrypoint-initdb.d/init-script.js
-          subPath: init-script.js
+          mountPath: /docker-entrypoint-initdb.d
+          readOnly: true
         # Writable, as the root file system is read-only by default: the
         # socket and the files of the entrypoint's first start (`/tmp`) and
         # the config database directory declared by the image

@@ -3,6 +3,18 @@ kind: ConfigMap
 metadata:
   name: mongo-init-script-{{ .Values.trs_filer.appName }}
 data:
+  {{- if include "trs-filer.mongodbAuth" . }}
+  {{- $db := tpl (default "trs-filer-db" .Values.mongodb.dbName) . }}
+  create-app-user.js: |
+    // Runs on MongoDB's first start with an empty volume, as the root user:
+    // the app user, with access to the app's database only, in which FOCA
+    // authenticates it (the database of the connection string)
+    db.getSiblingDB({{ $db | squote }}).createUser({
+      user: process.env.MONGO_APP_USERNAME,
+      pwd: process.env.MONGO_APP_PASSWORD,
+      roles: [{ role: 'readWrite', db: {{ $db | squote }} }],
+    });
+  {{- end }}
   init-script.js: |
     // Runs on MongoDB's first start with an empty volume: the collections and
     // indexes of the app's database (`MONGO_DBNAME`, `mongodb.dbName`), as

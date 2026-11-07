@@ -246,11 +246,15 @@ jobs:
         uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
         with:
           version: v3.22.1
-      # As `prepare` of `release.yml` lints it, and with a host name
+      # As `prepare` of `release.yml` lints it (with the test values, which
+      # name the Secret of MongoDB's credentials), and without
+      # authentication and a host name
       - name: Lint chart
         run: |
-          helm lint deployment --strict
-          helm lint deployment --strict --set host_name=trs.example.org
+          helm lint deployment --strict -f deployment/ci/test-values.yaml
+          helm lint deployment --strict -f deployment/ci/test-values.yaml \
+            --set mongodb.auth.enabled=false --set mongodb.auth.existingSecret= \
+            --set host_name=
       # The tests fail instead of skipping if Helm, jq or yq is missing (`CI`)
       - name: Test chart
         run: |
