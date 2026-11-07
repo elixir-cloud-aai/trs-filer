@@ -860,3 +860,59 @@ def test_chart_job() -> None:
     tests = _commands(steps["Test chart"])
     assert any("tests/test_update_config_map.py" in command for command in tests)
     assert any("tests/test_chart.py" in command for command in tests)
+
+
+def test_chart_install_job() -> None:
+    """CI installs the chart on kind with the image of the commit.
+
+    The job builds the image and loads it into the cluster (it pushes
+    nothing), so it holds no credentials and runs for pull requests from
+    forks too. It uses the Helm version of the release, and the gate and
+    `publish` need it, so that a chart that doesn't install fails CI and
+    holds back the `dev` image.
+    """
+    workflow = _load(WORKFLOWS / "ci.yml")
+    ci = workflow["jobs"]
+    release = _load(WORKFLOWS / "release.yml")["jobs"]
+    job = ci["chart-install"]
+    assert job["name"] == "Chart install"
+    assert "chart-install" in ci["passed"]["needs"]
+    assert "chart-install" in ci["publish"]["needs"]
+    # Only the workflow's `contents: read`, no environment and no secrets
+    assert "permissions" not in job
+    assert workflow["permissions"] == {"contents": "read"}
+    assert "environment" not in job
+    assert "secrets." not in yaml.safe_dump(job)
+    (helm,) = _steps(job, "azure/setup-helm")
+    (release_helm,) = _steps(release["prepare"], "azure/setup-helm")
+    assert helm == release_helm
+    # The image built, loaded into the cluster and installed is the same
+    (kind,) = _steps(job, "helm/kind-action")
+    assert kind["with"]["cluster_name"] == "${{ env.CLUSTER }}"
+    commands = [command for step in job["steps"] for command in _commands(step)]
+    assert any(
+        command.startswith("docker build ") and '--tag "${IMAGE}"' in command
+        for command in commands
+    )
+    assert 'kind load docker-image "${IMAGE}" --name "${CLUSTER}"' in commands
+    assert not any(command.startswith("docker push") for command in commands)
+    (install,) = [c for c in commands if c.startswith("helm install ")]
+    for option in [
+        "-f deployment/ci/test-values.yaml",
+        '--set trs_filer.image="${IMAGE}"',
+        "--set trs_filer.imagePullPolicy=Never",
+        "--wait",
+        "--wait-for-jobs",
+    ]:
+        assert option in install, option
+    # The Secret and the host name of the test values
+    values = yaml.safe_load((ROOT / "deployment/ci/test-values.yaml").read_text())
+    secret = values["mongodb"]["auth"]["existingSecret"]
+    assert any(
+        c.startswith(f"kubectl create secret generic {secret} ") for c in commands
+    )
+    steps = {step.get("name"): step for step in job["steps"]}
+    assert steps["Check API"]["env"]["HOST"] == values["host_name"]
+    assert "${HOST}" in steps["Check API"]["run"]
+    # Torn down also after failures
+    assert steps["Tear down cluster"]["if"] == "always()"

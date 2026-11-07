@@ -22,7 +22,7 @@ spec:
     spec:
       containers:
       - image: {{ .Values.trs_filer.image }}
-        imagePullPolicy: Always
+        imagePullPolicy: {{ .Values.trs_filer.imagePullPolicy | default "Always" }}
         name: {{ .Values.trs_filer.appName }}
         env:
           # The app's database (value `mongodb.dbName`, `trs-filer-db` if

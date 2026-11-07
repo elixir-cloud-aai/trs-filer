@@ -82,6 +82,7 @@ The values of `values.yaml`; the sections below describe them.
 | `host_name` | `""` | **Required.** Host name that the app serves (the app advertises `https://<host_name>`, so serve HTTPS: see `trs_filer.ingress.https` and [Ingress and Route](#ingress-and-route)), used by the Ingress, the Route and the configuration Job. |
 | `apiServer` | `kubernetes.default.svc:443` | Address of the Kubernetes API server, which the configuration Job writes the ConfigMap to. |
 | `trs_filer.image` | `elixircloud/trs-filer:latest` | Image of the app (released charts set the release's image). |
+| `trs_filer.imagePullPolicy` | `Always` | Pull policy of the app's image (`Always`, `IfNotPresent` or `Never`), also for the configuration Job; `IfNotPresent` or `Never` for an image loaded into the nodes. |
 | `trs_filer.appName` | `trs-filer` | Name of the app's Deployment and Service; names the other resources (e.g., `mongodb-<appName>`). Don't change it for an installed release (see [Persistence](#persistence)). |
 | `trs_filer.forwardedAllowIps` | `"*"` | Addresses or networks (comma-separated, or a list) whose `X-Forwarded-*` headers the app trusts; `*` for every address (see [Forwarded headers](#forwarded-headers)). |
 | `trs_filer.resources` | 100m CPU; 256Mi memory request, 384Mi limit | CPU and memory of the app (see [Resources](#resources)). |

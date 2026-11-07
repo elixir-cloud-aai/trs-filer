@@ -17,7 +17,7 @@ spec:
       containers:
       - name: certbot
         image: {{ .Values.trs_filer.image }}
-        imagePullPolicy: Always
+        imagePullPolicy: {{ .Values.trs_filer.imagePullPolicy | default "Always" }}
         # The base config, installed with the package: found via the
         # package, so that no path depends on the image's Python version
         # (exit 4 if it isn't installed); set here, not in the script, so
