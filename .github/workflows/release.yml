@@ -184,7 +184,10 @@ jobs:
           image="${IMAGE_NAME#docker.io/}:${VERSION}"
           IMAGE="${image}" yq -i '.trs_filer.image = strenv(IMAGE)' "${chart}/values.yaml"
           python scripts/chart_readme.py "${chart}/README.md" "v${VERSION}"
-          helm lint "${chart}" --strict
+          # With the values that users must pass (e.g., the Secret of
+          # MongoDB's credentials), so that the templates render as
+          # installed (left out of the package by `.helmignore`)
+          helm lint "${chart}" --strict -f deployment/ci/test-values.yaml
           helm package "${chart}" \
               --version "${CHART_VERSION}" --app-version "${VERSION}" -d dist
           package="dist/trs-filer-${CHART_VERSION}.tgz"

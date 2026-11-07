@@ -14,6 +14,20 @@
 Set `host_name` (see [Values](#values)): it is **required**, the chart has no
 useful default, and the configuration Job fails (exit 1) on the empty one.
 
+MongoDB requires authentication: create a Secret with its credentials in the
+namespace first, and pass its name in `mongodb.auth.existingSecret` (see
+[Authentication](#authentication)); otherwise, rendering the chart fails.
+E.g., with random passwords:
+
+```bash
+kubectl create namespace namespace
+kubectl create secret generic trs-filer-mongodb-credentials -n namespace \
+    --from-literal=root-username=root \
+    --from-literal=root-password="$(openssl rand -hex 24)" \
+    --from-literal=username=trs-filer \
+    --from-literal=password="$(openssl rand -hex 24)"
+```
+
 ### Install a release
 
 Install the chart attached to a release (`trs-filer-{{ chart_version }}.tgz`
@@ -36,11 +50,12 @@ If the verification succeeds, install the chart:
 
 ```bash
 helm install trs-filer trs-filer-{{ chart_version }}.tgz -n namespace \
-    --create-namespace --set host_name=trs.example.org
+    --set host_name=trs.example.org \
+    --set mongodb.auth.existingSecret=trs-filer-mongodb-credentials
 ```
 
 `namespace` is the name of the namespace where TRS-Filer should be
-installed (`--create-namespace` creates it if it doesn't exist), and
+installed (created above, with the Secret), and
 `trs-filer` could be any name: it is referenced later for upgrading or
 uninstalling. Set further values with `--set` or with a file
 (`-f my-values.yaml`; `helm show values trs-filer-{{ chart_version }}.tgz`
@@ -53,8 +68,9 @@ whose default image is `elixircloud/trs-filer:latest`), edit `values.yaml` or
 pass your values as above, and run this from the `deployment` folder:
 
 ```bash
-helm install trs-filer . -n namespace --create-namespace \
-    --set host_name=trs.example.org
+helm install trs-filer . -n namespace \
+    --set host_name=trs.example.org \
+    --set mongodb.auth.existingSecret=trs-filer-mongodb-credentials
 ```
 
 ## Values
@@ -84,6 +100,8 @@ The values of `values.yaml`; the sections below describe them.
 | `mongodb.image` | `docker.io/library/mongo:7.0` | MongoDB image (see [MongoDB](#mongodb)). |
 | `mongodb.imagePullPolicy` | `Always` | Pull policy of the MongoDB image. |
 | `mongodb.dbName` | `""` | Name of the app's database; `trs-filer-db` if empty. |
+| `mongodb.auth.enabled` | `true` | Require credentials (see [Authentication](#authentication)). |
+| `mongodb.auth.existingSecret` | `""` | **Required** with authentication: name of the Secret with the keys `root-username`, `root-password`, `username` and `password`. |
 | `mongodb.volumeSize` | `1Gi` | Size of the PersistentVolumeClaim with the data (see [Persistence](#persistence)). |
 | `mongodb.resources` | 200m CPU; 512Mi memory | CPU and memory of MongoDB (request and limit). |
 | `mongodb.podSecurityContext` | non-root user and group 999, `fsGroup` 999 (applied on a mismatch only), `RuntimeDefault` seccomp | Security context of MongoDB's pod (see [Security contexts](#security-contexts)). |
@@ -94,12 +112,14 @@ The values of `values.yaml`; the sections below describe them.
 ## Security notes
 
 - **No authentication in the API**, see the warning at the top.
-- **MongoDB runs without authentication.** Its NetworkPolicy
-  (`mongodb.networkPolicy`, see [Network policies](#network-policies)) lets
-  only the app's pods connect to it, in clusters that enforce
-  NetworkPolicies; otherwise, every pod in the cluster reaches it through
-  its Service (`mongodb-<appName>`, port 27017; the chart exposes it nowhere
-  else). Don't run untrusted workloads in the namespace.
+- **MongoDB requires credentials** by default (see
+  [Authentication](#authentication)); the app connects as a user with
+  access to its database only. Its NetworkPolicy (`mongodb.networkPolicy`,
+  see [Network policies](#network-policies)) also lets only the app's pods
+  connect to it, in clusters that enforce NetworkPolicies; otherwise, every
+  pod in the cluster reaches its Service (`mongodb-<appName>`, port 27017;
+  the chart exposes it nowhere else). With `mongodb.auth.enabled: false`,
+  every pod that reaches it can read and change the data.
 - **The configuration Job has a ServiceAccount with rights in the
   namespace.** Its ServiceAccount (`<appName>-configurer`) is bound
   (RoleBinding `<appName>-configurer`) to the Role `<appName>-configurer`,
@@ -426,7 +446,10 @@ If you need to change any parameter of the deployment, the procedure is similar 
    changes (e.g., the [Security contexts](#security-contexts) and [Network
    policies](#network-policies)) don't take effect; pass your values file
    instead, or use `--reset-then-reuse-values` (Helm 3.14 or later), which
-   applies the new chart's defaults with your earlier values on top:
+   applies the new chart's defaults with your earlier values on top.
+   Charts that enable MongoDB's authentication (`mongodb.auth`) need its
+   Secret; for releases installed without it, create the Secret and the
+   users first (see [Authentication](#authentication)):
 ```
 helm upgrade trs-filer . -n namespace -f my-values.yaml
 ```
@@ -460,8 +483,16 @@ images before 6.0):
 
 ```bash
 kubectl exec deploy/mongodb-trs-filer -n namespace -- sh -c \
-  '"$(command -v mongosh || echo mongo)" --quiet --eval "printjson({version: db.version(), fcv: db.adminCommand({getParameter: 1, featureCompatibilityVersion: 1}).featureCompatibilityVersion})"'
+  '"$(command -v mongosh || echo mongo)" --quiet \
+  -u "$MONGO_INITDB_ROOT_USERNAME" -p "$MONGO_INITDB_ROOT_PASSWORD" \
+  --authenticationDatabase admin \
+  --eval "printjson({version: db.version(), fcv: db.adminCommand({getParameter: 1, featureCompatibilityVersion: 1}).featureCompatibilityVersion})"'
 ```
+
+(Without authentication, leave out `-u`, `-p` and
+`--authenticationDatabase`; the same holds for the other `mongosh`,
+`mongodump` and `mongorestore` commands of this page and the upgrade
+notes.)
 
 - **Upgrades** go one major version at a time (e.g., 6.0 → 7.0 → 8.0): set
   the image of the next version, wait for the rollout, then set the FCV to
@@ -477,6 +508,91 @@ kubectl exec deploy/mongodb-trs-filer -n namespace -- sh -c \
 The MongoDB Deployment uses the `Recreate` strategy, as the data volume can
 only be used by one pod: changing the image stops MongoDB, and an image that
 cannot read the data leaves it down until the image is changed back.
+
+### Authentication
+
+MongoDB requires credentials (`mongodb.auth.enabled`, by default `true`).
+The commands below use the default names (`trs_filer.appName`
+`trs-filer`, database `trs-filer-db`, Secret
+`trs-filer-mongodb-credentials`) and the namespace `namespace`; replace
+them with yours.
+They come from an existing Secret in the release's namespace, named by
+`mongodb.auth.existingSecret`, with four keys:
+
+- `root-username` and `root-password`: MongoDB's root user (in the
+  database `admin`), for administration (e.g., the commands in
+  [Version](#version)).
+- `username` and `password`: the app user, with the role `readWrite` on
+  the app's database (`mongodb.dbName`, by default `trs-filer-db`) only, in
+  which it is created; the app connects as this user (FOCA's
+  `MONGO_USERNAME` and `MONGO_PASSWORD`).
+
+Create the Secret before installing (see [Quick start](#quick-start));
+without a Secret name, rendering the chart fails. Values without
+`mongodb.auth.enabled` (e.g., upgrades with `--reuse-values` from older
+charts) enable authentication if they name a Secret. To run MongoDB without
+authentication, set `mongodb.auth.enabled: false` explicitly. Credentials
+never appear in values files or ConfigMaps.
+
+MongoDB creates both users when it starts with an empty volume (the root
+user by its image's entrypoint, the app user by the init script
+`create-app-user.js` of the ConfigMap `mongo-init-script-<appName>`), and
+enforces authentication on every start. Changing the Secret doesn't change
+the users: to change a password, change it in MongoDB first (e.g.,
+`db.getSiblingDB("trs-filer-db").changeUserPassword("trs-filer", "<new
+password>")` as the root user), then update the Secret and restart the app
+(`kubectl rollout restart deploy/trs-filer -n namespace`); its requests to
+the database fail until then. After changing the root user's password,
+also restart MongoDB (`kubectl rollout restart deploy/mongodb-trs-filer -n
+namespace`), whose environment the commands in this README use for the
+root user's credentials. Changing `mongodb.dbName` of an installed
+release needs a user in the new database too.
+
+**Existing databases without authentication** (installed by earlier
+charts, or with `mongodb.auth.enabled: false`): MongoDB enforces
+authentication as soon as the chart enables it, but creates no users on
+the existing volume, so the app can't connect. Create the users first,
+while authentication is still off:
+
+1. Create the Secret (see [Quick start](#quick-start)).
+2. Create the users in the running MongoDB, with the credentials of the
+   Secret; the commands read them from the Secret, so that they don't
+   appear in the shell's history. If the database has users already
+   (e.g., it ran with authentication before), check them instead (see
+   below) and create only missing ones, with the commands for a missing
+   app user below:
+
+    ```bash
+    kubectl get secret trs-filer-mongodb-credentials -n namespace -o json \
+      | jq -r '.data | map_values(@base64d)
+          | "db.getSiblingDB(\"admin\").createUser({user: \(."root-username" | tojson), pwd: \(."root-password" | tojson), roles: [\"root\"]});
+             db.getSiblingDB(\"trs-filer-db\").createUser({user: \(.username | tojson), pwd: \(.password | tojson), roles: [{role: \"readWrite\", db: \"trs-filer-db\"}]});"' \
+      | kubectl exec -i deploy/mongodb-trs-filer -n namespace -- mongosh --quiet
+    ```
+
+    Check that the app user exists (the list shows `trs-filer`):
+
+    ```bash
+    kubectl exec deploy/mongodb-trs-filer -n namespace -- mongosh --quiet \
+      --eval 'printjson(db.getSiblingDB("trs-filer-db").getUsers().users.map(u => u.user))'
+    ```
+
+3. Upgrade the release with `mongodb.auth.existingSecret` set (and
+   `mongodb.auth.enabled` not set to `false`).
+
+If the root user exists but the app user is missing (e.g., because the
+first start was interrupted), log in as the root user and create only the
+app user:
+
+```bash
+kubectl exec -it deploy/mongodb-trs-filer -n namespace -- sh -c 'mongosh \
+  -u "$MONGO_INITDB_ROOT_USERNAME" -p "$MONGO_INITDB_ROOT_PASSWORD" \
+  --authenticationDatabase admin'
+```
+
+```javascript
+db.getSiblingDB("trs-filer-db").createUser({user: "trs-filer", pwd: "<password>", roles: [{role: "readWrite", db: "trs-filer-db"}]})
+```
 
 ### Persistence
 

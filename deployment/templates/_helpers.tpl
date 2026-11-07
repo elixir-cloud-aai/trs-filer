@@ -70,3 +70,33 @@ the size */}}
 {}
 {{- end -}}
 {{- end -}}
+
+{{- /* "true" if MongoDB requires credentials (`mongodb.auth.enabled`);
+without the key, if a Secret is named (e.g., upgrades with `--reuse-values`
+from charts without `mongodb.auth` and `--set mongodb.auth.existingSecret`),
+otherwise not (values of older charts keep MongoDB as it was) */}}
+{{- define "trs-filer.mongodbAuth" -}}
+{{- $secret := dig "auth" "existingSecret" "" .Values.mongodb -}}
+{{- if dig "auth" "enabled" (not (empty $secret)) .Values.mongodb -}}
+true
+{{- end -}}
+{{- end -}}
+
+{{- /* Name of the existing Secret with MongoDB's credentials; fails if unset */}}
+{{- define "trs-filer.mongodbSecret" -}}
+{{- required "mongodb.auth.existingSecret must be set if mongodb.auth.enabled (see the chart's README, Authentication)" (dig "auth" "existingSecret" "" .Values.mongodb) -}}
+{{- end -}}
+
+{{- /* Environment variables from keys of the Secret with MongoDB's
+credentials; call with a dict of the root context (`root`) and a dict
+mapping variable names to keys (`vars`), rendered in alphabetical order */}}
+{{- define "trs-filer.mongodbSecretEnv" -}}
+{{- $secret := include "trs-filer.mongodbSecret" .root -}}
+{{- range $name, $key := .vars }}
+- name: {{ $name }}
+  valueFrom:
+    secretKeyRef:
+      name: {{ $secret | quote }}
+      key: {{ $key }}
+{{- end }}
+{{- end -}}

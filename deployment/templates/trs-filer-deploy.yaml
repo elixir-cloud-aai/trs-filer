@@ -33,6 +33,14 @@ spec:
             value: {{ tpl (default "trs-filer-db" .Values.mongodb.dbName) . }}
           - name: MONGO_HOST
             value: mongodb-{{ .Values.trs_filer.appName }}
+          {{- if include "trs-filer.mongodbAuth" . }}
+          # The app user's credentials, which FOCA puts in the connection
+          # string; the user is in the app's database (`MONGO_DBNAME`)
+          {{- include "trs-filer.mongodbSecretEnv" (dict "root" . "vars" (dict
+            "MONGO_USERNAME" "username"
+            "MONGO_PASSWORD" "password"
+          )) | trim | nindent 10 }}
+          {{- end }}
           # The config that the Job renders, merged into the base config
           - name: FOCA_CONFIG_OVERLAY
             value: /etc/trs-filer/config.yaml

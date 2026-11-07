@@ -147,13 +147,16 @@ The [Helm chart](deployment.md) is in `deployment/`. Check changes with
 [Helm](https://helm.sh/docs/intro/install/), e.g.:
 
 ```bash
-helm lint deployment --set host_name=trs.example.org
-helm template trs-filer deployment --set host_name=trs.example.org
+helm lint deployment --strict -f deployment/ci/test-values.yaml
+helm template trs-filer deployment -f deployment/ci/test-values.yaml
 ```
 
 CI's job "Chart" (`.github/workflows/ci.yml`) lints the chart as the
-release workflow does (`helm lint deployment --strict`), and runs the tests
-that render it (`tests/test_chart.py`) and that run the script of its
+release workflow does, with the values that users must pass (e.g., the
+name of MongoDB's Secret):
+`helm lint deployment --strict -f deployment/ci/test-values.yaml`. It
+also runs the tests that render it (`tests/test_chart.py`) and that run
+the script of its
 config Job, `update-config-map.sh`, against a stub of the Kubernetes API
 server (`tests/test_update_config_map.py`; with `jq` and the Python `yq`
 of the image, a dev dependency). They check the rights of the Job's Role,
@@ -269,7 +272,7 @@ python scripts/check_release_pins.py
 [ ! -f docs/releases/X.Y.Z.md ] || python scripts/release_notes.py check docs/releases/X.Y.Z.md
 readme="$(mktemp -d)/README.md" && cp deployment/README.md "${readme}"
 python scripts/chart_readme.py "${readme}" vX.Y.Z  # links of the chart
-helm lint deployment --strict  # as `prepare` lints and packages the chart
+helm lint deployment --strict -f deployment/ci/test-values.yaml  # as `prepare`
 helm package deployment --version X.Y.Z --app-version X.Y.Z -d "$(mktemp -d)"
 git push origin <sha>:main  # fails unless it is a fast-forward
 git tag -s vX.Y.Z <sha> -m "vX.Y.Z"
