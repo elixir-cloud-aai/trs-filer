@@ -111,20 +111,28 @@ TOOLS = pytest.mark.skipif(
 
 
 def _run(
-    tmp_path: Path, env: dict[str, str]
+    tmp_path: Path,
+    env: dict[str, str],
+    namespace: str = NAMESPACE,
+    bare_python: bool = False,
 ) -> tuple[subprocess.CompletedProcess[str], list[dict[str, Any]]]:
     """Run the script against the stub API server.
+
+    It runs in `tmp_path`, so that Python doesn't find the package in the
+    working directory.
 
     Args:
         tmp_path: Temporary directory.
         env: Environment variables of the script, besides `PATH`.
+        namespace: Content of the service account's namespace file.
+        bare_python: Whether `python3` runs without `site-packages` (`-S`).
 
     Returns:
         The completed process, and the requests to the API server.
     """
     account = tmp_path / "serviceaccount"
     account.mkdir()
-    (account / "namespace").write_text(NAMESPACE, encoding="utf-8")
+    (account / "namespace").write_text(namespace, encoding="utf-8")
     (account / "token").write_text(TOKEN, encoding="utf-8")
     work = tmp_path / "work"
     work.mkdir()
@@ -141,11 +149,18 @@ def _run(
     curl = stubs / "curl"
     curl.write_text(f"#!{sys.executable}\n{CURL_STUB}", encoding="utf-8")
     curl.chmod(0o755)
+    if bare_python:
+        python = stubs / "python3"
+        python.write_text(
+            f'#!/bin/sh\nexec "{sys.executable}" -S "$@"\n', encoding="utf-8"
+        )
+        python.chmod(0o755)
     log = tmp_path / "curl.jsonl"
     result = subprocess.run(  # noqa: S603 (fixed executable, no shell)
         ["/bin/sh", str(script)],
         capture_output=True,
         check=False,
+        cwd=tmp_path,
         text=True,
         env={
             "PATH": f"{stubs}{os.pathsep}{os.environ['PATH']}",
@@ -243,7 +258,7 @@ def test_update_config_map_no_config(tmp_path: Path) -> None:
 
 
 @pytest.mark.parametrize(
-    "name", ["CONFIG_MAP_NAME", "APISERVER", "APP_CONFIG_PATH", "HOST_NAME", "APP_NAME"]
+    "name", ["CONFIG_MAP_NAME", "APISERVER", "HOST_NAME", "APP_NAME"]
 )
 def test_update_config_map_required(tmp_path: Path, name: str) -> None:
     """Each required variable missing fails the script before any request.
@@ -257,23 +272,62 @@ def test_update_config_map_required(tmp_path: Path, name: str) -> None:
     assert requests == []
 
 
-def test_config_path_python_version() -> None:
-    """The Job's config path is in the site-packages of the image's Python.
+@TOOLS
+def test_update_config_map_installed_config(tmp_path: Path) -> None:
+    """Without `APP_CONFIG_PATH`, the script uses the installed package's config.
 
-    The base image's Python changes every year (see "Python versions" in
-    `docs/development.md`); a stale path fails the Job (exit code 4).
+    So the Job needs no path with the image's Python version in it. The
+    package is found via `PYTHONPATH`, as in the image via `site-packages`.
+
+    Args:
+        tmp_path: Temporary directory.
     """
-    image = re.search(
-        r"^FROM elixircloud/foca:[^-@\s]+-py(?P<version>3\.\d+)@",
-        (ROOT / "Dockerfile").read_text(encoding="utf-8"),
-        flags=re.MULTILINE,
+    result, requests = _run(tmp_path, _env(APP_CONFIG_PATH=None, PYTHONPATH=str(ROOT)))
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert f"APP CONFIG PATH: {CONFIG}" in result.stdout
+    config = yaml.safe_load(requests[1]["body"]["data"]["config.yaml"])
+    assert config["custom"]["service"]["external_host"] == "trs.example.org"
+
+
+@TOOLS
+def test_update_config_map_no_package(tmp_path: Path) -> None:
+    """Without `APP_CONFIG_PATH` and the package, the script fails (exit 4).
+
+    It fails before any request. Python runs without `site-packages`, where
+    the dev environment has the package.
+
+    Args:
+        tmp_path: Temporary directory.
+    """
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    result, requests = _run(
+        tmp_path,
+        _env(APP_CONFIG_PATH=None, PYTHONPATH=str(empty), PYTHONNOUSERSITE="1"),
+        bare_python=True,
     )
-    assert image, "No Python version in the base image tag of the Dockerfile"
-    path = re.search(
-        r"name: APP_CONFIG_PATH\s+value: (?P<path>\S+)",
-        JOB.read_text(encoding="utf-8"),
-    )
-    assert path, "No APP_CONFIG_PATH in the config Job"
-    assert path["path"] == (
-        f"/usr/local/lib/python{image['version']}/site-packages/trs_filer/config.yaml"
-    )
+    assert result.returncode == 4, result.stdout + result.stderr
+    assert requests == []
+
+
+def test_update_config_map_no_namespace(tmp_path: Path) -> None:
+    """Without the service account's namespace, the script fails (exit 6).
+
+    It fails before any request.
+
+    Args:
+        tmp_path: Temporary directory.
+    """
+    result, requests = _run(tmp_path, _env(), namespace="")
+    assert result.returncode == 6, result.stdout + result.stderr
+    assert requests == []
+
+
+def test_job_sets_no_config_path() -> None:
+    """The Job leaves the config path to the script.
+
+    A path with the image's Python version in it (`site-packages`) would
+    break the Job with the yearly rotation of the base image's Python (see
+    "Python versions" in `docs/development.md`).
+    """
+    assert "APP_CONFIG_PATH" not in JOB.read_text(encoding="utf-8")

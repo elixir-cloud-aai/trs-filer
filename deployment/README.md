@@ -88,13 +88,15 @@ The values of `values.yaml`; the sections below describe them.
   the cluster through its Service (`mongodb-<appName>`, port 27017; the
   chart exposes it nowhere else). Restrict access to the namespace with
   NetworkPolicies and don't run untrusted workloads in it.
-- **The configuration Job has namespace admin rights.** Its ServiceAccount
-  (`<appName>-configurer`) is bound to the ClusterRole `admin` in the
-  namespace (RoleBinding `admin-<appName>-configurer`), so that it can write
-  the ConfigMap `app-config-<appName>`. It runs on every install and
-  upgrade; the chart needs permission to create these resources, and the
-  rights exist as long as the release does. This stays until the chart uses
-  FOCA's library chart ([#135](https://github.com/elixir-cloud-aai/trs-filer/issues/135)).
+- **The configuration Job has a ServiceAccount with rights in the
+  namespace.** Its ServiceAccount (`<appName>-configurer`) is bound
+  (RoleBinding `<appName>-configurer`) to the Role `<appName>-configurer`,
+  which allows only what the Job does: read and patch the ConfigMap
+  `app-config-<appName>`, and list and delete pods, to restart the app. It
+  runs on every install and upgrade; the chart needs permission to create
+  these resources, and the rights exist as long as the release does. This
+  stays until the chart uses FOCA's library chart
+  ([#135](https://github.com/elixir-cloud-aai/trs-filer/issues/135)).
 - **The app trusts `X-Forwarded-*` headers from every address**
   (`FORWARDED_ALLOW_IPS="*"`), so that links in responses keep `https` behind
   the ingress or route that terminates TLS. Every workload that can reach the

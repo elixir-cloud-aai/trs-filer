@@ -4,11 +4,19 @@
 #
 ###############################################################################
 
-if [ -z "$CONFIG_MAP_NAME" -o -z "$APISERVER" -o -z "$APP_CONFIG_PATH" -o -z "$HOST_NAME" -o -z "$APP_NAME" ];
+if [ -z "$CONFIG_MAP_NAME" -o -z "$APISERVER" -o -z "$HOST_NAME" -o -z "$APP_NAME" ];
 then
-	echo "CONFIG_MAP_NAME, APISERVER, APP_CONFIG_PATH, HOSTNAME, and APP_NAME env vars required"
+	echo "CONFIG_MAP_NAME, APISERVER, HOST_NAME, and APP_NAME env vars required"
 	env
 	exit 1
+fi
+
+# The base config, installed with the package; found via the package, so
+# that no path depends on the image's Python version. An empty path, if the
+# package isn't installed, fails below (exit 4)
+if [ -z "$APP_CONFIG_PATH" ];
+then
+  APP_CONFIG_PATH=$(python3 -c 'import importlib.util, os; spec = importlib.util.find_spec("trs_filer"); print(os.path.join(spec.submodule_search_locations[0], "config.yaml") if spec else "")')
 fi
 
 if [ -z "$MONGO_HOST" ];
@@ -30,7 +38,7 @@ if [ -z "$NAMESPACE" ];
 then
   echo "ERROR: Cannot get the namespace from '/var/run/secrets/kubernetes.io'" >&2
   echo "This script is meant to be run inside a Kubernetes pod only." >&2
-  exit -1
+  exit 6
 fi
 
 echo "Current Kubernetes namespace: $NAMESPACE"; echo
