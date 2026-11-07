@@ -94,7 +94,8 @@ The values of `values.yaml`; the sections below describe them.
   which allows only what the Job does: read and patch the ConfigMap
   `app-config-<appName>`, and list and delete pods, to restart the app. The
   pod rights cover every pod in the namespace (pod names are generated, so
-  the Role can't name them), though the Job deletes only the app's pods. It
+  the Role can't name them), though the Job deletes only the app's pods
+  (label `app: <appName>`). It
   runs on every install and upgrade; the chart needs permission to create
   these resources, and the rights exist as long as the release does. If
   reading or patching the ConfigMap or listing pods fails (e.g., the API

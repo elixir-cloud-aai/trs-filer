@@ -40,7 +40,20 @@ CONFIG_MAP_URL = (
     f"https://{APISERVER}/api/v1/namespaces/{NAMESPACE}/configmaps/{CONFIG_MAP}"
 )
 PODS_URL = f"https://{APISERVER}/api/v1/namespaces/{NAMESPACE}/pods/"
-PODS = ["trs-filer-5d9c-x1", "trs-filer-5d9c-x2", "mongodb-trs-filer-0", "other-1"]
+APP_PODS_URL = (
+    f"https://{APISERVER}/api/v1/namespaces/{NAMESPACE}/pods?labelSelector=app%3D"
+    "trs-filer"
+)
+# Pods of the namespace and their label `app`: the app's, MongoDB's, and
+# those of other workloads, one of them with a name that starts with the
+# app's
+PODS = {
+    "trs-filer-5d9c-x1": "trs-filer",
+    "trs-filer-5d9c-x2": "trs-filer",
+    "mongodb-trs-filer-0": "mongodb-trs-filer",
+    "trs-filer-tools-7f8d-y1": "trs-filer-tools",
+    "other-1": "other",
+}
 # Stub of `curl`: records each request (method, URL, headers, body) as a
 # JSON line in `$CURL_LOG`, and answers like the API server; it refuses
 # (`403`) requests whose method and URL end with `$CURL_REFUSE` (e.g.,
@@ -91,9 +104,17 @@ elif request["method"] == "GET" and "/configmaps/" in request["url"]:
         {"kind": "ConfigMap", "metadata": {"name": "app-config-trs-filer"},
          "data": {"config.yaml": "# Empty"}}
     )
-elif request["method"] == "GET" and request["url"].endswith("/pods/"):
+elif request["method"] == "GET" and "/pods?labelSelector=app%3D" in request["url"]:
+    app = request["url"].split("labelSelector=app%3D", 1)[1]
+    pods = dict(pod.split("=") for pod in os.environ["PODS"].split())
     answer = json.dumps(
-        {"items": [{"metadata": {"name": name}} for name in os.environ["PODS"].split()]}
+        {
+            "items": [
+                {"metadata": {"name": name, "labels": {"app": label}}}
+                for name, label in pods.items()
+                if label == app
+            ]
+        }
     )
 if output is not None and output != "/dev/null":
     with open(output, "w", encoding="utf-8") as file:
@@ -207,7 +228,7 @@ def _run(
         env={
             "PATH": f"{stubs}{os.pathsep}{os.environ['PATH']}",
             "CURL_LOG": str(log),
-            "PODS": " ".join(PODS),
+            "PODS": " ".join(f"{name}={label}" for name, label in PODS.items()),
             **env,
         },
     )
@@ -255,7 +276,7 @@ def test_update_config_map(tmp_path: Path) -> None:
     assert [(r["method"], r["url"]) for r in requests] == [
         ("GET", CONFIG_MAP_URL),
         ("PATCH", CONFIG_MAP_URL),
-        ("GET", PODS_URL),
+        ("GET", APP_PODS_URL),
         ("DELETE", f"{PODS_URL}trs-filer-5d9c-x1"),
         ("DELETE", f"{PODS_URL}trs-filer-5d9c-x2"),
     ]
@@ -371,7 +392,7 @@ def test_update_config_map_no_namespace(tmp_path: Path) -> None:
     [
         (f"GET /configmaps/{CONFIG_MAP}", 7, 1),
         (f"PATCH /configmaps/{CONFIG_MAP}", 8, 2),
-        ("GET /pods/", 9, 3),
+        ("GET /pods?labelSelector=app%3Dtrs-filer", 9, 3),
     ],
 )
 def test_update_config_map_refused(

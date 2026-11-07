@@ -49,7 +49,9 @@ clients and custom configs:
   too. With images of this release or later, it fails if the API server
   refuses reading or patching the ConfigMap or listing pods (before, it
   reported success): copies of the chart that add their own steps to the
-  Job may need more rights in the Role.
+  Job may need more rights in the Role. The Job restarts the pods with the
+  label `app: <appName>` (the app's), no longer all pods whose names start
+  with `<appName>-`.
 
 ## Configuration
 

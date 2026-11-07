@@ -84,6 +84,9 @@ curl -sS --fail \
   -d @/tmp/configmap-patch.json "https://$APISERVER/api/v1/namespaces/${NAMESPACE}/configmaps/${CONFIG_MAP_NAME}" \
   -o /dev/null || exit 8
 
+# The app's pods, selected by their label `app` (set by the app's
+# Deployment), not by name, so that pods of other workloads whose names
+# start with the app's name are kept
 echo " * Deleting current $APP_NAME pod"
 curl -sS --fail \
   --cacert /var/run/secrets/kubernetes.io/serviceaccount/ca.crt \
@@ -91,8 +94,8 @@ curl -sS --fail \
   -X GET \
   -H "Accept: application/json, */*" \
   -o /tmp/pods.json \
-  "https://$APISERVER/api/v1/namespaces/${NAMESPACE}/pods/" || exit 9
-jq '.items | .[] | .metadata.name ' -r /tmp/pods.json | grep "^${APP_NAME}-" | \
+  "https://$APISERVER/api/v1/namespaces/${NAMESPACE}/pods?labelSelector=app%3D${APP_NAME}" || exit 9
+jq '.items | .[] | .metadata.name ' -r /tmp/pods.json | \
 while read pod;
 do
   echo "   - Deleting: $pod"
