@@ -303,13 +303,13 @@ def test_no_request_body_size_limit(
         ),
         (
             "custom:\n  access_control:\n    tool_classes: controlled\n",
-            r"access_control\.tool_classes: Value error, this mode of adding "
-            r"tool classes is not supported yet; only 'open' is",
+            r"access_control\.tool_classes: Value error, only the mode 'open' "
+            r"of adding tool classes is supported yet",
         ),
         (
             "custom:\n  access_control:\n    tool_classes: moderated\n",
-            r"access_control\.tool_classes: Value error, this mode of adding "
-            r"tool classes is not supported yet; only 'open' is",
+            r"access_control\.tool_classes: Value error, only the mode 'open' "
+            r"of adding tool classes is supported yet",
         ),
     ],
     ids=[
@@ -415,7 +415,12 @@ def test_register_tool_class(client: FlaskClient) -> None:
 
 
 def test_tool_classes_open(app: App, client: FlaskClient) -> None:
-    """In mode `open` (the default), registering tools adds new tool classes.
+    """In mode `open` (the default), anybody adds tool classes.
+
+    Tool classes are added explicitly (`POST /toolClasses`) or by registering
+    a tool with a new tool class. The registration doesn't read the mode yet,
+    as `open` is the only one supported; extend this test when the other
+    modes are (#248).
 
     Args:
         app: FOCA app.
@@ -430,6 +435,14 @@ def test_tool_classes_open(app: App, client: FlaskClient) -> None:
     response = client.get(f"{BASE_PATH}/toolClasses")
     assert response.status_code == 200
     assert tool["toolclass"] in response.get_json()
+    response = client.post(
+        f"{BASE_PATH}/toolClasses",
+        json={"name": "Explicit", "description": "Added explicitly."},
+    )
+    assert response.status_code == 200
+    tool_class_id = response.get_json()
+    response = client.get(f"{BASE_PATH}/toolClasses")
+    assert tool_class_id in [item["id"] for item in response.get_json()]
 
 
 # Methods of operations in OpenAPI path items

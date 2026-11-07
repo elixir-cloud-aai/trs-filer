@@ -437,7 +437,7 @@ class AccessControlConfig(FOCABaseConfig):
         """
         if value != "open":
             raise ValueError(
-                "this mode of adding tool classes is not supported yet; only 'open' is"
+                "only the mode 'open' of adding tool classes is supported yet"
             )
         return value
 

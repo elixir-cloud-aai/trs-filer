@@ -140,12 +140,13 @@ Registry](https://cloud-registry.readthedocs.io/en/latest/configuration/#service
 TRS-Filer has no users and admins yet (see [Access
 control](access-control.md)), so `open` is the only mode it supports for
 now: the app refuses to start with `controlled` or `moderated`, with an
-error that names the setting (`custom.access_control.tool_classes: Value
-error, this mode of adding tool classes is not supported yet; only 'open'
-is`). For the same reason, it doesn't limit the number of tool classes that
-no tool has per user, as Cloud Registry does for service types: anybody who
-may write can add tool classes without bound, so restrict writes in front of
-the app, and delete unwanted tool classes (`DELETE /toolClasses/{id}`).
+error that the custom config doesn't match its model, caused by one that
+names the setting (`access_control.tool_classes: Value error, only the
+mode 'open' of adding tool classes is supported yet`).
+For the same reason, it doesn't limit the number of tool classes that no
+tool has per user, as Cloud Registry does for service types: anybody who
+may write can add tool classes without bound, so restrict writes in front
+of the app, and delete unwanted tool classes (`DELETE /toolClasses/{id}`).
 
 For example, in a config overlay:
 

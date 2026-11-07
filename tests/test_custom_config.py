@@ -36,7 +36,7 @@ def test_access_control_config_unsupported_mode(mode: str) -> None:
     Args:
         mode: Mode of adding tool classes.
     """
-    with pytest.raises(pydantic.ValidationError, match="not supported yet"):
+    with pytest.raises(pydantic.ValidationError, match="only the mode 'open'"):
         AccessControlConfig(tool_classes=mode)  # type: ignore[arg-type]
 
 
@@ -47,5 +47,8 @@ def test_access_control_config_invalid_mode(mode: object) -> None:
     Args:
         mode: Invalid mode of adding tool classes.
     """
-    with pytest.raises(pydantic.ValidationError, match="open"):
+    with pytest.raises(
+        pydantic.ValidationError,
+        match="Input should be 'open', 'controlled' or 'moderated'",
+    ):
         AccessControlConfig(tool_classes=mode)  # type: ignore[arg-type]
