@@ -343,8 +343,8 @@ def test_mongodb_security_context() -> None:
 def test_security_context_openshift(kind: str, name: str, fs_group: bool) -> None:
     """On OpenShift, which assigns user and group IDs, the chart sets none.
 
-    Also not if set in the values (here: `runAsUser` of the app and the
-    Job); the other settings are kept.
+    Also not if set in the values (here: `runAsUser` of all three); the
+    other settings are kept.
 
     Args:
         kind: Kind of the workload.
@@ -356,6 +356,8 @@ def test_security_context_openshift(kind: str, name: str, fs_group: bool) -> Non
         OPENSHIFT_SECURITY_API,
         "--set",
         "trs_filer.podSecurityContext.runAsUser=2000",
+        "--set",
+        "mongodb.podSecurityContext.runAsUser=2000",
     )
     pod = _pod(resources, kind, name)
     expected: dict[str, Any] = {

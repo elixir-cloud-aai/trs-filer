@@ -85,7 +85,7 @@ The values of `values.yaml`; the sections below describe them.
 | `mongodb.dbName` | `""` | Name of the app's database; `trs-filer-db` if empty. |
 | `mongodb.volumeSize` | `1Gi` | Size of the PersistentVolumeClaim with the data (see [Persistence](#persistence)). |
 | `mongodb.resources` | 200m CPU; 512Mi memory | CPU and memory of MongoDB (request and limit). |
-| `mongodb.podSecurityContext` | non-root user and group 999, `RuntimeDefault` seccomp | Security context of MongoDB's pod (see [Security contexts](#security-contexts)). |
+| `mongodb.podSecurityContext` | non-root user and group 999, `fsGroup` 999 (applied on a mismatch only), `RuntimeDefault` seccomp | Security context of MongoDB's pod (see [Security contexts](#security-contexts)). |
 | `mongodb.securityContext` | no privilege escalation, no capabilities, read-only root file system | Security context of MongoDB's container. |
 | `mongodb.tmpSizeLimit` | `64Mi` | Size limit of MongoDB's `emptyDir` at `/tmp`; `null` for none. |
 | `mongodb.networkPolicy.enabled` | `true` | Create a NetworkPolicy that lets only the app connect to MongoDB (see [Network policies](#network-policies)). |
