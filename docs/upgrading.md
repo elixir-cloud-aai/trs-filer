@@ -362,6 +362,10 @@ Since the chart of `v0.3.0`, the values changed:
   release's image), no longer `lvarin/trs-filer:0.1.0`.
 - `trs_filer.resources` and `mongodb.resources` set the requests and limits
   of the app and of MongoDB.
+- `trs_filer.forwardedAllowIps` (by default `*`, as before; also kept by
+  upgrades with `--reuse-values`) sets the addresses whose `X-Forwarded-*`
+  headers the app trusts; narrow it (see [Forwarded
+  headers](deployment.md#forwarded-headers)).
 - `mongodb.image` is `docker.io/library/mongo:7.0` (was `mongo:3.6`, and
   `mongo:noble` on `dev`), pulled as `mongodb.imagePullPolicy` says;
   `mongodb.dbName` sets the app's database (`trs-filer-db` if empty).

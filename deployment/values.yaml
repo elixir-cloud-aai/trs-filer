@@ -37,12 +37,12 @@ trs_filer:
     annotations: {}
   image: elixircloud/trs-filer:latest
   appName: trs-filer
-  # Addresses (or networks in CIDR notation), comma-separated, whose
-  # `X-Forwarded-*` headers the app trusts (Gunicorn's
+  # Addresses (or networks in CIDR notation), comma-separated or as a list,
+  # whose `X-Forwarded-*` headers the app trusts (Gunicorn's
   # `FORWARDED_ALLOW_IPS`), so that its links keep `https` behind the
   # ingress controller or router that terminates TLS; `*` trusts every
   # address. Narrow it to those of the ingress controller or router (see
-  # deployment/README.md, Forwarded headers)
+  # deployment/README.md, Forwarded headers); an invalid entry stops the app
   forwardedAllowIps: "*"
   # The image's Gunicorn defaults (one worker with four threads) peak at
   # about 175 MB (worker and master) under concurrent registrations; raise

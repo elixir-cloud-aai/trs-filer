@@ -7,3 +7,19 @@ charts without `trs_filer.route` keep the Route */}}
 true
 {{- end -}}
 {{- end -}}
+
+{{- /* Addresses whose `X-Forwarded-*` headers the app trusts (Gunicorn's
+`FORWARDED_ALLOW_IPS`), from `trs_filer.forwardedAllowIps`: a string or a
+list, joined with commas; every address (`*`) if unset (`dig`, so that
+upgrades with `--reuse-values` from charts without the value keep the
+earlier behaviour). Fails if empty, as Gunicorn would trust no address */}}
+{{- define "trs-filer.forwardedAllowIps" -}}
+{{- $ips := dig "forwardedAllowIps" "*" .Values.trs_filer -}}
+{{- if kindIs "slice" $ips -}}
+{{- $ips = join "," $ips -}}
+{{- end -}}
+{{- if not $ips -}}
+{{- fail "trs_filer.forwardedAllowIps must not be empty: set the addresses of the ingress controller or router, or \"*\" for every address" -}}
+{{- end -}}
+{{- $ips -}}
+{{- end -}}

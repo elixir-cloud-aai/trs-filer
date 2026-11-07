@@ -37,11 +37,10 @@ spec:
           - name: FOCA_CONFIG_OVERLAY
             value: /etc/trs-filer/config.yaml
           # Trust `X-Forwarded-*` of the ingress (or route), which terminates
-          # TLS, so that links in responses keep `https`; from every address
-          # if unset (`dig`, so that upgrades with `--reuse-values` from
-          # charts without the value keep it)
+          # TLS, so that links in responses keep `https` (see
+          # `trs-filer.forwardedAllowIps`)
           - name: FORWARDED_ALLOW_IPS
-            value: {{ dig "forwardedAllowIps" "*" .Values.trs_filer | quote }}
+            value: {{ include "trs-filer.forwardedAllowIps" . | quote }}
         ports:
         - containerPort: 8080
           protocol: TCP

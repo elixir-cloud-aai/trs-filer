@@ -67,7 +67,7 @@ The values of `values.yaml`; the sections below describe them.
 | `apiServer` | `kubernetes.default.svc:443` | Address of the Kubernetes API server, which the configuration Job writes the ConfigMap to. |
 | `trs_filer.image` | `elixircloud/trs-filer:latest` | Image of the app (released charts set the release's image). |
 | `trs_filer.appName` | `trs-filer` | Name of the app's Deployment and Service; names the other resources (e.g., `mongodb-<appName>`). Don't change it for an installed release (see [Persistence](#persistence)). |
-| `trs_filer.forwardedAllowIps` | `"*"` | Addresses or networks (comma-separated) whose `X-Forwarded-*` headers the app trusts; `*` for every address (see [Forwarded headers](#forwarded-headers)). |
+| `trs_filer.forwardedAllowIps` | `"*"` | Addresses or networks (comma-separated, or a list) whose `X-Forwarded-*` headers the app trusts; `*` for every address (see [Forwarded headers](#forwarded-headers)). |
 | `trs_filer.resources` | 100m CPU; 256Mi memory request, 384Mi limit | CPU and memory of the app (see [Resources](#resources)). |
 | `trs_filer.ingress.enabled` | `true` | Create an Ingress (see [Ingress and Route](#ingress-and-route)). |
 | `trs_filer.ingress.className` | `""` | Ingress class; the cluster's default class if empty. |
@@ -226,21 +226,31 @@ headers from the addresses in `trs_filer.forwardedAllowIps` (Gunicorn's
 `next_page`, `last_page` and `self_link` headers of tool listings) keep
 `https`. By default (`*`), it trusts them from every address, which works
 with any ingress controller or router, but lets every workload that can
-reach the app's Service or pod set the scheme and host of these links.
+reach the app's Service or pod set the scheme (and the path prefix) of
+these links. The host of the links comes from the `Host` header, which
+this value doesn't cover: every client that reaches the pod sets it.
 
-Narrow it to the addresses of the ingress controller's or router's pods,
-comma-separated, as addresses or networks in CIDR notation, e.g., the pod
-network of their nodes:
+Narrow it to the addresses that the ingress controller or router connects
+from, as addresses or networks in CIDR notation (network addresses, e.g.,
+`192.0.2.0/24`, not `192.0.2.1/24`), comma-separated or as a list, e.g.,
+the nodes' subnet if the controller runs in the host network:
 
 ```yaml
 trs_filer:
-  forwardedAllowIps: "10.128.0.0/14"
+  forwardedAllowIps:
+    - 192.0.2.0/24
 ```
 
-Check afterwards that a listing through the Ingress or Route still gives
-`https` links (e.g., `curl -sI
-'https://trs.example.org/ga4gh/trs/v2/tools?limit=1'` and its `self_link`
-header). With an address that doesn't match, the links get `http`.
+A network trusts every address in it: the pod network of the cluster
+(e.g., `10.128.0.0/14` on OpenShift) contains every pod, so it protects
+little. Pods get new addresses when they are rescheduled, so list
+networks rather than pod addresses, and restrict who can reach the app's
+pods with NetworkPolicies. An invalid entry stops the app (Gunicorn exits
+on startup); an empty value fails rendering. Check afterwards that a
+listing through the Ingress or Route still gives `https` links (e.g.,
+`curl -sI 'https://trs.example.org/ga4gh/trs/v2/tools?limit=1'` and its
+`self_link` header). With an address that doesn't match, the links get
+`http`.
 
 ## Configuration
 
