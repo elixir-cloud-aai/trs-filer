@@ -1,6 +1,6 @@
 # Everything that must pass on pull requests and pushes to `dev`: the pull
-# request title, lint, build, test, lint and test the Helm chart, build the
-# docs, run the app with Docker Compose, check the
+# request title, lint, build, test, lint and test the Helm chart, install it
+# on a kind cluster, build the docs, run the app with Docker Compose, check the
 # readiness of a release in preparation, scan the Docker image for known
 # vulnerabilities, and, on pushes, push the Docker image by digest (with
 # SBOM and provenance attestations), scan exactly that digest, then attest,
@@ -241,7 +241,8 @@ jobs:
         run: |
           uv sync --locked --extra dev --python "$(which python)"
           echo "${PWD}/.venv/bin" >> "$GITHUB_PATH"
-      # Same Helm version as in `release.yml` (bump both by hand)
+      # Same Helm version as in `release.yml` and the other chart job (bump
+      # all by hand)
       - name: Set up Helm
         uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
         with:
@@ -263,6 +264,160 @@ jobs:
           jq --version
           yq --version
           pytest -W ignore::DeprecationWarning tests/test_chart.py tests/test_update_config_map.py
+
+  # The chart as deployed in a cluster: installs it on kind (the defaults,
+  # with the values of `deployment/ci/test-values.yaml`: a host name and the
+  # Secret of MongoDB's credentials, created here with random passwords),
+  # with the image built from the commit, loaded into the cluster's node
+  # (pushed nowhere, so the job needs no secrets and runs for pull requests
+  # from forks), waits for the config Job, and checks the API through a
+  # port forward (the Ingress has no controller on kind): the service info,
+  # and the registration and retrieval of a tool, whose URL has the host
+  # name that the config Job writes to the app's config. See "Helm chart" in
+  # `docs/development.md` for running it locally
+  chart-install:
+    name: Chart install
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CLUSTER: trs-filer
+      NAMESPACE: trs-filer
+      # A local name, which no registry serves: the chart uses the image
+      # loaded into the node (`imagePullPolicy: Never`)
+      IMAGE: trs-filer:ci
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # Same Helm version as in `release.yml` and the other chart job (bump
+      # all by hand)
+      - name: Set up Helm
+        uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+        with:
+          version: v3.22.1
+      # kind version as in TESK's and FOCA's chart installs (not bumped by
+      # Dependabot; update manually)
+      - name: Create kind cluster
+        uses: helm/kind-action@1544676c07bb3570fcb70166beaa07c4528fd4aa # v1.15.1
+        with:
+          version: v0.33.0
+          cluster_name: ${{ env.CLUSTER }}
+      # The version is passed as in `smoke` (the build gets no Git metadata)
+      - name: Build and load image
+        run: |
+          docker build --build-arg SETUPTOOLS_SCM_PRETEND_VERSION=0.0.0+kind \
+            --tag "${IMAGE}" .
+          kind load docker-image "${IMAGE}" --name "${CLUSTER}"
+      # The Secret named in `deployment/ci/test-values.yaml`; `--wait-for-jobs`
+      # waits for the config Job, which restarts the app with its config
+      - name: Install chart
+        run: |
+          kubectl create namespace "${NAMESPACE}"
+          kubectl create secret generic trs-filer-mongodb-credentials \
+            -n "${NAMESPACE}" \
+            --from-literal=root-username=root \
+            --from-literal=root-password="$(openssl rand -hex 24)" \
+            --from-literal=username=trs-filer \
+            --from-literal=password="$(openssl rand -hex 24)"
+          helm install trs-filer deployment -n "${NAMESPACE}" \
+            -f deployment/ci/test-values.yaml \
+            --set trs_filer.image="${IMAGE}" \
+            --set trs_filer.imagePullPolicy=Never \
+            --wait --wait-for-jobs --timeout 600s
+      - name: Check API
+        env:
+          API: http://localhost:8080/ga4gh/trs/v2
+          # `host_name` of `deployment/ci/test-values.yaml`
+          HOST: trs.example.org
+        run: |
+          body="${RUNNER_TEMP}/body.json"
+          log="${RUNNER_TEMP}/port-forward.log"
+          # Wait until the pods that the config Job deleted are gone, so that
+          # the port forward reaches the restarted app
+          for _ in $(seq 60); do
+            if ! kubectl get pods -n "${NAMESPACE}" -l app=trs-filer -o json \
+                | jq -e 'any(.items[]; .metadata.deletionTimestamp)' > /dev/null; then
+              break
+            fi
+            sleep 2
+          done
+          kubectl rollout status deployment/trs-filer -n "${NAMESPACE}" \
+            --timeout=300s
+          pid=""
+          trap '[[ -n "${pid}" ]] && kill "${pid}" 2> /dev/null || true' EXIT
+          # The app has no readiness probe, so it may still be starting; a
+          # port forward ends on a refused connection, so it is restarted
+          # until the app answers
+          for _ in $(seq 60); do
+            if [[ -z "${pid}" ]] || ! kill -0 "${pid}" 2> /dev/null; then
+              kubectl port-forward -n "${NAMESPACE}" service/trs-filer \
+                8080:8080 >> "${log}" 2>&1 &
+              pid=$!
+              sleep 2
+            fi
+            if curl --fail --silent --max-time 10 --output /dev/null \
+                "${API}/service-info"; then
+              break
+            fi
+            sleep 5
+          done
+          # Request a path, with an optional JSON body; check the status and
+          # that the JSON response matches a jq filter (as in `smoke`)
+          check() {
+            local method="$1" path="$2" status="$3" filter="$4" data="${5:-}" actual
+            local args=(--silent --show-error --max-time 30 --output "${body}"
+              --write-out '%{http_code}' -X "${method}"
+              --header 'Accept: application/json')
+            if [ -n "${data}" ]; then
+              args+=(--header 'Content-Type: application/json' --data "${data}")
+            fi
+            actual="$(curl "${args[@]}" "${API}${path}")" || true
+            if [ "${actual}" != "${status}" ] \
+                || ! jq -e "${filter}" "${body}" > /dev/null; then
+              echo "::error::${method} ${path}: status ${actual}, expected ${status} and ${filter}"
+              cat "${body}" || true
+              cat "${log}"
+              return 1
+            fi
+          }
+          check GET /service-info 200 '.type.artifact == "trs"'
+          tool='{
+            "name": "kind",
+            "organization": "Example",
+            "toolclass": {"id": "kind", "name": "Kind", "description": "Chart install"},
+            "versions": [{
+              "name": "v1",
+              "is_production": false,
+              "descriptor_type": ["CWL"],
+              "files": [{
+                "type": "CWL",
+                "tool_file": {"file_type": "PRIMARY_DESCRIPTOR", "path": "main.cwl"},
+                "file_wrapper": {"content": "cwlVersion: v1.2"}
+              }]
+            }]
+          }'
+          check POST /tools 200 'type == "string"' "${tool}"
+          id="$(jq -r . "${body}")"
+          check GET "/tools/${id}" 200 \
+            ".id == \"${id}\" and .name == \"kind\" and .url == \"https://${HOST}:443/ga4gh/trs/v2/tools/${id}\""
+          version="$(jq -r '.versions[0].id' "${body}")"
+          check GET "/tools/${id}/versions/${version}/CWL/descriptor" 200 \
+            '.content == "cwlVersion: v1.2"'
+      - name: Show cluster state
+        if: failure()
+        run: |
+          kubectl get all,jobs,pvc,networkpolicies -n "${NAMESPACE}" || true
+          kubectl describe pods -n "${NAMESPACE}" || true
+          kubectl logs -n "${NAMESPACE}" --all-containers --prefix \
+            -l app=trs-filer --tail=100 || true
+          kubectl logs -n "${NAMESPACE}" --all-containers --prefix \
+            job/configmap-job-trs-filer-1 --tail=100 || true
+          kubectl logs -n "${NAMESPACE}" --all-containers --prefix \
+            deployment/mongodb-trs-filer --tail=100 || true
+      - name: Tear down cluster
+        if: always()
+        run: kind delete cluster --name "${CLUSTER}"
 
   # The app as deployed with Docker Compose (image, Gunicorn, MongoDB): starts
   # it and checks the API (`test` covers the API in detail), the version and
@@ -626,7 +781,7 @@ jobs:
     timeout-minutes: 30
     # The same expression as `PUBLISH` (`tests/test_workflows.py`)
     if: github.event_name == 'push' && (github.repository_owner == 'elixir-cloud-aai' || vars.DOCKERHUB_ORG != '')
-    needs: [lint, test, chart, docs, readiness, smoke, push, scan]
+    needs: [lint, test, chart, chart-install, docs, readiness, smoke, push, scan]
     # Docker Hub secrets; the environment only allows branch `dev`
     environment: dev-images
     permissions:
@@ -714,7 +869,7 @@ jobs:
     name: CI passed
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    needs: [title, lint, test, chart, docs, readiness, smoke, push, scan, publish]
+    needs: [title, lint, test, chart, chart-install, docs, readiness, smoke, push, scan, publish]
     if: always()
     permissions: {}
     steps:
