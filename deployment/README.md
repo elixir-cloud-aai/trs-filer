@@ -126,7 +126,13 @@ namespaces labelled `pod-security.kubernetes.io/enforce: restricted`):
   `trs_filer.securityContext`) run as the image's user (1000); MongoDB
   (`mongodb.podSecurityContext`, `mongodb.securityContext`) runs as the
   image's user `mongodb` (999), and its data volume belongs to its group
-  (`fsGroup: 999`), so that MongoDB can write to it.
+  (`fsGroup: 999`), so that MongoDB can write to it. This needs storage
+  that applies `fsGroup` (most dynamically provisioned volumes do; e.g.,
+  `hostPath` and some CSI drivers don't): otherwise, MongoDB can't write to
+  a new volume and doesn't start. For such storage, prepare the volume's
+  ownership (user 999) yourself, or let MongoDB's entrypoint start as root
+  and switch to its user, as before (`mongodb.podSecurityContext: null`,
+  `mongodb.securityContext: null`; not allowed under "restricted").
 - Temporary files go to `emptyDir`s at `/tmp`, limited by
   `trs_filer.tmpSizeLimit` and `mongodb.tmpSizeLimit` (the pod is evicted
   if it exceeds the limit); MongoDB also gets one at `/data/configdb`.
@@ -362,8 +368,13 @@ If you need to change any parameter of the deployment, the procedure is similar 
    `.tgz` of a release instead of `.`. `helm upgrade` applies the chart's
    defaults for values you don't pass again (`host_name` would be empty, and
    the configuration Job fails), so pass the same values as when installing,
-   e.g., your values file (`-f my-values.yaml`) or `--set host_name=...`,
-   or reuse those of the release with `--reuse-values`:
+   e.g., your values file (`-f my-values.yaml`) or `--set host_name=...`.
+   `--reuse-values` reuses the release's values as they are, including the
+   chart's defaults at the time, so values that a newer chart adds or
+   changes (e.g., the [Security contexts](#security-contexts) and [Network
+   policies](#network-policies)) don't take effect; pass your values file
+   instead, or use `--reset-then-reuse-values` (Helm 3.14 or later), which
+   applies the new chart's defaults with your earlier values on top:
 ```
 helm upgrade trs-filer . -n namespace -f my-values.yaml
 ```

@@ -40,17 +40,20 @@ clients and custom configs:
   that run `pip install` must install with uv instead, mounted from a
   pinned stage (see FOCA's migration guide for 0.20). The image installs
   the locked versions of its dependencies (`uv.lock`), with hash checks.
-- Helm chart: all pods run as non-root users with a read-only root file
-  system ([Security contexts](deployment.md#security-contexts)), and a
-  NetworkPolicy lets only the app connect to MongoDB ([Network
-  policies](deployment.md#network-policies)). MongoDB runs as user and
+- Helm chart, security contexts: all pods run as non-root users with a
+  read-only root file system ([Security
+  contexts](deployment.md#security-contexts)). MongoDB runs as user and
   group 999 from the start (before, its entrypoint started as root and
   switched to that user); the data that it wrote belongs to that user
-  already, and `fsGroup` makes the volume writable for it. Other workloads
-  that connect to MongoDB (e.g., backups) need a policy of their own, or
-  set `mongodb.networkPolicy.enabled: false`. Upgrades with
-  `--reuse-values` keep the earlier settings (no security contexts, no
-  NetworkPolicy); pass your values file instead.
+  already, and `fsGroup` keeps the volume writable for it (with storage
+  that applies `fsGroup`).
+- Helm chart, NetworkPolicy: only the app may connect to MongoDB ([Network
+  policies](deployment.md#network-policies)). Other workloads that connect
+  to MongoDB (e.g., backups) need a policy of their own, or set
+  `mongodb.networkPolicy.enabled: false`.
+- Helm chart, upgrades with `--reuse-values` keep the earlier settings (no
+  security contexts, no NetworkPolicy): pass your values file instead, or
+  use `--reset-then-reuse-values` (see [Upgrades](deployment.md#upgrades)).
 
 ## Configuration
 

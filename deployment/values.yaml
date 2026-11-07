@@ -112,6 +112,9 @@ mongodb:
     runAsUser: 999
     runAsGroup: 999
     fsGroup: 999
+    # Change the volume's ownership only if its root doesn't match, not on
+    # every start (which walks the whole database)
+    fsGroupChangePolicy: OnRootMismatch
     seccompProfile:
       type: RuntimeDefault
   securityContext:

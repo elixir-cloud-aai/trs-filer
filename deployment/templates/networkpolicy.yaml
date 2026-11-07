@@ -20,12 +20,13 @@ spec:
   ingress:
   - from:
       {{- toYaml $policy.ingressFrom | nindent 4 }}
+    # The app's port, as in its Deployment and Service
     ports:
     - port: 8080
       protocol: TCP
 {{- end }}
 {{- /* NetworkPolicy of MongoDB, if `mongodb.networkPolicy.enabled`: only the
-app's pods may connect to MongoDB. Off if unset (`dig`), e.g., for upgrades
+app's pods may connect to MongoDB (the config Job doesn't). Off if unset (`dig`), e.g., for upgrades
 with `--reuse-values` from charts without the value */}}
 {{- if dig "networkPolicy" "enabled" false .Values.mongodb }}
 ---

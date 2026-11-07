@@ -322,6 +322,7 @@ def test_mongodb_security_context() -> None:
         "runAsUser": 999,
         "runAsGroup": 999,
         "fsGroup": 999,
+        "fsGroupChangePolicy": "OnRootMismatch",
         "seccompProfile": {"type": "RuntimeDefault"},
     }
     (container,) = pod["containers"]
@@ -331,14 +332,41 @@ def test_mongodb_security_context() -> None:
     assert "/data/configdb" in mounts
 
 
-def test_security_context_openshift() -> None:
-    """On OpenShift, which assigns user and group IDs, the chart sets none."""
-    resources = render("--api-versions", OPENSHIFT_SECURITY_API)
-    pod = _pod(resources, "Deployment", "mongodb-trs-filer")
-    assert pod["securityContext"] == {
+@pytest.mark.parametrize(
+    ("kind", "name", "fs_group"),
+    [
+        ("Deployment", "trs-filer", False),
+        ("Job", "configmap-job-", False),
+        ("Deployment", "mongodb-trs-filer", True),
+    ],
+)
+def test_security_context_openshift(kind: str, name: str, fs_group: bool) -> None:
+    """On OpenShift, which assigns user and group IDs, the chart sets none.
+
+    Also not if set in the values (here: `runAsUser` of the app and the
+    Job); the other settings are kept.
+
+    Args:
+        kind: Kind of the workload.
+        name: Name of the workload, or its start.
+        fs_group: Whether the pod has MongoDB's `fsGroupChangePolicy`.
+    """
+    resources = render(
+        "--api-versions",
+        OPENSHIFT_SECURITY_API,
+        "--set",
+        "trs_filer.podSecurityContext.runAsUser=2000",
+    )
+    pod = _pod(resources, kind, name)
+    expected: dict[str, Any] = {
         "runAsNonRoot": True,
         "seccompProfile": {"type": "RuntimeDefault"},
     }
+    if fs_group:
+        expected["fsGroupChangePolicy"] = "OnRootMismatch"
+    assert pod["securityContext"] == expected
+    (container,) = pod["containers"]
+    assert container["securityContext"] == RESTRICTED_CONTAINER
 
 
 def test_security_context_values(tmp_path: Path) -> None:
@@ -397,9 +425,15 @@ def test_security_context_without_values() -> None:
         "--set",
         "mongodb.networkPolicy=null",
     )
-    app = _pod(resources, "Deployment", "trs-filer")
-    assert app["securityContext"] == {}
-    assert app["containers"][0]["securityContext"] == {}
+    for kind, name in [
+        ("Deployment", "trs-filer"),
+        ("Job", "configmap-job-"),
+        ("Deployment", "mongodb-trs-filer"),
+    ]:
+        pod = _pod(resources, kind, name)
+        assert pod["securityContext"] == {}
+        assert pod["containers"][0]["securityContext"] == {}
+        assert _tmp_volume(pod) == {"name": "tmp", "emptyDir": {}}
     assert of_kind(resources, "NetworkPolicy") == []
 
 
