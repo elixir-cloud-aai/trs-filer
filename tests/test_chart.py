@@ -240,3 +240,223 @@ def test_notes_nothing_exposed(tmp_path: Path) -> None:
     assert "The chart exposes the app neither via an Ingress" in notes
     assert "kubectl port-forward svc/trs-filer 8080:8080 -n trs" in notes
     assert "trs.example.org" not in notes
+
+
+OPENSHIFT_SECURITY_API = "security.openshift.io/v1"
+RESTRICTED_CONTAINER = {
+    "allowPrivilegeEscalation": False,
+    "capabilities": {"drop": ["ALL"]},
+    "readOnlyRootFilesystem": True,
+}
+
+
+def _pod(resources: list[dict[str, Any]], kind: str, name: str) -> dict[str, Any]:
+    """Get the pod spec of a workload.
+
+    Args:
+        resources: Rendered resources.
+        kind: Kind of the workload, `Deployment` or `Job`.
+        name: Name of the workload, or its start (for the Job, which is
+            named by revision).
+
+    Returns:
+        The pod spec.
+    """
+    (workload,) = (
+        resource
+        for resource in of_kind(resources, kind)
+        if resource["metadata"]["name"].startswith(name)
+    )
+    pod: dict[str, Any] = workload["spec"]["template"]["spec"]
+    return pod
+
+
+def _tmp_volume(pod: dict[str, Any]) -> dict[str, Any]:
+    """Get the volume mounted at `/tmp` of the pod's only container.
+
+    Args:
+        pod: Pod spec.
+
+    Returns:
+        The volume.
+    """
+    (container,) = pod["containers"]
+    (mount,) = (m for m in container["volumeMounts"] if m["mountPath"] == "/tmp")  # noqa: S108 (a mount path)
+    (volume,) = (v for v in pod["volumes"] if v["name"] == mount["name"])
+    return volume
+
+
+@pytest.mark.parametrize(
+    ("kind", "name"), [("Deployment", "trs-filer"), ("Job", "configmap-job-")]
+)
+def test_app_security_context(kind: str, name: str) -> None:
+    """The app and the config Job run as non-root, without privileges.
+
+    They meet the Pod Security Standard "restricted", with a read-only root
+    file system and a writable `emptyDir` at `/tmp`; the image's user (1000)
+    is kept, so OpenShift can assign its own.
+
+    Args:
+        kind: Kind of the workload.
+        name: Name of the workload, or its start.
+    """
+    pod = _pod(render(), kind, name)
+    assert pod["securityContext"] == {
+        "runAsNonRoot": True,
+        "seccompProfile": {"type": "RuntimeDefault"},
+    }
+    (container,) = pod["containers"]
+    assert container["securityContext"] == RESTRICTED_CONTAINER
+    assert _tmp_volume(pod) == {"name": "tmp", "emptyDir": {"sizeLimit": "64Mi"}}
+
+
+def test_mongodb_security_context() -> None:
+    """MongoDB runs as its image's user `mongodb` (999), without privileges.
+
+    The data volume belongs to its group (`fsGroup`); the root file system
+    is read-only, with `emptyDir`s at `/tmp` and `/data/configdb`.
+    """
+    pod = _pod(render(), "Deployment", "mongodb-trs-filer")
+    assert pod["securityContext"] == {
+        "runAsNonRoot": True,
+        "runAsUser": 999,
+        "runAsGroup": 999,
+        "fsGroup": 999,
+        "seccompProfile": {"type": "RuntimeDefault"},
+    }
+    (container,) = pod["containers"]
+    assert container["securityContext"] == RESTRICTED_CONTAINER
+    assert _tmp_volume(pod) == {"name": "tmp", "emptyDir": {"sizeLimit": "64Mi"}}
+    mounts = {mount["mountPath"] for mount in container["volumeMounts"]}
+    assert "/data/configdb" in mounts
+
+
+def test_security_context_openshift() -> None:
+    """On OpenShift, which assigns user and group IDs, the chart sets none."""
+    resources = render("--api-versions", OPENSHIFT_SECURITY_API)
+    pod = _pod(resources, "Deployment", "mongodb-trs-filer")
+    assert pod["securityContext"] == {
+        "runAsNonRoot": True,
+        "seccompProfile": {"type": "RuntimeDefault"},
+    }
+
+
+def test_security_context_values(tmp_path: Path) -> None:
+    """The security contexts and `/tmp` limits are values.
+
+    Args:
+        tmp_path: Directory for the values file.
+    """
+    values = tmp_path / "values.yaml"
+    values.write_text(
+        yaml.safe_dump(
+            {
+                "trs_filer": {
+                    "podSecurityContext": {"runAsUser": 2000},
+                    "securityContext": {"readOnlyRootFilesystem": False},
+                    "tmpSizeLimit": None,
+                },
+                "mongodb": {"podSecurityContext": None, "tmpSizeLimit": "1Gi"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    resources = render("--values", str(values))
+    app = _pod(resources, "Deployment", "trs-filer")
+    # Maps are merged with the chart's defaults, `null` removes a key
+    assert app["securityContext"]["runAsUser"] == 2000
+    assert app["containers"][0]["securityContext"]["readOnlyRootFilesystem"] is False
+    assert _tmp_volume(app) == {"name": "tmp", "emptyDir": {}}
+    mongodb = _pod(resources, "Deployment", "mongodb-trs-filer")
+    assert mongodb["securityContext"] == {}
+    assert _tmp_volume(mongodb)["emptyDir"] == {"sizeLimit": "1Gi"}
+
+
+def test_security_context_without_values() -> None:
+    """Values without the new settings (e.g., of older charts) still render.
+
+    So do upgrades with `--reuse-values`; the pods then run as before, and
+    MongoDB without its NetworkPolicy. `null` removes the keys from the
+    chart's defaults.
+    """
+    resources = render(
+        "--set",
+        "trs_filer.podSecurityContext=null",
+        "--set",
+        "trs_filer.securityContext=null",
+        "--set",
+        "trs_filer.tmpSizeLimit=null",
+        "--set",
+        "trs_filer.networkPolicy=null",
+        "--set",
+        "mongodb.podSecurityContext=null",
+        "--set",
+        "mongodb.securityContext=null",
+        "--set",
+        "mongodb.tmpSizeLimit=null",
+        "--set",
+        "mongodb.networkPolicy=null",
+    )
+    app = _pod(resources, "Deployment", "trs-filer")
+    assert app["securityContext"] == {}
+    assert app["containers"][0]["securityContext"] == {}
+    assert of_kind(resources, "NetworkPolicy") == []
+
+
+def test_mongodb_network_policy() -> None:
+    """By default, only the app's pods may connect to MongoDB."""
+    (policy,) = of_kind(render(), "NetworkPolicy")
+    assert policy["metadata"]["name"] == "mongodb-trs-filer"
+    assert policy["spec"] == {
+        "podSelector": {"matchLabels": {"app": "mongodb-trs-filer"}},
+        "policyTypes": ["Ingress"],
+        "ingress": [
+            {
+                "from": [{"podSelector": {"matchLabels": {"app": "trs-filer"}}}],
+                "ports": [{"port": 27017, "protocol": "TCP"}],
+            }
+        ],
+    }
+
+
+def test_mongodb_network_policy_disabled() -> None:
+    """`mongodb.networkPolicy.enabled: false` leaves MongoDB's policy out."""
+    resources = render("--set", "mongodb.networkPolicy.enabled=false")
+    assert of_kind(resources, "NetworkPolicy") == []
+
+
+def test_app_network_policy(tmp_path: Path) -> None:
+    """`trs_filer.networkPolicy` lets only the listed peers connect to the app.
+
+    Args:
+        tmp_path: Directory for the values file.
+    """
+    peer = {
+        "namespaceSelector": {
+            "matchLabels": {"kubernetes.io/metadata.name": "ingress-nginx"}
+        }
+    }
+    values = tmp_path / "values.yaml"
+    values.write_text(
+        yaml.safe_dump(
+            {"trs_filer": {"networkPolicy": {"enabled": True, "ingressFrom": [peer]}}}
+        ),
+        encoding="utf-8",
+    )
+    policies = {
+        policy["metadata"]["name"]: policy
+        for policy in of_kind(render("--values", str(values)), "NetworkPolicy")
+    }
+    assert sorted(policies) == ["mongodb-trs-filer", "trs-filer"]
+    assert policies["trs-filer"]["spec"] == {
+        "podSelector": {"matchLabels": {"app": "trs-filer"}},
+        "policyTypes": ["Ingress"],
+        "ingress": [{"from": [peer], "ports": [{"port": 8080, "protocol": "TCP"}]}],
+    }
+
+
+def test_app_network_policy_needs_peers() -> None:
+    """The app's policy without peers fails, as it would allow all sources."""
+    with pytest.raises(subprocess.CalledProcessError) as error:
+        render("--set", "trs_filer.networkPolicy.enabled=true")
+    assert "trs_filer.networkPolicy.ingressFrom must list" in error.value.stderr
