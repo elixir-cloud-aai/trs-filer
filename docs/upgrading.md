@@ -187,7 +187,9 @@ version at a time. For the Helm chart, see [Helm chart](#helm-chart).
 - Forwarded headers (`X-Forwarded-*`) are trusted from Gunicorn's default
   (`127.0.0.1`) only, no longer from every client: behind a proxy that
   terminates TLS, set `FORWARDED_ALLOW_IPS` to its addresses (the Helm
-  chart sets it).
+  chart sets it, by default to `*`; narrow it with the value
+  `trs_filer.forwardedAllowIps`, see [Forwarded
+  headers](deployment.md#forwarded-headers)).
 - The image runs as user 1000 (also with a read-only root file system and a
   writable `/tmp`) and reports its version (e.g., in the service info) from
   the build argument `SETUPTOOLS_SCM_PRETEND_VERSION`.
@@ -386,6 +388,10 @@ Since the chart of `v0.3.0`, the values changed:
   release's image), no longer `lvarin/trs-filer:0.1.0`.
 - `trs_filer.resources` and `mongodb.resources` set the requests and limits
   of the app and of MongoDB.
+- `trs_filer.forwardedAllowIps` (by default `*`, as before; also kept by
+  upgrades with `--reuse-values`) sets the addresses whose `X-Forwarded-*`
+  headers the app trusts; narrow it (see [Forwarded
+  headers](deployment.md#forwarded-headers)).
 - `mongodb.image` is `docker.io/library/mongo:7.0` (was `mongo:3.6`, and
   `mongo:noble` on `dev`), pulled as `mongodb.imagePullPolicy` says;
   `mongodb.dbName` sets the app's database (`trs-filer-db` if empty).
