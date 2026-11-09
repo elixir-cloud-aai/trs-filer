@@ -571,7 +571,7 @@ def _read_limited(response: requests.Response, max_size: int) -> bytes:
     """
     encoding = response.headers.get("Content-Encoding", "identity")
     if encoding.strip().lower() not in ("", "identity"):
-        raise RemoteFileError(f"Content encoding '{encoding}' is not supported")
+        raise RemoteFileError("The content encoding is not supported")
     declared = response.headers.get("Content-Length", "")
     if declared.isascii() and declared.isdigit() and int(declared) > max_size:
         raise RemoteFileError(

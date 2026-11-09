@@ -884,11 +884,15 @@ class TestFetchRemoteFile:
         network.responses[PUBLIC] = _response(body=b"x" * 10, length=length)
         assert fetch_remote_file(f"http://{PUBLIC}/", config).content == b"x" * 10
 
-    @pytest.mark.parametrize("encoding", ["gzip", "deflate", "br", "x-custom"])
+    @pytest.mark.parametrize(
+        "encoding", ["gzip", "deflate", "br", "x-custom", "http://u:s3cret@h/"]
+    )
     def test_content_encoding_refused(
         self, network: FakeNetwork, config: RemoteFilesConfig, encoding: str
     ) -> None:
         """Encoded content (e.g., compressed) is refused.
+
+        The reason doesn't quote the header's value.
 
         Args:
             network: Fake network.
@@ -896,8 +900,9 @@ class TestFetchRemoteFile:
             encoding: Content encoding.
         """
         network.responses[PUBLIC] = _response(headers={"Content-Encoding": encoding})
-        with pytest.raises(RemoteFileError):
+        with pytest.raises(RemoteFileError) as exc_info:
             fetch_remote_file(f"http://{PUBLIC}/", config)
+        assert exc_info.value.description == "The content encoding is not supported"
 
     def test_content_encoding_identity(
         self, network: FakeNetwork, config: RemoteFilesConfig
