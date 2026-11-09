@@ -335,12 +335,28 @@ class TestCheckURL:
         ],
     )
     def test_invalid(self, url: object) -> None:
-        """Other URLs are invalid.
+        """Other URLs are invalid; the message names the reason, not the URL.
 
         Args:
             url: Invalid URL.
         """
-        with pytest.raises(InvalidURL):
+        with pytest.raises(InvalidURL) as exc_info:
+            check_url(url, schemes=["http", "https"])
+        message = str(exc_info.value)
+        assert "example" not in message
+        assert "secret" not in message
+
+    @pytest.mark.parametrize(
+        "url",
+        ["https://user@files.example.org/", "https://user:secret@files.example.org/a"],
+    )
+    def test_user_info(self, url: str) -> None:
+        """URLs with user info are invalid, with that as the reason.
+
+        Args:
+            url: URL with user info.
+        """
+        with pytest.raises(InvalidURL, match=r"^The URL has user info$"):
             check_url(url, schemes=["http", "https"])
 
     def test_scheme_not_allowed(self) -> None:
@@ -1015,6 +1031,98 @@ class TestFetchRemoteFile:
         assert [record.getMessage() for record in caplog.records] == [
             f"Could not retrieve file from URL 'ftp://files.example.org/': {reason!r}"
         ]
+
+    def test_reason_without_user_info(self, caplog: pytest.LogCaptureFixture) -> None:
+        """Logs and descriptions name the reason, not the URL's user info.
+
+        The logged URL is the one without user info.
+
+        Args:
+            caplog: Captured logs.
+        """
+        with pytest.raises(RemoteFileError) as exc_info:
+            fetch_remote_file(
+                "https://user:s3cret@files.example.org/x.cwl", RemoteFilesConfig()
+            )
+        reason = exc_info.value.description
+        assert reason == "InvalidURL: The URL has user info"
+        assert [record.getMessage() for record in caplog.records] == [
+            "Could not retrieve file from URL "
+            f"'https://***@files.example.org/x.cwl': {reason!r}"
+        ]
+
+    def test_redirect_reason_without_user_info(
+        self,
+        network: FakeNetwork,
+        config: RemoteFilesConfig,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """Logs and descriptions omit the user info of redirect locations.
+
+        Args:
+            network: Fake network.
+            config: Settings for retrieving files.
+            caplog: Captured logs.
+        """
+        network.responses[PUBLIC] = _response(
+            status="302 Found",
+            headers={"Location": "http://user:s3cret@files.example.org/b.cwl"},
+            body=b"",
+        )
+        with pytest.raises(RemoteFileError) as exc_info:
+            fetch_remote_file(f"http://{PUBLIC}/a.cwl", config)
+        assert exc_info.value.description == "InvalidURL: The URL has user info"
+        messages = [record.getMessage() for record in caplog.records]
+        assert (
+            "Could not retrieve file from URL "
+            f"'http://{PUBLIC}/a.cwl': 'InvalidURL: The URL has user info'"
+        ) in messages
+        assert all("s3cret" not in message for message in messages)
+
+    @pytest.mark.parametrize(
+        "location", ["http://[x/?token=s3cret", "http://a]b/?token=s3cret"]
+    )
+    def test_malformed_redirect_reason(
+        self,
+        network: FakeNetwork,
+        config: RemoteFilesConfig,
+        caplog: pytest.LogCaptureFixture,
+        location: str,
+    ) -> None:
+        """Errors of lower layers are described by their types only.
+
+        Their messages may quote URLs, e.g., of redirect locations.
+
+        Args:
+            network: Fake network.
+            config: Settings for retrieving files.
+            caplog: Captured logs.
+            location: Malformed redirect location.
+        """
+        network.responses[PUBLIC] = _response(
+            status="302 Found", headers={"Location": location}, body=b""
+        )
+        with pytest.raises(RemoteFileError) as exc_info:
+            fetch_remote_file(f"http://{PUBLIC}/", config)
+        assert "s3cret" not in exc_info.value.description
+        assert all("s3cret" not in record.getMessage() for record in caplog.records)
+
+    def test_connection_error_reason(
+        self, network: FakeNetwork, config: RemoteFilesConfig
+    ) -> None:
+        """Connection errors are described by the types of their causes.
+
+        Args:
+            network: Fake network.
+            config: Settings for retrieving files.
+        """
+        with pytest.raises(RemoteFileError) as exc_info:
+            fetch_remote_file("http://unknown.example.org/a?token=s3cret", config)
+        reason = exc_info.value.description
+        assert reason.startswith("ConnectionError (caused by ")
+        assert "NameResolutionError" in reason
+        assert "s3cret" not in reason
+        assert "example" not in reason
 
 
 @pytest.fixture
