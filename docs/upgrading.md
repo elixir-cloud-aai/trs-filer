@@ -21,10 +21,11 @@ clients, custom configs and log checks:
   their responses gain the members `type`, `code` (`invalid-request`) and
   `errors`, which lists the invalid fields.
 - Logs: requests (`Incoming request`) name the route of the request instead
-  of its path, and rejected requests are logged by the locations and codes
-  of their invalid fields instead of the validator's reason (both logged at
-  `DEBUG`), so rejected values are no longer logged at `INFO`. FOCA warns
-  once per worker of what it deprecates ahead of its release on ASGI.
+  of its path, and rejected requests (`Request rejected`) name the locations
+  and codes of their invalid fields instead of the validator's reason. Paths
+  and reasons are logged only at `DEBUG`, so rejected values no longer show
+  up at `INFO`. FOCA warns once per worker of what it deprecates ahead of its
+  release on ASGI.
 
 - Query parameters that an operation doesn't declare now give `400 Bad
   Request` on all operations, also on `GET /service-info`,
