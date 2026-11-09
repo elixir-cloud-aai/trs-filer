@@ -27,14 +27,13 @@ Requests that fail with an error have no line with the status of their
 response. Requests that don't match the API specification have no line of
 the request either: they are logged at `INFO` as `Request rejected:`, with
 the locations and codes of the invalid fields (the reason only at `DEBUG`).
-Other errors that FOCA's error handler answers (e.g., `404 Not Found`, also
-for unknown routes, which have no line of the request, `500 Internal Server
-Error`, and `400 Bad Request` for files whose content can't be retrieved)
-are logged at `ERROR` with the problem details sent, which include the
-status. TRS-Filer's own `400 Bad Request` responses to
-requests it refuses (see [Errors](api.md#errors)) are logged only with the
-reason, at `ERROR` (e.g., `Invalid limit 0.`), after the line of the
-request.
+Other errors that FOCA's error handler answers (e.g., `404 Not Found`,
+`500 Internal Server Error`, and `400 Bad Request` for files whose content
+can't be retrieved) are logged at `ERROR` with the problem details sent,
+which include the status; unknown routes have no line of the request.
+TRS-Filer's own `400 Bad Request` responses to requests it refuses (see
+[Errors](api.md#errors)) are logged only with the reason, at `ERROR` (e.g.,
+`Invalid limit 0.`), after the line of the request.
 
 ## Health checks
 

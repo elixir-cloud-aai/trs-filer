@@ -168,11 +168,12 @@ operation doesn't declare, on all operations (e.g., `GET /tools?x=1`, and
 also `GET /service-info?x=1`, `GET /toolClasses?x=1` and `POST /tools?x=1`,
 whose operations have no parameters), and JSON bodies with unpaired
 surrogates (e.g., `"\ud800"`), for which `detail` names neither the field
-nor the value. Bodies that aren't valid JSON or have unpaired surrogates
-get `title`, `status` and `detail` only; where the invalid fields are
-known, the other responses have
-FOCA's problem type of invalid requests: besides `title`, `status` and
-`detail`, the members `type` (a URL ending in
+nor the value.
+
+Where the invalid fields are known (not for bodies that aren't valid JSON
+or have unpaired surrogates, which get only `title`, `status` and
+`detail`), these responses have FOCA's problem type of invalid requests:
+besides `title`, `status` and `detail`, the members `type` (a URL ending in
 `/problems/invalid-request/`), `code` (`invalid-request`) and `errors`,
 which lists the invalid fields, each with `detail`, `code` and either
 `parameter` (a path or query parameter) or `pointer` (a JSON Pointer into
