@@ -7,6 +7,7 @@ updates:
   # together; CI's checks install the locked ones
   - package-ecosystem: uv
     directory: /
+    labels: ["type: dependencies"]
     schedule:
       interval: monthly
     target-branch: dev
@@ -27,6 +28,7 @@ updates:
   # Actions in the workflows
   - package-ecosystem: github-actions
     directory: /
+    labels: ["type: dependencies"]
     schedule:
       interval: monthly
     target-branch: dev
@@ -36,6 +38,7 @@ updates:
   # Base image and uv image in the `Dockerfile` (tag and digest)
   - package-ecosystem: docker
     directory: /
+    labels: ["type: dependencies"]
     schedule:
       interval: monthly
     target-branch: dev
@@ -50,6 +53,7 @@ updates:
   # Hook revisions in `.pre-commit-config.yaml`
   - package-ecosystem: pre-commit
     directory: /
+    labels: ["type: dependencies"]
     schedule:
       interval: monthly
     target-branch: dev
