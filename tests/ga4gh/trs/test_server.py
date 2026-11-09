@@ -834,7 +834,8 @@ def test_type_BadRequest_unsupported(
     response = client.get(f"{VERSION_PATH}/SMK/{path}")
     assert response.status_code == 400
     assert response.get_json() == _bad_request(
-        "The descriptor type is not supported; supported are: CWL, WDL, NFL, GALAXY."
+        "The descriptor type is not supported; supported are: CWL, WDL, NFL, GALAXY "
+        "(their PLAIN_ forms are accepted, but not served yet)."
     )
 
 

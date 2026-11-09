@@ -896,8 +896,9 @@ def validate_descriptor_type(type: str) -> None:
             valid_types,
         )
         # The `PLAIN_` types are accepted, but not served yet, so the reason
-        # names the served types only
+        # lists the served types only, and says so
         raise InvalidRequest(
             "The descriptor type is not supported; supported are: "
-            f"{', '.join(RegisterToolVersion.descriptor_types)}."
+            f"{', '.join(RegisterToolVersion.descriptor_types)} (their PLAIN_ "
+            "forms are accepted, but not served yet)."
         )
