@@ -18,7 +18,8 @@ access in front of it:
   (`trs_filer.networkPolicy.enabled: false`), every pod in the cluster can
   call the app's Service (`<appName>`, port 8080) directly, with all
   methods, set `X-Forwarded-*` headers, which change the scheme of the
-  links in responses (`trs_filer.forwardedAllowIps: "*"`), and set the
+  links in responses (and, via the `SCRIPT_NAME` header, their path;
+  `trs_filer.forwardedAllowIps: "*"`), and set the
   `Host` header, which changes their host. To
   let only the ingress controller or router connect, enable
   `trs_filer.networkPolicy` with their pods or namespace in

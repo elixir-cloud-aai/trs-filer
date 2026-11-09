@@ -26,7 +26,9 @@ Read them with `docker compose logs` or `kubectl logs`.
 Requests that fail with an error have no line with the status of their
 response. Requests that don't match the API specification have no line of
 the request either: they are logged at `INFO` as `Request rejected:`, with
-the locations and codes of the invalid fields (the reason only at `DEBUG`).
+the locations and codes of the invalid fields where known (otherwise a
+general reason, e.g., `The request is malformed.`), and the reason of the
+validation only at `DEBUG`.
 Other errors that FOCA's error handler answers (e.g., `404 Not Found`,
 `500 Internal Server Error`, and `400 Bad Request` for files whose content
 can't be retrieved) are logged at `ERROR` with the problem details sent,
