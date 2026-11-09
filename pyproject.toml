@@ -107,7 +107,7 @@ dependencies = [
     "connexion>=2.15.1,<3.0.0",
     # FOCA is bumped by hand, together with the base image in the
     # `Dockerfile` (`.github/dependabot.yml`).
-    "foca>=0.21.0,<0.22",
+    "foca>=0.22.0,<0.23",
     "gunicorn>=26.2.0,<27",
     # Remote files are retrieved with connection classes of urllib3 2.x
     # (`trs_filer/remote_files.py`)

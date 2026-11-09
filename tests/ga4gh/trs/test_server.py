@@ -768,7 +768,9 @@ def test_type_BadRequest_unknown(
 ) -> None:
     """Unknown descriptor types are refused by the validation of requests.
 
-    The reason is sent as `detail` (`exceptions.validation_details`).
+    The reason is sent as `detail` (`exceptions.validation_details` and
+    `exceptions.validation_reasons`), and the invalid parameter is listed in
+    `errors` (FOCA's problem type of invalid requests).
 
     Args:
         client: Test client.
@@ -778,7 +780,17 @@ def test_type_BadRequest_unknown(
     response = client.get(f"{VERSION_PATH}/FOO/{path}")
     assert response.status_code == 400
     body = response.get_json()
-    assert body == {**BAD_REQUEST, "detail": body["detail"]}
+    assert body == {
+        **BAD_REQUEST,
+        "detail": body["detail"],
+        "type": "https://foca.readthedocs.io/en/latest/problems/invalid-request/",
+        "code": "invalid-request",
+        "errors": body["errors"],
+    }
+    assert [(e["parameter"], e["code"]) for e in body["errors"]] == [
+        ("type", "invalid-value")
+    ]
+    assert "FOO" not in str(body["errors"])
     # The reason names the allowed types of the path's parameter, in full
     # (they differ between paths, e.g., without the `PLAIN_` types)
     reason = body["detail"].splitlines()[0]
