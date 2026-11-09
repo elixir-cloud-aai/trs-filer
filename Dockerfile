@@ -12,7 +12,7 @@ FROM ghcr.io/astral-sh/uv:0.13.7@sha256:96f40d3904aad8d0bd010539001d36c8e2188b98
 ## Pinned by digest, so that rebuilds (e.g., of a release) use the same base
 ## image; Dependabot updates the tag and digest together
 ## (`.github/dependabot.yml`). It has no pip (since FOCA 0.20)
-FROM elixircloud/foca:0.21.0-py3.13@sha256:ba79033cab60dd79419c2c44f90000f4fb9aa8d495ea09c2798a7348516bd84f AS base
+FROM elixircloud/foca:0.22.0-py3.13@sha256:bf02db1195d60940dd3b29e53ce4757854155e258f35199e28d778cbf6128f9a AS base
 
 ##### BUILD #####
 ## Build the app's wheel, in a stage of its own, so that the image doesn't
