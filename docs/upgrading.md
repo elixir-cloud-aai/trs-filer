@@ -10,10 +10,21 @@ Upgrading from 0.4.0? See [From 0.4.0](#from-040).
 
 ## From 0.4.0
 
-TRS-Filer now runs on FOCA 0.21 (from 0.19; see FOCA's migration guides
-for [0.20](https://foca.readthedocs.io/en/v0.21.0/migration-0.20/) and
-[0.21](https://foca.readthedocs.io/en/v0.21.0/migration-0.21/)). Check
-clients and custom configs:
+TRS-Filer now runs on FOCA 0.22 (from 0.19; see FOCA's migration guides
+for [0.20](https://foca.readthedocs.io/en/v0.21.0/migration-0.20/),
+[0.21](https://foca.readthedocs.io/en/v0.21.0/migration-0.21/) and
+[0.22](https://foca.readthedocs.io/en/v0.22.0/migration-0.22/)). Check
+clients, custom configs and log checks:
+
+- Requests that fail the validation of the API specification keep the
+  validator's reason as `detail` (`exceptions.validation_reasons`), and
+  their responses gain the members `type`, `code` (`invalid-request`) and
+  `errors`, which lists the invalid fields.
+- Logs: requests (`Incoming request`) name the route of the request instead
+  of its path, and rejected requests are logged by the locations and codes
+  of their invalid fields instead of the validator's reason (both logged at
+  `DEBUG`), so rejected values are no longer logged at `INFO`. FOCA warns
+  once per worker of what it deprecates ahead of its release on ASGI.
 
 - Query parameters that an operation doesn't declare now give `400 Bad
   Request` on all operations, also on `GET /service-info`,
@@ -81,8 +92,8 @@ clients and custom configs:
 
 ## Configuration
 
-TRS-Filer runs on FOCA 0.21 and Python 3.13. Custom configs must apply the
-config changes of FOCA 0.14 to 0.21 (see the [FOCA release
+TRS-Filer runs on FOCA 0.22 and Python 3.13. Custom configs must apply the
+config changes of FOCA 0.14 to 0.22 (see the [FOCA release
 notes](https://github.com/elixir-cloud-aai/foca/releases) and migration
 guides), e.g., `exceptions.mapping` instead of the old exception members,
 no `server.environment` or `server.use_reloader`, and no top-level
