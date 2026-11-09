@@ -1,4 +1,4 @@
-"""Tests of the app created from `config.yaml`, with FOCA 0.21."""
+"""Tests of the app created from `config.yaml`, with FOCA 0.22."""
 
 from collections.abc import Callable
 from copy import deepcopy
