@@ -6,6 +6,7 @@ published from the notes in `docs/releases/` where these exist, followed by
 GitHub's generated list of changes (see [Versioning and
 releases](development.md#versioning-and-releases)):
 
+- [0.5.0](releases/0.5.0.md)
 - [0.4.0](releases/0.4.0.md)
 
 The tag `v0.3.0` (2023) has no release notes.

@@ -24,11 +24,14 @@ clients, custom configs and log checks:
 - Logs: requests (`Incoming request`) name the route of the request instead
   of its path, and rejected requests (`Request rejected`) name the locations
   and codes of their invalid fields (otherwise the mapped `detail`) instead
-  of the validator's reason. Paths
-  and reasons are logged only at `DEBUG`, so rejected values no longer show
-  up at `INFO`. FOCA warns once per worker of what it deprecates ahead of its
-  release on ASGI.
-
+  of the validator's reason. Paths and reasons are logged only at `DEBUG`,
+  so rejected values no longer show up at `INFO`. FOCA warns once per
+  worker of what it deprecates ahead of its release on ASGI.
+- Requests that TRS-Filer itself refuses (e.g., `limit=0`, deleting the
+  last version of a tool, or a tool class that tools use) get their reason
+  as `detail` instead of the generic `The request is malformed.` (see
+  [Errors](api.md#errors)); clients that compared `detail` with the generic
+  text must check `status` instead.
 - Query parameters that an operation doesn't declare now give `400 Bad
   Request` on all operations, also on `GET /service-info`,
   `GET /toolClasses`, `POST /tools` and `POST /toolClasses`, which ignored
@@ -92,6 +95,12 @@ clients, custom configs and log checks:
 - Helm chart: `trs_filer.imagePullPolicy` sets the pull policy of the app's
   image (app and configuration Job); the default, `Always`, is the earlier
   behaviour, also for upgrades with `--reuse-values`.
+- Helm chart: `trs_filer.forwardedAllowIps` sets the addresses that
+  forwarded headers are trusted from; the default, `*`, is the earlier
+  behaviour (see [Forwarded headers](deployment.md#forwarded-headers)).
+- Config: `custom.access_control.tool_classes` sets who may add tool
+  classes; its default, `open`, is the earlier behaviour (see [Adding tool
+  classes](configuration.md#adding-tool-classes)).
 
 ## Configuration
 
