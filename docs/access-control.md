@@ -13,6 +13,20 @@ access in front of it:
   `GET` requests (and `HEAD`, `OPTIONS`) from the public, and the other
   methods only from trusted clients (e.g., by IP address or with
   authentication at the proxy).
+- Such restrictions apply only to requests that pass the proxy or ingress
+  controller. With the default values of the Helm chart
+  (`trs_filer.networkPolicy.enabled: false`), every pod in the cluster can
+  call the app's Service (`<appName>`, port 8080) directly, with all
+  methods, set `X-Forwarded-*` headers, which change the scheme of the
+  links in responses (and, via the `SCRIPT_NAME` header, their path;
+  `trs_filer.forwardedAllowIps: "*"`), and set the
+  `Host` header, which changes their host. To
+  let only the ingress controller or router connect, enable
+  `trs_filer.networkPolicy` with their pods or namespace in
+  `trs_filer.networkPolicy.ingressFrom`, in a cluster whose network plugin
+  enforces NetworkPolicies, and narrow `trs_filer.forwardedAllowIps` (see
+  [Security notes](deployment.md#security-notes) and [Network
+  policies](deployment.md#network-policies)).
 
 See your proxy's documentation for how to restrict methods and clients. The
 Helm chart's Ingress or OpenShift Route applies no such restrictions by

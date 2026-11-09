@@ -17,11 +17,25 @@ The Docker Compose setup and the [Helm chart](deployment.md) run both.
 
 The app logs to standard error (section `log` of the config, by default at
 level `INFO`): each request to the API (method, route and client address,
-not the body; the path at `DEBUG`) and the status of its response,
-registered and replaced objects, and errors, e.g., the reasons why the
-content of a file could not be retrieved from its URL (which clients don't get, see [Remote
-files](configuration.md#remote-files)). Read them with
-`docker compose logs` or `kubectl logs`.
+not the body; the path at `DEBUG`) and the status of its response (except
+for errors, see below), registered and replaced objects, and errors, e.g.,
+the reasons why the content of a file could not be retrieved from its URL
+(which clients don't get, see [Remote files](configuration.md#remote-files)).
+Read them with `docker compose logs` or `kubectl logs`.
+
+Requests that fail with an error have no line with the status of their
+response. Requests that don't match the API specification have no line of
+the request either: they are logged at `INFO` as `Request rejected:`, with
+the locations and codes of the invalid fields where known (otherwise a
+general reason, e.g., `The request is malformed.`), and the reason of the
+validation only at `DEBUG`.
+Other errors that FOCA's error handler answers (e.g., `404 Not Found`,
+`500 Internal Server Error`, and `400 Bad Request` for files whose content
+can't be retrieved) are logged at `ERROR` with the problem details sent,
+which include the status; unknown routes have no line of the request.
+TRS-Filer's own `400 Bad Request` responses to requests it refuses (see
+[Errors](api.md#errors)) are logged only with the reason, at `ERROR` (e.g.,
+`Invalid limit 0.`), after the line of the request.
 
 ## Health checks
 
