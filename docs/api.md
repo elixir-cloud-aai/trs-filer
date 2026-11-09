@@ -155,10 +155,13 @@ responses of the TRS specification), e.g.:
 }
 ```
 
-Every response, including error responses, has the header `X-Request-ID`,
-which the app generates for each request (a request ID set by a proxy in
-front of the app isn't used, see [Upgrading](upgrading.md)); log records
-carry it as a field, which the default log format doesn't show.
+Every response of the app, including error responses, has the header
+`X-Request-ID`, which the app generates for each request (a request ID set
+by a proxy in front of the app isn't used, see [Upgrading](upgrading.md));
+log records carry it as a field, which the default log format doesn't
+show. Responses to requests that Gunicorn refuses before they reach the
+app (e.g., with a malformed request line or oversized headers) don't have
+it.
 
 Requests that don't match the API specification (e.g., an unknown
 descriptor type, or a body without required properties) get `400 Bad
