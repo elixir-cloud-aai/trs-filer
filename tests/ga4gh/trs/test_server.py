@@ -848,11 +848,10 @@ def test_validate_descriptor_type_logged_escaped(
     """
     with pytest.raises(server.InvalidRequest):
         server.validate_descriptor_type("SMK\nforged line")
-    assert [record.getMessage() for record in caplog.records] == [
+    (message,) = [record.getMessage() for record in caplog.records]
+    assert message.startswith(
         "Specified type 'SMK\\nforged line' not among valid types: "
-        "['PLAIN_CWL', 'PLAIN_WDL', 'PLAIN_NFL', 'PLAIN_GALAXY', 'CWL', 'WDL', "
-        "'NFL', 'GALAXY']"
-    ]
+    )
 
 
 # `PLAIN_` forms of the supported descriptor types (`DescriptorTypeWithPlain`

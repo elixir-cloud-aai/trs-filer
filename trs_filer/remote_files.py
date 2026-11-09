@@ -96,7 +96,7 @@ def check_url(url: object, schemes: Collection[str]) -> None:
     if not isinstance(url, str):
         raise InvalidURL("The URL is not a string")
     if re.fullmatch(_URL_REGEX, url) is None:
-        if _has_user_info(url):
+        if _user_info_end(url) >= 0:
             raise InvalidURL("The URL has user info")
         raise InvalidURL(
             "Not an HTTP(S) URL with a host, without whitespace and control characters"
@@ -118,19 +118,27 @@ def check_url(url: object, schemes: Collection[str]) -> None:
         raise InvalidURL("The host or port of the URL is invalid")
 
 
-def _has_user_info(url: str) -> bool:
-    """Check whether the authority of a URL has user info.
+def _user_info_end(url: str) -> int:
+    """Find the end of the user info of a URL.
+
+    For the messages of :py:func:`check_url` and the logs of
+    :py:func:`fetch_remote_file` (cf. :py:func:`_redact`), the user info is
+    taken to end at the last `@` before the first `/`, `?` or `#` after
+    `://`, so that every candidate is covered.
 
     Args:
         url: URL.
 
     Returns:
-        Whether the part between `://` and the first `/`, `?`, `#` or
-        backslash contains `@`.
+        Index of the `@` that ends the user info, or `-1` if the URL has
+        none.
     """
-    _, separator, rest = url.partition("://")
-    authority = re.split(r"[/?#\\]", rest, maxsplit=1)[0]
-    return bool(separator) and "@" in authority
+    start = url.find("://")
+    if start < 0:
+        return -1
+    start += 3
+    ends = [index for index in map(url.find, "/?#", [start] * 3) if index >= 0]
+    return url.rfind("@", start, min(ends, default=len(url)))
 
 
 class DestinationNotAllowed(Exception):
@@ -542,12 +550,9 @@ def _redact(url: str) -> str:
     Returns:
         URL without user info, quoted with control characters escaped.
     """
-    scheme, separator, rest = url.partition("://")
-    if separator:
-        ends = [index for index in map(rest.find, "/?#") if index >= 0]
-        at = rest.rfind("@", 0, min(ends, default=len(rest)))
-        if at >= 0:
-            url = f"{scheme}{separator}***@{rest[at + 1 :]}"
+    at = _user_info_end(url)
+    if at >= 0:
+        url = f"{url[: url.find('://') + 3]}***{url[at:]}"
     return repr(url)
 
 
@@ -602,6 +607,9 @@ def fetch_remote_file(url: str, config: RemoteFilesConfig) -> RemoteFile:
         RemoteFileError: The content could not be retrieved, or retrieval is
             not allowed by the configuration.
     """
+    # Reasons don't quote URLs (which may hold credentials): the messages
+    # of the app's own exceptions don't; those of lower layers may (e.g., of
+    # redirect locations), so only their types are given
     deadline = _Deadline(timeout=config.total_timeout)
     try:
         with deadline:
@@ -610,18 +618,16 @@ def fetch_remote_file(url: str, config: RemoteFilesConfig) -> RemoteFile:
         # responses (without `Content-Length`)
         deadline.remaining()
         return file
-    # Reasons don't quote URLs (which may hold credentials): the messages
-    # of the app's own exceptions don't, those of lower layers may (e.g., of
-    # redirect locations), so only their types are given
     except RemoteFileError as exc:
         reason: object = exc.description
-    except (DestinationNotAllowed, InvalidURL) as exc:
-        reason = f"{type(exc).__name__}: {exc}"
-    # `ValueError` includes errors on malformed URLs and headers; `OSError`
-    # includes the exceptions of `requests` (e.g., timeouts) and TLS errors
-    # of lower layers
-    except (ValueError, OSError) as exc:
-        reason = _describe(exc)
+    # `ValueError` includes `InvalidURL` and errors on malformed URLs and
+    # headers; `OSError` includes the exceptions of `requests` (e.g.,
+    # timeouts) and TLS errors of lower layers
+    except (DestinationNotAllowed, ValueError, OSError) as exc:
+        if isinstance(exc, (DestinationNotAllowed, InvalidURL)):
+            reason = f"{type(exc).__name__}: {exc}"
+        else:
+            reason = _describe(exc)
         if deadline.expired:
             reason = f"Retrieval exceeded the total timeout ({reason})"
     logger.error("Could not retrieve file from URL %s: %r", _redact(url), reason)
@@ -638,16 +644,31 @@ def _describe(exc: BaseException) -> str:
 
     Returns:
         Type name of the exception, followed by those of its causes (or
-        contexts) in parentheses, if any; e.g., `ConnectionError (caused by
-        MaxRetryError, NameResolutionError, gaierror)`.
+        contexts, unless suppressed, as in tracebacks) in parentheses, if
+        any; e.g., `ConnectionError (caused by MaxRetryError,
+        NameResolutionError, gaierror)`.
     """
+
+    def _next(error: BaseException) -> BaseException | None:
+        """Get the cause of an exception, or its context unless suppressed.
+
+        Args:
+            error: Exception.
+
+        Returns:
+            Cause or context, if any.
+        """
+        if error.__cause__ is not None or error.__suppress_context__:
+            return error.__cause__
+        return error.__context__
+
     causes: list[str] = []
     seen = {id(exc)}
-    cause = exc.__cause__ or exc.__context__
+    cause = _next(exc)
     while cause is not None and id(cause) not in seen:
         seen.add(id(cause))
         causes.append(type(cause).__name__)
-        cause = cause.__cause__ or cause.__context__
+        cause = _next(cause)
     if not causes:
         return type(exc).__name__
     return f"{type(exc).__name__} (caused by {', '.join(causes)})"

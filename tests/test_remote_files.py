@@ -17,6 +17,7 @@ from typing import Any, NoReturn
 
 from pydantic import ValidationError
 import pytest
+import requests
 from requests.adapters import HTTPAdapter
 import yaml
 
@@ -29,6 +30,7 @@ from trs_filer.remote_files import (
     RemoteFile,
     _CheckedConnectionMixin,
     _Deadline,
+    _describe,
     _make_session,
     _redact,
     check_url,
@@ -345,6 +347,31 @@ class TestCheckURL:
         message = str(exc_info.value)
         assert "example" not in message
         assert "secret" not in message
+
+    @pytest.mark.parametrize(
+        ("url", "message"),
+        [
+            (None, "The URL is not a string"),
+            (
+                "https://files.example.org/a b",
+                "Not an HTTP(S) URL with a host, without whitespace and control "
+                "characters",
+            ),
+            ("https://[::1/", "The URL can't be parsed"),
+            ("https://files.example.org:x/", "The port of the URL is invalid"),
+            ("https://files.example.org:0/", "The host or port of the URL is invalid"),
+        ],
+    )
+    def test_invalid_message(self, url: object, message: str) -> None:
+        """The message of an invalid URL names the reason.
+
+        Args:
+            url: Invalid URL.
+            message: Expected message.
+        """
+        with pytest.raises(InvalidURL) as exc_info:
+            check_url(url, schemes=["http", "https"])
+        assert str(exc_info.value) == message
 
     @pytest.mark.parametrize(
         "url",
@@ -1079,32 +1106,38 @@ class TestFetchRemoteFile:
         ) in messages
         assert all("s3cret" not in message for message in messages)
 
-    @pytest.mark.parametrize(
-        "location", ["http://[x/?token=s3cret", "http://a]b/?token=s3cret"]
-    )
-    def test_malformed_redirect_reason(
+    def test_lower_layer_reason(
         self,
-        network: FakeNetwork,
+        monkeypatch: pytest.MonkeyPatch,
         config: RemoteFilesConfig,
         caplog: pytest.LogCaptureFixture,
-        location: str,
     ) -> None:
         """Errors of lower layers are described by their types only.
 
         Their messages may quote URLs, e.g., of redirect locations.
 
         Args:
-            network: Fake network.
+            monkeypatch: Patch of the request.
             config: Settings for retrieving files.
             caplog: Captured logs.
-            location: Malformed redirect location.
         """
-        network.responses[PUBLIC] = _response(
-            status="302 Found", headers={"Location": location}, body=b""
-        )
+
+        def get(*args: Any, **kwargs: Any) -> NoReturn:
+            """Fail with a message that quotes a URL.
+
+            Args:
+                *args: Ignored.
+                **kwargs: Ignored.
+
+            Raises:
+                requests.exceptions.InvalidURL: Always.
+            """
+            raise requests.exceptions.InvalidURL("Bad URL http://h/?token=s3cret")
+
+        monkeypatch.setattr(requests.Session, "get", get)
         with pytest.raises(RemoteFileError) as exc_info:
             fetch_remote_file(f"http://{PUBLIC}/", config)
-        assert "s3cret" not in exc_info.value.description
+        assert exc_info.value.description == "InvalidURL"
         assert all("s3cret" not in record.getMessage() for record in caplog.records)
 
     def test_connection_error_reason(
@@ -1225,8 +1258,63 @@ class TestConnect:
         assert registered == ["tls-socket"]
 
 
+class TestDescribe:
+    """Tests for `_describe()`."""
+
+    def test_without_cause(self) -> None:
+        """Exceptions without causes are described by their type."""
+        assert _describe(ValueError("http://h/?token=s3cret")) == "ValueError"
+
+    def test_causes(self) -> None:
+        """Causes, and contexts otherwise, are listed by their types."""
+        try:
+            try:
+                try:
+                    raise KeyError("s3cret")
+                except KeyError:
+                    raise OSError("s3cret") from None
+            except OSError as exc:
+                raise ValueError("s3cret") from exc
+        except ValueError as exc:
+            error = exc
+        assert _describe(error) == "ValueError (caused by OSError)"
+        try:
+            try:
+                raise KeyError("s3cret")
+            except KeyError:
+                raise ValueError("s3cret")  # noqa: B904 (context only)
+        except ValueError as exc:
+            error = exc
+        assert _describe(error) == "ValueError (caused by KeyError)"
+
+    def test_cycle(self) -> None:
+        """Cycles of causes end the description."""
+        first, second = ValueError(), OSError()
+        first.__cause__ = second
+        second.__cause__ = first
+        assert _describe(first) == "ValueError (caused by OSError)"
+
+
 class TestRedact:
     """Tests for `_redact()`."""
+
+    @pytest.mark.parametrize(
+        "url",
+        [
+            "https://u:p@h.example/",
+            "https://h.example\\@other.example/",
+            "https://u@h.example?q=a@b",
+        ],
+    )
+    def test_agrees_with_check_url(self, url: str) -> None:
+        """URLs whose user info is redacted are refused as having user info.
+
+        Args:
+            url: URL with user info.
+        """
+        assert "***@" in _redact(url)
+        with pytest.raises(InvalidURL, match=r"^The URL has user info$"):
+            check_url(url, schemes=["http", "https"])
 
     @pytest.mark.parametrize(
         ("url", "redacted"),
