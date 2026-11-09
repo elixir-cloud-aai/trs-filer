@@ -155,6 +155,37 @@ responses of the TRS specification), e.g.:
 }
 ```
 
+Every response, including error responses, has the header `X-Request-ID`,
+which the app generates for each request (log records carry it as a field,
+which the default log format doesn't show).
+
+`400 Bad Request` responses come in two shapes:
+
+- Requests that don't match the API specification get FOCA's problem type
+  of invalid requests where the invalid fields are known: besides `title`,
+  `status` and `detail`, they have the members `type` (a URL ending in
+  `/problems/invalid-request/`), `code` (`invalid-request`) and `errors`,
+  which lists the invalid fields, each with `detail`, `code` and either
+  `parameter` (a path or query parameter) or `pointer` (a JSON Pointer into
+  the body), without the values sent, e.g.:
+
+    ```json
+    {
+      "title": "Bad request",
+      "status": 400,
+      "detail": "'FOO' is not one of ['CWL', 'WDL', ...]",
+      "type": "https://foca.readthedocs.io/en/latest/problems/invalid-request/",
+      "code": "invalid-request",
+      "errors": [
+        {"detail": "...", "parameter": "type", "code": "invalid-value"}
+      ]
+    }
+    ```
+
+- Requests that match the specification but that TRS-Filer refuses (see
+  below), and files whose content can't be retrieved, get only `title`,
+  `status` and `detail`.
+
 Requests that don't match the API specification (e.g., an unknown
 descriptor type, or a body without required properties) get `400 Bad
 Request` with the reason of the validation as `detail` (see

@@ -23,6 +23,15 @@ content of a file could not be retrieved from its URL (which clients don't get, 
 files](configuration.md#remote-files)). Read them with
 `docker compose logs` or `kubectl logs`.
 
+Requests that fail with an error have no line with the status of their
+response. Errors that FOCA's error handler answers (e.g., `404 Not Found`,
+`500 Internal Server Error`, and `400 Bad Request` for files whose content
+can't be retrieved) are logged at `ERROR` with the problem details sent,
+which include the status. TRS-Filer's own `400 Bad Request` responses to
+requests it refuses (see [Errors](api.md#errors)) are logged only with the
+reason, at `ERROR` (e.g., `Invalid limit 0.`), after the line of the
+request.
+
 ## Health checks
 
 The image checks its health by requesting the Swagger UI
