@@ -17,6 +17,7 @@ from typing import Any, NoReturn
 
 from pydantic import ValidationError
 import pytest
+import requests
 from requests.adapters import HTTPAdapter
 import yaml
 
@@ -29,6 +30,7 @@ from trs_filer.remote_files import (
     RemoteFile,
     _CheckedConnectionMixin,
     _Deadline,
+    _describe,
     _make_session,
     _redact,
     check_url,
@@ -335,12 +337,53 @@ class TestCheckURL:
         ],
     )
     def test_invalid(self, url: object) -> None:
-        """Other URLs are invalid.
+        """Other URLs are invalid; the message names the reason, not the URL.
 
         Args:
             url: Invalid URL.
         """
-        with pytest.raises(InvalidURL):
+        with pytest.raises(InvalidURL) as exc_info:
+            check_url(url, schemes=["http", "https"])
+        message = str(exc_info.value)
+        assert "example" not in message
+        assert "secret" not in message
+
+    @pytest.mark.parametrize(
+        ("url", "message"),
+        [
+            (None, "The URL is not a string"),
+            (
+                "https://files.example.org/a b",
+                "Not an HTTP(S) URL with a host, without whitespace and control "
+                "characters",
+            ),
+            ("https://[::1/", "The URL can't be parsed"),
+            ("https://files.example.org:x/", "The port of the URL is invalid"),
+            ("https://files.example.org:0/", "The host or port of the URL is invalid"),
+        ],
+    )
+    def test_invalid_message(self, url: object, message: str) -> None:
+        """The message of an invalid URL names the reason.
+
+        Args:
+            url: Invalid URL.
+            message: Expected message.
+        """
+        with pytest.raises(InvalidURL) as exc_info:
+            check_url(url, schemes=["http", "https"])
+        assert str(exc_info.value) == message
+
+    @pytest.mark.parametrize(
+        "url",
+        ["https://user@files.example.org/", "https://user:secret@files.example.org/a"],
+    )
+    def test_user_info(self, url: str) -> None:
+        """URLs with user info are invalid, with that as the reason.
+
+        Args:
+            url: URL with user info.
+        """
+        with pytest.raises(InvalidURL, match=r"^The URL has user info$"):
             check_url(url, schemes=["http", "https"])
 
     def test_scheme_not_allowed(self) -> None:
@@ -841,11 +884,15 @@ class TestFetchRemoteFile:
         network.responses[PUBLIC] = _response(body=b"x" * 10, length=length)
         assert fetch_remote_file(f"http://{PUBLIC}/", config).content == b"x" * 10
 
-    @pytest.mark.parametrize("encoding", ["gzip", "deflate", "br", "x-custom"])
+    @pytest.mark.parametrize(
+        "encoding", ["gzip", "deflate", "br", "x-custom", "http://u:s3cret@h/"]
+    )
     def test_content_encoding_refused(
         self, network: FakeNetwork, config: RemoteFilesConfig, encoding: str
     ) -> None:
         """Encoded content (e.g., compressed) is refused.
+
+        The reason doesn't quote the header's value.
 
         Args:
             network: Fake network.
@@ -853,8 +900,9 @@ class TestFetchRemoteFile:
             encoding: Content encoding.
         """
         network.responses[PUBLIC] = _response(headers={"Content-Encoding": encoding})
-        with pytest.raises(RemoteFileError):
+        with pytest.raises(RemoteFileError) as exc_info:
             fetch_remote_file(f"http://{PUBLIC}/", config)
+        assert exc_info.value.description == "The content encoding is not supported"
 
     def test_content_encoding_identity(
         self, network: FakeNetwork, config: RemoteFilesConfig
@@ -1016,6 +1064,104 @@ class TestFetchRemoteFile:
             f"Could not retrieve file from URL 'ftp://files.example.org/': {reason!r}"
         ]
 
+    def test_reason_without_user_info(self, caplog: pytest.LogCaptureFixture) -> None:
+        """Logs and descriptions name the reason, not the URL's user info.
+
+        The logged URL is the one without user info.
+
+        Args:
+            caplog: Captured logs.
+        """
+        with pytest.raises(RemoteFileError) as exc_info:
+            fetch_remote_file(
+                "https://user:s3cret@files.example.org/x.cwl", RemoteFilesConfig()
+            )
+        reason = exc_info.value.description
+        assert reason == "InvalidURL: The URL has user info"
+        assert [record.getMessage() for record in caplog.records] == [
+            "Could not retrieve file from URL "
+            f"'https://***@files.example.org/x.cwl': {reason!r}"
+        ]
+
+    def test_redirect_reason_without_user_info(
+        self,
+        network: FakeNetwork,
+        config: RemoteFilesConfig,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """Logs and descriptions omit the user info of redirect locations.
+
+        Args:
+            network: Fake network.
+            config: Settings for retrieving files.
+            caplog: Captured logs.
+        """
+        network.responses[PUBLIC] = _response(
+            status="302 Found",
+            headers={"Location": "http://user:s3cret@files.example.org/b.cwl"},
+            body=b"",
+        )
+        with pytest.raises(RemoteFileError) as exc_info:
+            fetch_remote_file(f"http://{PUBLIC}/a.cwl", config)
+        assert exc_info.value.description == "InvalidURL: The URL has user info"
+        messages = [record.getMessage() for record in caplog.records]
+        assert (
+            "Could not retrieve file from URL "
+            f"'http://{PUBLIC}/a.cwl': 'InvalidURL: The URL has user info'"
+        ) in messages
+        assert all("s3cret" not in message for message in messages)
+
+    def test_lower_layer_reason(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        config: RemoteFilesConfig,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """Errors of lower layers are described by their types only.
+
+        Their messages may quote URLs, e.g., of redirect locations.
+
+        Args:
+            monkeypatch: Patch of the request.
+            config: Settings for retrieving files.
+            caplog: Captured logs.
+        """
+
+        def get(*args: Any, **kwargs: Any) -> NoReturn:
+            """Fail with a message that quotes a URL.
+
+            Args:
+                *args: Ignored.
+                **kwargs: Ignored.
+
+            Raises:
+                requests.exceptions.InvalidURL: Always.
+            """
+            raise requests.exceptions.InvalidURL("Bad URL http://h/?token=s3cret")
+
+        monkeypatch.setattr(requests.Session, "get", get)
+        with pytest.raises(RemoteFileError) as exc_info:
+            fetch_remote_file(f"http://{PUBLIC}/", config)
+        assert exc_info.value.description == "InvalidURL"
+        assert all("s3cret" not in record.getMessage() for record in caplog.records)
+
+    def test_connection_error_reason(
+        self, network: FakeNetwork, config: RemoteFilesConfig
+    ) -> None:
+        """Connection errors are described by the types of their causes.
+
+        Args:
+            network: Fake network.
+            config: Settings for retrieving files.
+        """
+        with pytest.raises(RemoteFileError) as exc_info:
+            fetch_remote_file("http://unknown.example.org/a?token=s3cret", config)
+        reason = exc_info.value.description
+        assert reason.startswith("ConnectionError (caused by ")
+        assert "NameResolutionError" in reason
+        assert "s3cret" not in reason
+        assert "example" not in reason
+
 
 @pytest.fixture
 def slow_server(monkeypatch: pytest.MonkeyPatch) -> Iterator[list[bytes]]:
@@ -1117,8 +1263,63 @@ class TestConnect:
         assert registered == ["tls-socket"]
 
 
+class TestDescribe:
+    """Tests for `_describe()`."""
+
+    def test_without_cause(self) -> None:
+        """Exceptions without causes are described by their type."""
+        assert _describe(ValueError("http://h/?token=s3cret")) == "ValueError"
+
+    def test_causes(self) -> None:
+        """Causes, and contexts otherwise, are listed by their types."""
+        try:
+            try:
+                try:
+                    raise KeyError("s3cret")
+                except KeyError:
+                    raise OSError("s3cret") from None
+            except OSError as exc:
+                raise ValueError("s3cret") from exc
+        except ValueError as exc:
+            error = exc
+        assert _describe(error) == "ValueError (caused by OSError)"
+        try:
+            try:
+                raise KeyError("s3cret")
+            except KeyError:
+                raise ValueError("s3cret")  # noqa: B904 (context only)
+        except ValueError as exc:
+            error = exc
+        assert _describe(error) == "ValueError (caused by KeyError)"
+
+    def test_cycle(self) -> None:
+        """Cycles of causes end the description."""
+        first, second = ValueError(), OSError()
+        first.__cause__ = second
+        second.__cause__ = first
+        assert _describe(first) == "ValueError (caused by OSError)"
+
+
 class TestRedact:
     """Tests for `_redact()`."""
+
+    @pytest.mark.parametrize(
+        "url",
+        [
+            "https://u:p@h.example/",
+            "https://h.example\\@other.example/",
+            "https://u@h.example?q=a@b",
+        ],
+    )
+    def test_agrees_with_check_url(self, url: str) -> None:
+        """URLs whose user info is redacted are refused as having user info.
+
+        Args:
+            url: URL with user info.
+        """
+        assert "***@" in _redact(url)
+        with pytest.raises(InvalidURL, match=r"^The URL has user info$"):
+            check_url(url, schemes=["http", "https"])
 
     @pytest.mark.parametrize(
         ("url", "redacted"),

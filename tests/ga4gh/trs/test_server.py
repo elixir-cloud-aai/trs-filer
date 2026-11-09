@@ -348,6 +348,25 @@ def test_toolsGet_pagination_invalid(
     assert response.get_json() == _bad_request(detail)
 
 
+def test_toolsGet_offset_logged_escaped(
+    client: FlaskClient, tool: dict[str, Any], caplog: pytest.LogCaptureFixture
+) -> None:
+    """Invalid offsets are logged with line breaks escaped.
+
+    Args:
+        client: Test client.
+        tool: Registered tool.
+        caplog: Captured logs.
+    """
+    response = client.get(
+        f"{BASE_PATH}/tools", query_string={"offset": "1\nforged line"}
+    )
+    assert response.status_code == 400
+    messages = [record.getMessage() for record in caplog.records]
+    assert "Offset '1\\nforged line' is not an integer." in messages
+    assert all("\n" not in message for message in messages)
+
+
 def test_toolsGet_filters(client: FlaskClient, tool: dict[str, Any]) -> None:
     """Tools matching all filters are listed.
 
@@ -815,8 +834,24 @@ def test_type_BadRequest_unsupported(
     response = client.get(f"{VERSION_PATH}/SMK/{path}")
     assert response.status_code == 400
     assert response.get_json() == _bad_request(
-        "The descriptor type is not supported; supported are: PLAIN_CWL, "
-        "PLAIN_WDL, PLAIN_NFL, PLAIN_GALAXY, CWL, WDL, NFL, GALAXY."
+        "The descriptor type is not supported; supported are: CWL, WDL, NFL, GALAXY "
+        "(their PLAIN_ forms are accepted, but not served yet)."
+    )
+
+
+def test_validate_descriptor_type_logged_escaped(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Unsupported descriptor types are logged with line breaks escaped.
+
+    Args:
+        caplog: Captured logs.
+    """
+    with pytest.raises(server.InvalidRequest):
+        server.validate_descriptor_type("SMK\nforged line")
+    (message,) = [record.getMessage() for record in caplog.records]
+    assert message.startswith(
+        "Specified type 'SMK\\nforged line' not among valid types: "
     )
 
 
