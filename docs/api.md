@@ -156,50 +156,43 @@ responses of the TRS specification), e.g.:
 ```
 
 Every response, including error responses, has the header `X-Request-ID`,
-which the app generates for each request (log records carry it as a field,
-which the default log format doesn't show).
-
-`400 Bad Request` responses come in two shapes:
-
-- Requests that don't match the API specification get FOCA's problem type
-  of invalid requests where the invalid fields are known: besides `title`,
-  `status` and `detail`, they have the members `type` (a URL ending in
-  `/problems/invalid-request/`), `code` (`invalid-request`) and `errors`,
-  which lists the invalid fields, each with `detail`, `code` and either
-  `parameter` (a path or query parameter) or `pointer` (a JSON Pointer into
-  the body), without the values sent, e.g.:
-
-    ```json
-    {
-      "title": "Bad request",
-      "status": 400,
-      "detail": "'FOO' is not one of ['CWL', 'WDL', ...]",
-      "type": "https://foca.readthedocs.io/en/latest/problems/invalid-request/",
-      "code": "invalid-request",
-      "errors": [
-        {"detail": "...", "parameter": "type", "code": "invalid-value"}
-      ]
-    }
-    ```
-
-- Requests that match the specification but that TRS-Filer refuses (see
-  below), and files whose content can't be retrieved, get only `title`,
-  `status` and `detail`.
+which the app generates for each request (a request ID set by a proxy in
+front of the app isn't used, see [Upgrading](upgrading.md)); log records
+carry it as a field, which the default log format doesn't show.
 
 Requests that don't match the API specification (e.g., an unknown
 descriptor type, or a body without required properties) get `400 Bad
-Request` with the reason of the validation as `detail` (see
-[Errors](configuration.md#errors)). So do query parameters that an
+Request` with the reason of the validation as `detail` (see the setting
+[`exceptions`](configuration.md#errors)). So do query parameters that an
 operation doesn't declare, on all operations (e.g., `GET /tools?x=1`, and
 also `GET /service-info?x=1`, `GET /toolClasses?x=1` and `POST /tools?x=1`,
 whose operations have no parameters), and JSON bodies with unpaired
 surrogates (e.g., `"\ud800"`), for which `detail` names neither the field
-nor the value.
+nor the value. Where the invalid fields are known, these responses have
+FOCA's problem type of invalid requests: besides `title`, `status` and
+`detail`, the members `type` (a URL ending in
+`/problems/invalid-request/`), `code` (`invalid-request`) and `errors`,
+which lists the invalid fields, each with `detail`, `code` and either
+`parameter` (a path or query parameter) or `pointer` (a JSON Pointer into
+the body), without the values sent, e.g.:
 
-Requests that match the specification but that TRS-Filer refuses also get
-`400 Bad Request` with the reason as `detail`, which names the rule but not
-the values sent (they may hold credentials, e.g., in URLs). Only the first
-reason found is given:
+```json
+{
+  "title": "Bad request",
+  "status": 400,
+  "detail": "'FOO' is not one of ['CWL', 'WDL', ...]",
+  "type": "https://foca.readthedocs.io/en/latest/problems/invalid-request/",
+  "code": "invalid-request",
+  "errors": [
+    {"detail": "...", "parameter": "type", "code": "invalid-value"}
+  ]
+}
+```
+
+Requests that match the specification but that TRS-Filer refuses get `400
+Bad Request` with `title`, `status` and the reason as `detail` only, which
+names the rule but not the values sent (they may hold credentials, e.g., in
+URLs). Only the first reason found is given:
 
 | Request | Reason |
 | --- | --- |

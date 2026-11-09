@@ -17,11 +17,11 @@ The Docker Compose setup and the [Helm chart](deployment.md) run both.
 
 The app logs to standard error (section `log` of the config, by default at
 level `INFO`): each request to the API (method, route and client address,
-not the body; the path at `DEBUG`) and the status of its response,
-registered and replaced objects, and errors, e.g., the reasons why the
-content of a file could not be retrieved from its URL (which clients don't get, see [Remote
-files](configuration.md#remote-files)). Read them with
-`docker compose logs` or `kubectl logs`.
+not the body; the path at `DEBUG`) and the status of its response (except
+for errors, see below), registered and replaced objects, and errors, e.g.,
+the reasons why the content of a file could not be retrieved from its URL
+(which clients don't get, see [Remote files](configuration.md#remote-files)).
+Read them with `docker compose logs` or `kubectl logs`.
 
 Requests that fail with an error have no line with the status of their
 response. Errors that FOCA's error handler answers (e.g., `404 Not Found`,
