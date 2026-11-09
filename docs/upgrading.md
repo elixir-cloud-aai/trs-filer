@@ -17,12 +17,14 @@ for [0.20](https://foca.readthedocs.io/en/v0.21.0/migration-0.20/),
 clients, custom configs and log checks:
 
 - Requests that fail the validation of the API specification keep the
-  validator's reason as `detail` (`exceptions.validation_reasons`), and
-  their responses gain the members `type`, `code` (`invalid-request`) and
-  `errors`, which lists the invalid fields.
+  validator's reason as `detail` (`exceptions.validation_reasons`). Where
+  the invalid fields are known, their responses gain the members `type`
+  (FOCA's problem type, a URL ending in `/problems/invalid-request/`),
+  `code` (`invalid-request`) and `errors`, which lists them.
 - Logs: requests (`Incoming request`) name the route of the request instead
   of its path, and rejected requests (`Request rejected`) name the locations
-  and codes of their invalid fields instead of the validator's reason. Paths
+  and codes of their invalid fields (otherwise the mapped `detail`) instead
+  of the validator's reason. Paths
   and reasons are logged only at `DEBUG`, so rejected values no longer show
   up at `INFO`. FOCA warns once per worker of what it deprecates ahead of its
   release on ASGI.
