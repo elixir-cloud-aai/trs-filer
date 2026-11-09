@@ -177,8 +177,12 @@ Hosts must resolve to public addresses only (also after redirects), unless
 they are listed in `allowed_hosts`; proxy settings of the environment are
 not used. Retrievals that fail (e.g., a refused URL, a timeout, a response
 other than `2xx` or a file that is too large) fail the registration with
-`400 Bad Request`; for ZIP archives, `404 Not Found`. Name resolution is not
-limited by the timeouts. For example, to register files of a web server on
+`400 Bad Request`; for ZIP archives, `404 Not Found`. The app logs the
+reason, which names the problem but not the URL (e.g., `InvalidURL: The URL
+has user info`; for errors of lower layers, only their types, such as
+`ConnectionError (caused by MaxRetryError, NameResolutionError, gaierror)`),
+next to the URL without its user info. Name resolution is not limited by the
+timeouts. For example, to register files of a web server on
 the Docker Compose network in a local setup:
 
 ```yaml

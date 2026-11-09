@@ -91,12 +91,20 @@ def check_url(url: object, schemes: Collection[str]) -> None:
             host (e.g., has user info, whitespace or control characters, or
             an invalid port), or uses a scheme that is not allowed.
     """
-    if not isinstance(url, str) or re.fullmatch(_URL_REGEX, url) is None:
-        raise InvalidURL(f"Not an HTTP(S) URL with a host: {url!r}")
+    # Messages give the reason only: URLs may hold credentials (e.g., as
+    # user info), and the messages are logged
+    if not isinstance(url, str):
+        raise InvalidURL("The URL is not a string")
+    if re.fullmatch(_URL_REGEX, url) is None:
+        if _user_info_end(url) >= 0:
+            raise InvalidURL("The URL has user info")
+        raise InvalidURL(
+            "Not an HTTP(S) URL with a host, without whitespace and control characters"
+        )
     try:
         parts = urlsplit(url)
     except ValueError as exc:
-        raise InvalidURL(f"Invalid URL: {url!r}") from exc
+        raise InvalidURL("The URL can't be parsed") from exc
     if parts.scheme.lower() not in schemes:
         raise InvalidURL(
             f"Scheme '{parts.scheme}' is not allowed (allowed: "
@@ -105,9 +113,32 @@ def check_url(url: object, schemes: Collection[str]) -> None:
     try:
         port = parts.port
     except ValueError as exc:
-        raise InvalidURL(f"Invalid port: {url!r}") from exc
+        raise InvalidURL("The port of the URL is invalid") from exc
     if not parts.hostname or port == 0:
-        raise InvalidURL(f"Invalid host or port: {url!r}")
+        raise InvalidURL("The host or port of the URL is invalid")
+
+
+def _user_info_end(url: str) -> int:
+    """Find the end of the user info of a URL.
+
+    For the messages of :py:func:`check_url` and the logs of
+    :py:func:`fetch_remote_file` (cf. :py:func:`_redact`), the user info is
+    taken to end at the last `@` before the first `/`, `?` or `#` after
+    `://`, so that every candidate is covered.
+
+    Args:
+        url: URL.
+
+    Returns:
+        Index of the `@` that ends the user info, or `-1` if the URL has
+        none.
+    """
+    start = url.find("://")
+    if start < 0:
+        return -1
+    start += 3
+    ends = [index for index in map(url.find, "/?#", [start] * 3) if index >= 0]
+    return url.rfind("@", start, min(ends, default=len(url)))
 
 
 class DestinationNotAllowed(Exception):
@@ -519,12 +550,9 @@ def _redact(url: str) -> str:
     Returns:
         URL without user info, quoted with control characters escaped.
     """
-    scheme, separator, rest = url.partition("://")
-    if separator:
-        ends = [index for index in map(rest.find, "/?#") if index >= 0]
-        at = rest.rfind("@", 0, min(ends, default=len(rest)))
-        if at >= 0:
-            url = f"{scheme}{separator}***@{rest[at + 1 :]}"
+    at = _user_info_end(url)
+    if at >= 0:
+        url = f"{url[: url.find('://') + 3]}***{url[at:]}"
     return repr(url)
 
 
@@ -543,7 +571,7 @@ def _read_limited(response: requests.Response, max_size: int) -> bytes:
     """
     encoding = response.headers.get("Content-Encoding", "identity")
     if encoding.strip().lower() not in ("", "identity"):
-        raise RemoteFileError(f"Content encoding '{encoding}' is not supported")
+        raise RemoteFileError("The content encoding is not supported")
     declared = response.headers.get("Content-Length", "")
     if declared.isascii() and declared.isdigit() and int(declared) > max_size:
         raise RemoteFileError(
@@ -579,6 +607,9 @@ def fetch_remote_file(url: str, config: RemoteFilesConfig) -> RemoteFile:
         RemoteFileError: The content could not be retrieved, or retrieval is
             not allowed by the configuration.
     """
+    # Reasons don't quote URLs (which may hold credentials): the messages
+    # of the app's own exceptions don't; those of lower layers may (e.g., of
+    # redirect locations), so only their types are given
     deadline = _Deadline(timeout=config.total_timeout)
     try:
         with deadline:
@@ -589,15 +620,58 @@ def fetch_remote_file(url: str, config: RemoteFilesConfig) -> RemoteFile:
         return file
     except RemoteFileError as exc:
         reason: object = exc.description
-    # `ValueError` includes `InvalidURL` and errors on
-    # malformed URLs and headers; `OSError` includes the exceptions of
-    # `requests` (e.g., timeouts) and TLS errors of lower layers
+    # `ValueError` includes `InvalidURL` and errors on malformed URLs and
+    # headers; `OSError` includes the exceptions of `requests` (e.g.,
+    # timeouts) and TLS errors of lower layers
     except (DestinationNotAllowed, ValueError, OSError) as exc:
-        reason = f"{type(exc).__name__}: {exc}"
+        if isinstance(exc, (DestinationNotAllowed, InvalidURL)):
+            reason = f"{type(exc).__name__}: {exc}"
+        else:
+            reason = _describe(exc)
         if deadline.expired:
             reason = f"Retrieval exceeded the total timeout ({reason})"
     logger.error("Could not retrieve file from URL %s: %r", _redact(url), reason)
     raise RemoteFileError(str(reason))
+
+
+def _describe(exc: BaseException) -> str:
+    """Describe an exception by its type and the types of its causes.
+
+    Messages are left out, as they may quote URLs.
+
+    Args:
+        exc: Exception.
+
+    Returns:
+        Type name of the exception, followed by those of its causes (or
+        contexts, unless suppressed, as in tracebacks) in parentheses, if
+        any; e.g., `ConnectionError (caused by MaxRetryError,
+        NameResolutionError, gaierror)`.
+    """
+
+    def _next(error: BaseException) -> BaseException | None:
+        """Get the cause of an exception, or its context unless suppressed.
+
+        Args:
+            error: Exception.
+
+        Returns:
+            Cause or context, if any.
+        """
+        if error.__cause__ is not None or error.__suppress_context__:
+            return error.__cause__
+        return error.__context__
+
+    causes: list[str] = []
+    seen = {id(exc)}
+    cause = _next(exc)
+    while cause is not None and id(cause) not in seen:
+        seen.add(id(cause))
+        causes.append(type(cause).__name__)
+        cause = _next(cause)
+    if not causes:
+        return type(exc).__name__
+    return f"{type(exc).__name__} (caused by {', '.join(causes)})"
 
 
 def _fetch(url: str, config: RemoteFilesConfig, deadline: _Deadline) -> RemoteFile:
@@ -646,7 +720,7 @@ def _fetch(url: str, config: RemoteFilesConfig, deadline: _Deadline) -> RemoteFi
                     headers={"Accept-Encoding": "identity"},
                 )
             else:  # pragma: no cover (refused by `check_url()`)
-                raise InvalidURL(f"Not an HTTP(S) URL: {current!r}")
+                raise InvalidURL("Not an HTTP(S) URL")
             with response:
                 if response.is_redirect:
                     current = requote_uri(

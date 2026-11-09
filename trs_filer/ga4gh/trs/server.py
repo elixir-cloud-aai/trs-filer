@@ -8,7 +8,7 @@ from urllib.parse import unquote, urlencode
 from zipfile import ZIP_DEFLATED, ZipFile
 
 from flask import Response, request, send_file
-from foca.utils.logging import log_traffic
+from foca.utils.logging import escape_log_value, log_traffic
 
 from trs_filer.errors.exceptions import (
     InternalServerError,
@@ -214,7 +214,7 @@ def toolsGet(
     try:
         offset_int = 0 if offset is None else int(offset)
     except ValueError as exc:
-        logger.error("Offset '%s' is not an integer.", offset)
+        logger.error("Offset '%s' is not an integer.", escape_log_value(offset))
         raise InvalidRequest(OFFSET_INVALID) from exc
     if offset_int < 0:
         logger.error("Invalid offset %s.", offset_int)
@@ -890,8 +890,15 @@ def validate_descriptor_type(type: str) -> None:
     valid_types += RegisterToolVersion.descriptor_types
 
     if type not in valid_types:
-        logger.error("Specified type '%s' not among valid types: %s", type, valid_types)
+        logger.error(
+            "Specified type '%s' not among valid types: %s",
+            escape_log_value(type),
+            valid_types,
+        )
+        # The `PLAIN_` types are accepted, but not served yet, so the reason
+        # lists the served types only, and says so
         raise InvalidRequest(
             "The descriptor type is not supported; supported are: "
-            f"{', '.join(valid_types)}."
+            f"{', '.join(RegisterToolVersion.descriptor_types)} (their PLAIN_ "
+            "forms are accepted, but not served yet)."
         )
