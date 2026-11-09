@@ -758,6 +758,19 @@ def test_mongodb_database_name_quoted() -> None:
     assert 'db = db.getSiblingDB("a\'b\\"c");' in scripts["init-script.js"]
 
 
+@pytest.mark.parametrize("name", ["123", "true", "a'b\"c"])
+def test_mongodb_database_name_quoted_env(name: str) -> None:
+    """The database name is a string in the app's environment.
+
+    Also names that YAML reads as numbers or booleans.
+
+    Args:
+        name: Database name (`mongodb.dbName`).
+    """
+    env = _app_env(render("--set-string", f"mongodb.dbName={name}"))
+    assert env["MONGO_DBNAME"] == name
+
+
 def test_mongodb_auth_disabled() -> None:
     """`mongodb.auth.enabled: false` runs MongoDB without credentials."""
     resources = render("--set", "mongodb.auth.enabled=false")
