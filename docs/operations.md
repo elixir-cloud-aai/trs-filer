@@ -16,10 +16,10 @@ The Docker Compose setup and the [Helm chart](deployment.md) run both.
 ## Logs
 
 The app logs to standard error (section `log` of the config, by default at
-level `INFO`): each request to the API (method, path and client address,
-not the body) and the status of its response, registered and replaced
-objects, and errors, e.g., the reasons why the content of a file could not
-be retrieved from its URL (which clients don't get, see [Remote
+level `INFO`): each request to the API (method, route and client address,
+not the body; the path at `DEBUG`) and the status of its response,
+registered and replaced objects, and errors, e.g., the reasons why the
+content of a file could not be retrieved from its URL (which clients don't get, see [Remote
 files](configuration.md#remote-files)). Read them with
 `docker compose logs` or `kubectl logs`.
 
