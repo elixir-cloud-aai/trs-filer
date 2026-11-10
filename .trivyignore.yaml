@@ -13,45 +13,4 @@
 #       expired_at: 2027-01-31
 #
 # See https://trivy.dev/latest/docs/configuration/filtering/#trivyignoreyaml
-vulnerabilities:
-  # Copies vendored by pip, used only when pip runs (to install the app's
-  # dependencies at build time), not by the app. FOCA's base image has no
-  # pip since FOCA 0.20, and images built from `dev` have none since the move
-  # to FOCA 0.21 (#218), but the weekly scan (`scan.yml`) applies this file
-  # to the latest release, which still has the pip of the FOCA 0.19 image
-  # (setuptools 70.3.0 in its SBOM, `pip/_vendor/bom.cdx.json`, and urllib3
-  # 2.7.0 and msgpack 1.1.2, which pip 26.3 no longer vendors). Trivy
-  # reports the vendored copies without a path, so the entries can't be
-  # limited with `paths`. Remove them all with the first release without pip
-  - id: CVE-2025-47273
-    purls: ["pkg:pypi/setuptools@70.3.0"]
-    statement: Vendored by pip, not used by the app (path traversal in PackageIndex, which pip doesn't use)
-    expired_at: 2027-01-31
-  - id: CVE-2026-59890
-    purls: ["pkg:pypi/setuptools@70.3.0"]
-    statement: Vendored by pip, not used by the app (MANIFEST.in exclusion bypass in sdist builds on macOS; pip vendors only pkg_resources)
-    expired_at: 2027-01-31
-  - id: GHSA-xmj3-9gf7-h52w
-    purls: ["pkg:pypi/setuptools@70.3.0"]
-    statement: Vendored by pip, not used by the app (Windows path escape in legacy wheel installation; the image is Linux, and pip vendors only pkg_resources)
-    expired_at: 2027-01-31
-  - id: CVE-2026-97687
-    purls: ["pkg:pypi/urllib3@2.7.0"]
-    statement: Vendored by pip, not used by the app (pip only runs at build time)
-    expired_at: 2027-01-31
-  - id: CVE-2026-97688
-    purls: ["pkg:pypi/urllib3@2.7.0"]
-    statement: Vendored by pip, not used by the app (infinite loop on malicious chunked deflate responses; pip only runs at build time, against the configured index, where at worst the build hangs)
-    expired_at: 2027-01-31
-  - id: CVE-2026-97689
-    purls: ["pkg:pypi/urllib3@2.7.0"]
-    statement: Vendored by pip, not used by the app (pip only runs at build time)
-    expired_at: 2027-01-31
-  - id: GHSA-6v7p-g79w-8964
-    purls: ["pkg:pypi/msgpack@1.1.2"]
-    statement: Vendored by pip, not used by the app (pip only runs at build time)
-    expired_at: 2027-01-31
-  - id: CVE-2026-114613
-    purls: ["pkg:pypi/msgpack@1.1.2"]
-    statement: Vendored by pip, not used by the app (memory leak in map deserialization; pip only runs at build time, on its own cache data)
-    expired_at: 2027-01-31
+vulnerabilities: []
