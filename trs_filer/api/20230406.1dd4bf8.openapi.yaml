@@ -1,3 +1,11 @@
+# GA4GH Tool Registry Service (TRS) API specification, vendored from
+# https://github.com/ga4gh/tool-registry-service-schemas, file
+# `openapi/openapi.yaml` at commit 1dd4bf806f98fa2e3d224d1976f6179de5cd46d6
+# (branch `develop`, 2023-04-05), licensed under the Apache License 2.0
+# (https://github.com/ga4gh/tool-registry-service-schemas/blob/develop/LICENSE).
+# Changes: commented out the `/service-info` path (FOCA serves it, see
+# `additions.openapi.yaml`), the security requirements and their scheme
+# (`BEARER`), and three `example` values.
 openapi: 3.0.0
 info:
   title: GA4GH Tool Discovery API
