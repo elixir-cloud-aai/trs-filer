@@ -261,6 +261,29 @@ def test_ci_gate() -> None:
     assert step["with"]["needs"] == "${{ toJSON(needs) }}"
 
 
+def test_ci_concurrency() -> None:
+    """Only a new head commit of a pull request cancels its CI runs.
+
+    A run cancelled by a newer run on the same commit (e.g. for an edit of
+    the description) leaves a failed gate as the newest result on the
+    commit, which blocks the merge. So only the first attempt of a run for
+    `synchronize` cancels runs in progress, and runs for pushes get a group
+    of their own (see "Cancelled runs" in `actions/gate/README.md` of
+    `elixir-cloud-aai/.github`).
+    """
+    concurrency = yaml.safe_load(
+        (ROOT / ".github" / "workflows" / "ci.yml").read_text()
+    )["concurrency"]
+    cancel = " ".join(concurrency["cancel-in-progress"].split())
+    assert cancel == (
+        "${{ github.event_name == 'pull_request'"
+        " && github.event.action == 'synchronize'"
+        " && github.run_attempt == 1 }}"
+    )
+    group = " ".join(concurrency["group"].split())
+    assert "github.event_name == 'push' && github.sha ||" in group
+
+
 def test_ci_gate_conditions() -> None:
     """The gate may skip a job exactly where the job's condition is false.
 
