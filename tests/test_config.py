@@ -280,8 +280,14 @@ def test_ci_concurrency() -> None:
         " && github.event.action == 'synchronize'"
         " && github.run_attempt == 1 }}"
     )
+    # The whole expression, so that no other branch can give pushes a shared
+    # group (pushes first, by commit; edits that keep the title; the ref)
     group = " ".join(concurrency["group"].split())
-    assert "github.event_name == 'push' && github.sha ||" in group
+    assert group == (
+        "${{ github.workflow }}-${{ github.event_name == 'push' && github.sha"
+        " || github.event.action == 'edited' && !github.event.changes.title"
+        " && format('{0}-edited', github.ref) || github.ref }}"
+    )
 
 
 def test_ci_gate_conditions() -> None:
