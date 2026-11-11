@@ -330,6 +330,7 @@ class RegisterToolVersion:
         "WDL",
         "NFL",
         "GALAXY",
+        "SMK",
     ]
     image_types: ClassVar[list[str]] = [
         "Docker",

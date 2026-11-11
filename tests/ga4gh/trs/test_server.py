@@ -576,20 +576,157 @@ def test_toolsGet_filters_empty_descriptor_type(
     assert response.status_code == 400
 
 
-@pytest.mark.parametrize("query", ["tags=a", "tags=a,b", "tags=a&tags=b", "tags="])
+@pytest.mark.parametrize(
+    "query",
+    [
+        "tags=tag_1",
+        "tags=tag_2",
+        "tags=tag_1,tag_2",
+        "tags=tag_2,tag_1",
+        "tags=tag_1%2Ctag_2",
+    ],
+)
 def test_toolsGet_tags(client: FlaskClient, tool: dict[str, Any], query: str) -> None:
-    """The filter `tags` is not supported and refused, with the reason.
+    """Tools that have all given tags are listed, in any order.
+
+    Encoded commas separate tags, too, so tags can't contain commas (see
+    `test_tool_tags_invalid`).
 
     Args:
         client: Test client.
-        tool: Registered tool.
-        query: Query string with tags.
+        tool: Registered tool, with tags `tag_1` and `tag_2`.
+        query: Query string with tags of the tool, comma-separated
+            (`explode: false`).
     """
     response = client.get(f"{BASE_PATH}/tools?{query}")
-    assert response.status_code == 400
-    assert response.get_json() == _bad_request(
-        "The filter 'tags' is not supported: tools have no tags."
+    assert response.status_code == 200
+    assert response.get_json() == [_without_files(tool)]
+
+
+@pytest.mark.parametrize("query", ["tags=other", "tags=tag_1,other", "tags="])
+def test_toolsGet_tags_no_match(
+    client: FlaskClient, tool: dict[str, Any], query: str
+) -> None:
+    """Tools that lack any of the given tags are not listed.
+
+    An empty value is an empty tag, which matches only empty tags, as other
+    empty filter values do.
+
+    Args:
+        client: Test client.
+        tool: Registered tool, with tags `tag_1` and `tag_2`.
+        query: Query string with a tag that the tool doesn't have.
+    """
+    response = client.get(f"{BASE_PATH}/tools?{query}")
+    assert response.status_code == 200
+    assert response.get_json() == []
+
+
+@pytest.mark.parametrize(
+    ("query", "match"),
+    [
+        ("tags=tag_1&tags=tag_2", True),
+        ("tags=tag_2&tags=tag_1", True),
+        ("tags=other&tags=tag_1", False),
+        ("tags=tag_1&tags=other", False),
+        ("tags=tag_1&tags=tag_2,other", False),
+    ],
+)
+def test_toolsGet_tags_repeated(
+    client: FlaskClient, tool: dict[str, Any], query: str, match: bool
+) -> None:
+    """Repeated `tags` parameters all apply, as do comma-separated ones.
+
+    Connexion keeps only the last value of repeated parameters with
+    `explode: false`; the filter takes all of them.
+
+    Args:
+        client: Test client.
+        tool: Registered tool, with tags `tag_1` and `tag_2`.
+        query: Query string with repeated `tags` parameters.
+        match: Whether the tool has all the tags.
+    """
+    response = client.get(f"{BASE_PATH}/tools?{query}")
+    assert response.status_code == 200
+    assert response.get_json() == ([_without_files(tool)] if match else [])
+
+
+def test_toolsGet_tags_untagged(client: FlaskClient, tool: dict[str, Any]) -> None:
+    """Tools without tags are listed without the filter, not with it.
+
+    Args:
+        client: Test client.
+        tool: Registered tool, with tags.
+    """
+    data = deepcopy(MOCK_TOOL_VERSION_ID)
+    del data["tags"]
+    response = client.put(f"{BASE_PATH}/tools/TOOL02", json=data)
+    assert response.status_code == 200
+    response = client.get(f"{BASE_PATH}/tools")
+    assert [item["id"] for item in response.get_json()] == [TOOL_ID, "TOOL02"]
+    assert "tags" not in response.get_json()[1]
+    response = client.get(f"{BASE_PATH}/tools?tags=tag_1")
+    assert [item["id"] for item in response.get_json()] == [TOOL_ID]
+
+
+def test_toolsGet_tags_combined(client: FlaskClient, tool: dict[str, Any]) -> None:
+    """The filter `tags` applies together with the other filters.
+
+    Args:
+        client: Test client.
+        tool: Registered tool, with tags.
+    """
+    response = client.get(f"{BASE_PATH}/tools?tags=tag_1&toolname=other")
+    assert response.get_json() == []
+    response = client.get(f"{BASE_PATH}/tools?tags=tag_1&toolname={tool['name']}")
+    assert [item["id"] for item in response.get_json()] == [TOOL_ID]
+
+
+def test_toolsGet_tags_pagination(client: FlaskClient, tool: dict[str, Any]) -> None:
+    """Links to pages keep the tags of the request.
+
+    Args:
+        client: Test client.
+        tool: Registered tool, with tags.
+    """
+    response = client.get(f"{BASE_PATH}/tools?tags=tag_1,tag_2&limit=5")
+    assert response.status_code == 200
+    assert response.headers["last_page"] == (
+        f"http://localhost{BASE_PATH}/tools?tags=tag_1%2Ctag_2&offset=0&limit=5"
     )
+
+
+def test_tool_tags_replaced(client: FlaskClient, tool: dict[str, Any]) -> None:
+    """Replacing a tool replaces its tags.
+
+    Args:
+        client: Test client.
+        tool: Registered tool, with tags.
+    """
+    data = deepcopy(MOCK_TOOL_VERSION_ID)
+    data["tags"] = ["tag_3"]
+    response = client.put(f"{BASE_PATH}/tools/{TOOL_ID}", json=data)
+    assert response.status_code == 200
+    response = client.get(f"{BASE_PATH}/tools/{TOOL_ID}")
+    assert response.get_json()["tags"] == ["tag_3"]
+    assert client.get(f"{BASE_PATH}/tools?tags=tag_1").get_json() == []
+
+
+@pytest.mark.parametrize("tags", [[1], "tag_1", [None], ["tag_1,tag_2"]])
+def test_tool_tags_invalid(client: FlaskClient, tags: Any) -> None:
+    """Tags must be a list of strings without commas.
+
+    Commas separate the tags of the filter `tags`, so tags with commas
+    couldn't be filtered by.
+
+    Args:
+        client: Test client.
+        tags: Invalid tags.
+    """
+    data = deepcopy(MOCK_TOOL_VERSION_ID)
+    data["tags"] = tags
+    response = client.put(f"{BASE_PATH}/tools/{TOOL_ID}", json=data)
+    assert response.status_code == 400
 
 
 # GET /tools/{id}
@@ -652,6 +789,53 @@ def test_toolsIdVersionsVersionIdGet(client: FlaskClient, tool: dict[str, Any]) 
     assert response.status_code == 200
     assert response.get_json() == _without_files(tool)["versions"][0]
     assert response.get_json()["url"] == f"{TOOL_URL}/versions/{VERSION_ID}"
+
+
+@pytest.mark.parametrize("method", ["POST", "PUT"])
+def test_version_description(
+    client: FlaskClient, tool: dict[str, Any], method: str
+) -> None:
+    """The descriptions of versions are stored, served and replaced.
+
+    Args:
+        client: Test client.
+        tool: Registered tool, whose version has a description.
+        method: Method of the request that registers a version.
+    """
+    assert (
+        client.get(VERSION_PATH).get_json()["description"]
+        == (MOCK_VERSION_NO_ID["description"])
+    )
+    data = deepcopy(MOCK_VERSION_NO_ID)
+    data["description"] = "other"
+    path = f"{BASE_PATH}/tools/{TOOL_ID}/versions" + (
+        "" if method == "POST" else f"/{VERSION_ID}"
+    )
+    response = client.open(path, method=method, json=data)
+    assert response.status_code == 200
+    version_id = response.get_json()
+    response = client.get(f"{BASE_PATH}/tools/{TOOL_ID}/versions/{version_id}")
+    assert response.get_json()["description"] == "other"
+    del data["description"]
+    response = client.put(
+        f"{BASE_PATH}/tools/{TOOL_ID}/versions/{version_id}", json=data
+    )
+    assert response.status_code == 200
+    response = client.get(f"{BASE_PATH}/tools/{TOOL_ID}/versions/{version_id}")
+    assert "description" not in response.get_json()
+
+
+def test_version_description_invalid(client: FlaskClient, tool: dict[str, Any]) -> None:
+    """Descriptions of versions must be strings.
+
+    Args:
+        client: Test client.
+        tool: Registered tool.
+    """
+    data = deepcopy(MOCK_VERSION_NO_ID)
+    data["description"] = ["other"]
+    response = client.post(f"{BASE_PATH}/tools/{TOOL_ID}/versions", json=data)
+    assert response.status_code == 400
 
 
 UNKNOWN_VERSIONS = pytest.mark.parametrize(
@@ -817,25 +1001,61 @@ def test_type_BadRequest_unknown(
     assert "'CWL', 'WDL', 'NFL', 'GALAXY', 'SMK'" in reason
 
 
-@pytest.mark.parametrize("path", TYPE_PATHS)
-def test_type_BadRequest_unsupported(
-    client: FlaskClient, tool: dict[str, Any], path: str
-) -> None:
-    """Descriptor types of the spec that the app doesn't support are refused.
+def _smk_version() -> dict[str, Any]:
+    """Get the mock version with Snakemake (`SMK`) instead of CWL files.
 
-    `SMK` is refused by the controllers, with the supported types as
-    `detail`.
+    Returns:
+        Version, with descriptor type `SMK`.
+    """
+    version = deepcopy(MOCK_VERSION_NO_ID)
+    version["descriptor_type"] = ["SMK"]
+    for file in version["files"]:
+        if file["type"] == "CWL":
+            file["type"] = "SMK"
+    return version
+
+
+def test_type_SMK(client: FlaskClient, tool: dict[str, Any]) -> None:
+    """Snakemake (`SMK`) versions are registered and served.
 
     Args:
         client: Test client.
         tool: Registered tool.
-        path: Path below the type.
     """
-    response = client.get(f"{VERSION_PATH}/SMK/{path}")
-    assert response.status_code == 400
-    assert response.get_json() == _bad_request(
-        "The descriptor type is not supported; supported are: CWL, WDL, NFL, GALAXY "
-        "(their PLAIN_ forms are accepted, but not served yet)."
+    response = client.put(f"{VERSION_PATH}", json=_smk_version())
+    assert response.status_code == 200
+    response = client.get(f"{VERSION_PATH}")
+    assert response.get_json()["descriptor_type"] == ["SMK"]
+    response = client.get(f"{VERSION_PATH}/SMK/descriptor")
+    assert response.status_code == 200
+    assert response.get_json()["content"] == "content"
+    response = client.get(f"{VERSION_PATH}/SMK/descriptor/path_other_cwl")
+    assert response.status_code == 200
+    response = client.get(f"{VERSION_PATH}/SMK/tests")
+    assert response.status_code == 200
+    assert len(response.get_json()) == 1
+    response = client.get(f"{VERSION_PATH}/SMK/files")
+    assert {file["path"] for file in response.get_json()} == CWL_PATHS
+    # no CWL files left
+    assert client.get(f"{VERSION_PATH}/CWL/descriptor").status_code == 404
+    response = client.get(f"{BASE_PATH}/tools?descriptorType=SMK")
+    assert [item["id"] for item in response.get_json()] == [TOOL_ID]
+    # not served as plain files yet, as the other types
+    assert client.get(f"{VERSION_PATH}/PLAIN_SMK/descriptor").status_code == 404
+
+
+def test_validate_descriptor_type_unsupported() -> None:
+    """Descriptor types that the app doesn't support are refused.
+
+    All descriptor types of the specification are supported, so only types
+    that the specification adds later reach the check; the reason lists the
+    supported types.
+    """
+    with pytest.raises(server.InvalidRequest) as exc_info:
+        server.validate_descriptor_type("FOO")
+    assert exc_info.value.description == (
+        "The descriptor type is not supported; supported are: CWL, WDL, NFL, "
+        "GALAXY, SMK (their PLAIN_ forms are accepted, but not served yet)."
     )
 
 
@@ -848,16 +1068,16 @@ def test_validate_descriptor_type_logged_escaped(
         caplog: Captured logs.
     """
     with pytest.raises(server.InvalidRequest):
-        server.validate_descriptor_type("SMK\nforged line")
+        server.validate_descriptor_type("FOO\nforged line")
     (message,) = [record.getMessage() for record in caplog.records]
     assert message.startswith(
-        "Specified type 'SMK\\nforged line' not among valid types: "
+        "Specified type 'FOO\\nforged line' not among valid types: "
     )
 
 
 # `PLAIN_` forms of the supported descriptor types (`DescriptorTypeWithPlain`
 # of the specification): output types of the `{type}` paths, not file types
-PLAIN_TYPES = ["PLAIN_CWL", "PLAIN_WDL", "PLAIN_NFL", "PLAIN_GALAXY"]
+PLAIN_TYPES = ["PLAIN_CWL", "PLAIN_WDL", "PLAIN_NFL", "PLAIN_GALAXY", "PLAIN_SMK"]
 
 
 @pytest.mark.parametrize("path", ["descriptor", "descriptor/path_other_cwl", "tests"])
@@ -1707,7 +1927,7 @@ INVALID_VERSIONS = pytest.mark.parametrize(
         (
             _descriptor_image_type,
             "The type of descriptor, test and other files must be a "
-            "supported descriptor type: CWL, WDL, NFL, GALAXY.",
+            "supported descriptor type: CWL, WDL, NFL, GALAXY, SMK.",
         ),
         (
             _containerfile_descriptor_type,

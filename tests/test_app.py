@@ -538,6 +538,39 @@ def test_swagger_ui(client: FlaskClient) -> None:
     assert "get" in spec["paths"]["/service-info"]
 
 
+def test_spec_additions(client: FlaskClient) -> None:
+    """The served specification has the app's info and extensions.
+
+    The info is the app's, as in Cloud Registry; tools have `tags`, and the
+    registration schemas reference the enums of the TRS schemas instead of
+    copying them.
+
+    Args:
+        client: Test client.
+    """
+    spec = client.get(f"{BASE_PATH}/openapi.json").get_json()
+    info = spec["info"]
+    assert info["title"] == "TRS-Filer"
+    assert "brought to you by ELIXIR On-Cloud" in info["description"]
+    assert info["license"]["name"] == "Apache 2.0"
+    assert info["contact"]["email"] == "cloud-service@elixir-europe.org"
+    schemas = spec["components"]["schemas"]
+    for name in ("Tool", "ToolRegister"):
+        tags = schemas[name]["properties"]["tags"]
+        assert tags["type"] == "array"
+        assert tags["items"]["type"] == "string"
+    # Commas separate the tags of the filter
+    assert schemas["ToolRegister"]["properties"]["tags"]["items"]["pattern"] == (
+        "^[^,]*$"
+    )
+    for name in ("ToolVersionRegister", "ToolVersionRegisterId"):
+        assert schemas[name]["properties"]["description"]["type"] == "string"
+    assert schemas["ToolFileRegister"]["properties"]["file_type"] == {
+        "$ref": "#/components/schemas/ToolFile/properties/file_type"
+    }
+    assert "SMK" in schemas["DescriptorType"]["enum"]
+
+
 def test_collections(app: App) -> None:
     """The collections of the app's database are registered.
 

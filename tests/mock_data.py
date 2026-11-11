@@ -174,6 +174,7 @@ MOCK_IMAGES: list[dict[str, Any]] = [
 ]
 MOCK_VERSION_NO_ID: dict[str, Any] = {
     "author": ["author"],
+    "description": "version_description",
     "descriptor_type": ["CWL"],
     "files": MOCK_FILES,
     "images": MOCK_IMAGES,
@@ -206,6 +207,10 @@ MOCK_TOOL: dict[str, Any] = {
     "has_checker": True,
     "name": "name",
     "organization": "organization",
+    "tags": [
+        "tag_1",
+        "tag_2",
+    ],
     "toolclass": MOCK_TOOL_CLASS,
     "versions": [
         MOCK_VERSION_NO_ID,
