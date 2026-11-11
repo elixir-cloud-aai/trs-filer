@@ -69,9 +69,33 @@ def _pinned(requirements: str) -> dict[str, list[str]]:
     for line in lines:
         if not line or line.lstrip().startswith("#"):
             continue
-        name, _, rest = line.partition("==")
+        # Direct references (`<name> @ <URL>`, e.g., a FOCA commit) have no
+        # hashes
+        name, _, rest = (
+            line.partition(" @ ")
+            if " @ " in line.split("==")[0]
+            else line.partition("==")
+        )
         packages[name.strip()] = re.findall(r"--hash=sha256:([0-9a-f]{64})", rest)
     return packages
+
+
+def _foca_commit(requirements: str) -> str | None:
+    """Get the FOCA commit of a temporary direct reference, if any.
+
+    Args:
+        requirements: Requirements file, as `uv export` writes it.
+
+    Returns:
+        The full commit SHA that FOCA is pinned to, or `None` for a locked
+        FOCA release.
+    """
+    match = re.search(
+        r"^foca @ git\+https://github\.com/elixir-cloud-aai/foca@([0-9a-f]{40})$",
+        requirements,
+        flags=re.MULTILINE,
+    )
+    return match[1] if match else None
 
 
 def _locked_versions(requirements: str) -> dict[str, str]:
@@ -225,16 +249,19 @@ def test_dockerfile_exports() -> None:
 def test_runtime_requirements_without_build_requirements() -> None:
     """The runtime requirements of the image leave out the build group.
 
-    They have `yq` (dependency group `config-job`), each with hashes, but no
-    dev dependencies (the `dev` extra).
+    They have `yq` (dependency group `config-job`), each with hashes (except
+    a temporary FOCA commit, which the image build leaves out), but no dev
+    dependencies (the `dev` extra).
     """
-    packages = _pinned(_export("--no-dev", "--group", CONFIG_JOB))
+    exported = _export("--no-dev", "--group", CONFIG_JOB)
+    packages = _pinned(exported)
     assert {"connexion", "foca", "gunicorn", "yq"} <= packages.keys()
     assert "setuptools" not in packages
     assert "setuptools-scm" not in packages
     assert "pytest" not in packages
+    unhashed = {"foca"} if _foca_commit(exported) else set()
     for name, hashes in packages.items():
-        assert hashes, name
+        assert hashes or name in unhashed, name
 
 
 def test_config_job_group() -> None:
@@ -252,10 +279,12 @@ def test_config_job_group() -> None:
 
 
 def test_image_requirements_of_export() -> None:
-    """The script keeps the export of the image build as is, with FOCA's release.
+    """The script keeps the export of the image build, but a FOCA commit.
 
     As the base image has the locked FOCA release (see
-    `test_locked_foca_is_base_image_foca()`), nothing is left out.
+    `test_locked_foca_is_base_image_foca()`), nothing is left out; a
+    temporary FOCA commit, which the base image has, is left out, with the
+    other requirements kept as they are.
     """
     spec = importlib.util.spec_from_file_location(
         "image_requirements", ROOT / "scripts/image_requirements.py"
@@ -264,8 +293,21 @@ def test_image_requirements_of_export() -> None:
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     exported = _export("--no-dev", "--group", CONFIG_JOB)
-    locked = _locked_versions(exported)
-    assert module.image_requirements(exported, locked["foca"]) == exported
+    commit = _foca_commit(exported)
+    if commit is None:
+        locked = _locked_versions(exported)
+        assert module.image_requirements(exported, locked["foca"]) == exported
+    else:
+        # As setuptools-scm sets it for FOCA's development image
+        installed = f"0.0.1.dev1+g{commit[:9]}"
+        kept = module.image_requirements(exported, installed)
+        assert "foca @" not in kept
+        assert kept == "".join(
+            f"{line}\n"
+            for entry in module.entries(exported)
+            if not entry[0].startswith("foca @")
+            for line in entry
+        )
 
 
 def test_downloads_hash_checked() -> None:
