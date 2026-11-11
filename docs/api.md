@@ -19,14 +19,16 @@ The service info reports TRS version 2.0.1 (`type.version`), the last
 release that the specification implements; the specification itself says
 `info.version: 2.1.0`, the version that `develop` was heading for at that
 commit. The file's header names its source, its license (Apache 2.0) and
-the parts commented out here.
+the parts commented out here. The app's info and extensions (the
+registration endpoints, the `tags` of tools) are merged into it from
+[`additions.openapi.yaml`](https://github.com/elixir-cloud-aai/trs-filer/blob/dev/trs_filer/api/additions.openapi.yaml).
 
 ## GA4GH TRS endpoints
 
 | Endpoint | Description |
 | --- | --- |
 | `GET /service-info` | The service info of the deployment (see [Service info](configuration.md#service-info)). |
-| `GET /tools` | List tools, without the files of their versions, optionally filtered (e.g., by `toolClass`, `descriptorType`, `organization`, `toolname`), one page at a time (see [Listing tools](#listing-tools)). |
+| `GET /tools` | List tools, without the files of their versions, optionally filtered (e.g., by `toolClass`, `descriptorType`, `tags`, `organization`, `toolname`), one page at a time (see [Listing tools](#listing-tools)). |
 | `GET /tools/{id}` | Get a tool. |
 | `GET /tools/{id}/versions` | List the versions of a tool. |
 | `GET /tools/{id}/versions/{version_id}` | Get a version of a tool. |
@@ -39,9 +41,8 @@ the parts commented out here.
 
 ## Descriptor types
 
-TRS-Filer supports the descriptor types `CWL`, `WDL`, `NFL` and `GALAXY`;
-`SMK`, also a descriptor type of the specification, gives `400 Bad Request`
-in paths and as the type of files (see [Errors](#errors)).
+TRS-Filer supports all descriptor types of the specification: `CWL`,
+`WDL`, `NFL`, `GALAXY` and `SMK` (Snakemake).
 
 The specification also defines `PLAIN_` types (`PLAIN_CWL`, `PLAIN_WDL`,
 `PLAIN_NFL`, `PLAIN_GALAXY`, `PLAIN_SMK`). They are not descriptor types of
@@ -66,8 +67,14 @@ and filters of images (`registry`, `name`) the same image of that version.
 Empty values match only empty values, like other values (e.g., `author=`
 lists the tools with an empty author in one of their versions; an empty
 `descriptorType` is not a valid descriptor type and gives `400 Bad
-Request`). The filter `tags` of the specification is not supported, as
-tools have no tags: requests with it give `400 Bad Request`.
+Request`).
+
+The filter `tags` lists the tools that have all given tags (see
+[Registering tools](#registering-tools)), in any order; tags are separated
+by commas, also encoded ones (`tags=a,b` or `tags=a%2Cb`: tools with both
+`a` and `b`), as the specification declares the parameter with `explode:
+false`. Tools without tags don't match any `tags` filter, and `tags=` only
+tools with an empty tag.
 
 Tools are listed in the order of their database identifiers, one page at a
 time. That is roughly the order they were added (tools added by different
@@ -110,10 +117,15 @@ These endpoints are TRS-Filer's own, in
 | `DELETE /toolClasses/{id}` | Delete a tool class; tool classes that tools use can't be deleted (`400 Bad Request`). |
 
 A tool has an `organization`, a tool class (`toolclass`) and a list of
-versions (`versions`), and optionally a `name`, a `description`, `aliases`
-and a checker tool (`has_checker`, `checker_url`). Each version lists its
-descriptor types (`descriptor_type`), its container images (`images`) and
-its files (`files`). Each file has a path and a file type (`tool_file`:
+versions (`versions`), and optionally a `name`, a `description`, `aliases`,
+`tags` and a checker tool (`has_checker`, `checker_url`). Tags are
+registry-specific strings without commas (e.g., `genomics`), by which
+`GET /tools` filters (see [Listing tools](#listing-tools)); they are an
+extension of TRS-Filer to the `Tool` schema of the specification, which
+declares the filter but not where tools keep their tags, and are returned
+with the tool. Each version lists its descriptor types (`descriptor_type`),
+its container images (`images`) and its files (`files`), and optionally has
+a `description`. Each file has a path and a file type (`tool_file`:
 `PRIMARY_DESCRIPTOR`, `SECONDARY_DESCRIPTOR`, `TEST_FILE`, `CONTAINERFILE` or
 `OTHER`), its descriptor type or image type (`type`: one of the supported
 [descriptor types](#descriptor-types) for descriptors, test files and other
@@ -203,8 +215,7 @@ URLs). Only the first reason found is given:
 
 | Request | Reason |
 | --- | --- |
-| `GET /tools` | The filter `tags` is given (tools have no tags); the `offset` is not a non-negative integer; the `limit` is below 1. |
-| `GET` of the descriptors, tests and files of a version | The descriptor type is one of the specification that TRS-Filer doesn't support (e.g., `SMK`); the reason lists the supported ones and says that their `PLAIN_` forms are accepted but not served yet (see [Descriptor types](#descriptor-types)). |
+| `GET /tools` | The `offset` is not a non-negative integer; the `limit` is below 1. |
 | `POST`, `PUT` of tools | The tool class doesn't exist while tool classes are validated (see [Tool classes](configuration.md#tool-classes)); the versions have duplicate identifiers; a version is invalid (see below). |
 | `POST`, `PUT` of versions | The paths of the files of a version are not unique per type; a descriptor type has more than one `PRIMARY_DESCRIPTOR` file, or `SECONDARY_DESCRIPTOR` files but none; a file has neither `file_wrapper.content` nor `file_wrapper.url`; a file of a production version (`is_production`) has no checksums (`file_wrapper.checksum`); the type of a descriptor, test or other file is not a supported descriptor type, or that of a containerfile not a supported image type. |
 | `DELETE /tools/{id}/versions/{version_id}` | The version is the last one of the tool (delete the tool instead). |

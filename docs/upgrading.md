@@ -6,7 +6,30 @@ affected by the changes since the tag `v0.3.0` (2023) and the images
 published from `dev` before the move to FOCA 0.17 (tagged `latest` and by
 date, with FOCA 0.12); for images from `dev` since then, see [Images from
 `dev` since FOCA 0.17](#images-from-dev-since-foca-017).
-Upgrading from 0.4.0? See [From 0.4.0](#from-040).
+Upgrading from 0.5.0? See [From 0.5.0](#from-050); from 0.4.0, see
+[From 0.4.0](#from-040) too.
+
+## From 0.5.0
+
+The API supports more of the TRS specification; existing data and configs
+need no changes. Check clients:
+
+- `GET /tools` filters by `tags` (comma-separated; tools must have all of
+  them) instead of refusing the filter with `400 Bad Request`. Tools get
+  their tags on registration (`tags` of `ToolRegister`, strings without
+  commas) and return them; stored tools have none (see [Listing
+  tools](api.md#listing-tools)).
+- The descriptor type `SMK` (Snakemake) is supported: versions and files of
+  type `SMK` are registered, and the `SMK` and `PLAIN_SMK` paths of the
+  descriptor, test and file endpoints behave as those of the other types
+  (plain files aren't served yet), instead of giving `400 Bad Request`
+  (see [Descriptor
+  types](api.md#descriptor-types)).
+- Versions take a `description` (`ToolVersionRegister`), which they
+  return; registrations with it failed with `400 Bad Request` before.
+- The served specification (`openapi.json`, Swagger UI) has the app's
+  `info` (title `TRS-Filer`, license and contact), instead of the TRS
+  specification's.
 
 ## From 0.4.0
 
@@ -153,8 +176,8 @@ drop it if you like.
   images apply to the same version and image (they overwrote each other).
   The links `next_page` and `last_page` keep the filters of the request
   (they had only `offset` and `limit`). An empty `author` matches only empty
-  authors (it matched all tools), and the unsupported filter `tags` gives
-  `400 Bad Request` (it was ignored). See [Listing
+  authors (it matched all tools), and the filter `tags` filters by the
+  tags of tools (it was ignored). See [Listing
   tools](api.md#listing-tools).
 - Registering or replacing a tool no longer changes an existing tool class:
   the tool stores a copy of the stored tool class instead of the one it was
