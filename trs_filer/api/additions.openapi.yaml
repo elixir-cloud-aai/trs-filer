@@ -2,7 +2,7 @@
 # the app's info, the registration endpoints and their schemas, and the
 # app's extensions of TRS schemas (`tags` of tools). The registration schemas
 # mirror the read schemas of TRS and reference its enums instead of copying
-# them
+# them. `info.version` stays that of the TRS specification
 info:
   title: 'TRS-Filer'
   description: |

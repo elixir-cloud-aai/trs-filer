@@ -19,8 +19,10 @@ The service info reports TRS version 2.0.1 (`type.version`), the last
 release that the specification implements; the specification itself says
 `info.version: 2.1.0`, the version that `develop` was heading for at that
 commit. The file's header names its source, its license (Apache 2.0) and
-the parts commented out here. The app's info and extensions (the
-registration endpoints, the `tags` of tools) are merged into it from
+the parts commented out here. The app's info (title, description, license
+and contact; `info.version` stays the specification's, not the app's) and
+extensions (the registration endpoints, the `tags` of tools) are merged
+into it from
 [`additions.openapi.yaml`](https://github.com/elixir-cloud-aai/trs-filer/blob/dev/trs_filer/api/additions.openapi.yaml).
 
 ## GA4GH TRS endpoints
@@ -73,8 +75,9 @@ The filter `tags` lists the tools that have all given tags (see
 [Registering tools](#registering-tools)), in any order; tags are separated
 by commas, also encoded ones (`tags=a,b` or `tags=a%2Cb`: tools with both
 `a` and `b`), as the specification declares the parameter with `explode:
-false`. Tools without tags don't match any `tags` filter, and `tags=` only
-tools with an empty tag.
+false`. Repeated parameters apply too (`tags=a&tags=b` is `tags=a,b`).
+Tools without tags don't match any `tags` filter, and `tags=` only tools
+with an empty tag.
 
 Tools are listed in the order of their database identifiers, one page at a
 time. That is roughly the order they were added (tools added by different

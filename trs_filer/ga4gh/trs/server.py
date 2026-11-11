@@ -147,7 +147,8 @@ def toolsGet(
         alias: Return only entries with the given alias.
         toolClass: Return only entries with the given subclass name.
         descriptorType: Return only entries with the given descriptor type.
-        tags: Return only entries that have all the given tags.
+        tags: Return only entries that have all the given tags, of all
+            `tags` parameters of the request, if repeated.
         registry: Return only entries from the given registry.
         organization: Return only entries from the given organization.
         name: Return only entries with the given image name.
@@ -188,7 +189,15 @@ def toolsGet(
     if description is not None:
         filt["description"] = description
     if tags is not None:
-        filt["tags"] = {"$all": tags}
+        # Connexion keeps only the last of repeated parameters (`explode:
+        # false`), so the tags of all of them are taken from the request
+        filt["tags"] = {
+            "$all": [
+                tag
+                for value in request.args.getlist("tags")
+                for tag in value.split(",")
+            ]
+        }
     if checker is not None:
         filt["has_checker"] = checker
     image_filt: dict[str, Any] = {}

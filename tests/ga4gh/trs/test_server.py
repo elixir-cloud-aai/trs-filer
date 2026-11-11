@@ -622,6 +622,35 @@ def test_toolsGet_tags_no_match(
     assert response.get_json() == []
 
 
+@pytest.mark.parametrize(
+    ("query", "match"),
+    [
+        ("tags=tag_1&tags=tag_2", True),
+        ("tags=tag_2&tags=tag_1", True),
+        ("tags=other&tags=tag_1", False),
+        ("tags=tag_1&tags=other", False),
+        ("tags=tag_1&tags=tag_2,other", False),
+    ],
+)
+def test_toolsGet_tags_repeated(
+    client: FlaskClient, tool: dict[str, Any], query: str, match: bool
+) -> None:
+    """Repeated `tags` parameters all apply, as do comma-separated ones.
+
+    Connexion keeps only the last value of repeated parameters with
+    `explode: false`; the filter takes all of them.
+
+    Args:
+        client: Test client.
+        tool: Registered tool, with tags `tag_1` and `tag_2`.
+        query: Query string with repeated `tags` parameters.
+        match: Whether the tool has all the tags.
+    """
+    response = client.get(f"{BASE_PATH}/tools?{query}")
+    assert response.status_code == 200
+    assert response.get_json() == ([_without_files(tool)] if match else [])
+
+
 def test_toolsGet_tags_untagged(client: FlaskClient, tool: dict[str, Any]) -> None:
     """Tools without tags are listed without the filter, not with it.
 
