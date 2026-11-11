@@ -147,8 +147,7 @@ def toolsGet(
         alias: Return only entries with the given alias.
         toolClass: Return only entries with the given subclass name.
         descriptorType: Return only entries with the given descriptor type.
-        tags: Filter by registry-specific tags of the specification; not
-            supported, as tools have no tags.
+        tags: Return only entries that have all the given tags.
         registry: Return only entries from the given registry.
         organization: Return only entries from the given organization.
         name: Return only entries with the given image name.
@@ -170,14 +169,9 @@ def toolsGet(
         The links to pages keep the other query parameters of the request.
 
     Raises:
-        InvalidRequest: The offset is not a non-negative integer, the limit
-            is below 1, or `tags` are given.
+        InvalidRequest: The offset is not a non-negative integer, or the
+            limit is below 1.
     """
-    # deliberately refused (not ignored): tools have no tags to filter by
-    if tags is not None:
-        logger.error("Filtering tools by tags is not supported.")
-        raise InvalidRequest("The filter 'tags' is not supported: tools have no tags.")
-
     # set filters; those of versions apply to the same version, those of
     # images to the same image of that version
     filt: dict[str, Any] = {}
@@ -193,6 +187,8 @@ def toolsGet(
         filt["name"] = toolname
     if description is not None:
         filt["description"] = description
+    if tags is not None:
+        filt["tags"] = {"$all": tags}
     if checker is not None:
         filt["has_checker"] = checker
     image_filt: dict[str, Any] = {}
@@ -291,7 +287,7 @@ def toolsIdVersionsVersionIdTypeDescriptorGet(
 
     Args:
         type: The output type of the descriptor. Allowable values include
-            "CWL", "WDL", "NFL", "GALAXY".
+            "CWL", "WDL", "NFL", "GALAXY", "SMK".
         id: Tool identifier.
         version_id: Identifier to the tool version of the given tool `id`.
 
@@ -345,7 +341,7 @@ def toolsIdVersionsVersionIdTypeDescriptorRelativePathGet(
 
     Args:
         type: The output type of the descriptor. Examples of allowable
-            values are "CWL", "WDL", "NFL", "GALAXY".
+            values are "CWL", "WDL", "NFL", "GALAXY", "SMK".
         id: Tool identifier.
         version_id: Tool version identifier.
         relative_path: A relative path to the additional file (same
@@ -413,7 +409,7 @@ def toolsIdVersionsVersionIdTypeTestsGet(
 
     Args:
         type: The output type of the descriptor. Examples of allowable
-            values are "CWL", "WDL", "NFL", "GALAXY".
+            values are "CWL", "WDL", "NFL", "GALAXY", "SMK".
         id: Tool identifier.
         version_id: Tool version identifier.
 
@@ -472,7 +468,7 @@ def toolsIdVersionsVersionIdTypeFilesGet(
 
     Args:
         type: The output type of the descriptor. Examples of allowable
-            values are "CWL", "WDL", "NFL", "GALAXY".
+            values are "CWL", "WDL", "NFL", "GALAXY", "SMK".
         id: Tool identifier.
         version_id: Tool version identifier.
         format: `zip` to get the files as a ZIP archive instead of their

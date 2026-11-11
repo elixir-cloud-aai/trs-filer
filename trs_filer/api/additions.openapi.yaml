@@ -1,3 +1,21 @@
+# Merged into the TRS specification (`api.specs.trs.path` in `config.yaml`):
+# the app's info, the registration endpoints and their schemas, and the
+# app's extensions of TRS schemas (`tags` of tools). The registration schemas
+# mirror the read schemas of TRS and reference its enums instead of copying
+# them
+info:
+  title: 'TRS-Filer'
+  description: |
+    Registry of tools and workflows, implementing the GA4GH Tool Registry
+    Service (TRS) API, with endpoints to register, change and delete tools,
+    their versions and tool classes; brought to you by ELIXIR On-Cloud. More
+    information on [GitHub](https://github.com/elixir-cloud-aai/trs-filer).
+  license:
+    name: 'Apache 2.0'
+    url: 'http://www.apache.org/licenses/LICENSE-2.0'
+  contact:
+    name: 'ELIXIR On-Cloud'
+    email: 'cloud-service@elixir-europe.org'
 paths:
   # Served by FOCA from the config (`service_info`); the controller set here
   # takes precedence over the one added to all operations (`api.specs` in
@@ -492,6 +510,16 @@ paths:
                 $ref: '#/components/schemas/Error'
 components:
   schemas:
+    # Extension of the TRS schema: the tags of tools, by which `GET /tools`
+    # filters (`tags`)
+    Tool:
+      properties:
+        tags:
+          type: array
+          items:
+            type: string
+          description: Registry-specific tags of the tool, by which tools are
+            filtered (`tags` of `GET /tools`). An extension of TRS-Filer.
     ChecksumRegister:
       type: object
       required:
@@ -651,14 +679,7 @@ components:
           description: Relative path of the file.  A descriptor's path can be used with
             the GA4GH .../{type}/descriptor/{relative_path} endpoint.
         file_type:
-          type: string
-          enum:
-            - TEST_FILE
-            - PRIMARY_DESCRIPTOR
-            - SECONDARY_DESCRIPTOR
-            - CONTAINERFILE
-            - OTHER
-          example: OTHER
+          $ref: '#/components/schemas/ToolFile/properties/file_type'
     ToolRegister:
       type: object
       description: A tool (or described tool) is defined as a tuple of a
@@ -696,6 +717,19 @@ components:
         description:
           type: string
           description: The description of the tool.
+        tags:
+          type: array
+          items:
+            type: string
+            # Commas separate the tags of the filter
+            pattern: '^[^,]*$'
+          description: Registry-specific tags of the tool, by which tools are
+            filtered (`tags` of `GET /tools`); a tool matches if it has all
+            tags of the filter. Tags can't contain commas, which separate the
+            tags of the filter.
+          example:
+            - alignment
+            - genomics
         has_checker:
           type: boolean
           description: Whether this tool has a checker tool associated with it.
@@ -744,6 +778,11 @@ components:
           description: The type (or types) of descriptors available.
           items:
             $ref: "#/components/schemas/DescriptorType"
+        description:
+          type: string
+          description: The description of the tool version. This allows for
+            documentation of a specific tool version as a tool evolves over
+            time.
         verified:
           type: boolean
           description: Reports whether this tool has been verified by a
@@ -808,6 +847,11 @@ components:
           description: The type (or types) of descriptors available.
           items:
             $ref: "#/components/schemas/DescriptorType"
+        description:
+          type: string
+          description: The description of the tool version. This allows for
+            documentation of a specific tool version as a tool evolves over
+            time.
         verified:
           type: boolean
           description: Reports whether this tool has been verified by a
