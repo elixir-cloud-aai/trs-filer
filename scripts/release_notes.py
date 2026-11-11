@@ -108,14 +108,17 @@ MOVING_LINK = (
 # Whitespace before a link target, also a line break (in block quotes, with
 # the quote markers of the next line)
 _NEXT_LINE = r"[ \t]*(?:\n[ \t]*(?:>[ \t]*)*)?"
+# Start of a line in containers: indentation, and markers of block quotes and
+# list items (`>`, `-`, `*`, `+`, `1.`, `1)`), also nested, in any order
+_CONTAINERS = r"(?:[ \t]*(?:>|(?:[-*+]|[0-9]{1,9}[.)])[ \t]))*[ \t]*"
 # Link targets of inline links and images (`[text](target)`) and of reference
-# definitions (`[label]: target`, also in block quotes, not footnotes), both
-# also on the next line or in angle brackets. Matches outside links (e.g., in
-# code, or lines of paragraphs that look like definitions) count too, like
-# `UNVERSIONED`
+# definitions (`[label]: target`, also in block quotes and list items, at any
+# indentation, not footnotes), both also on the next line or in angle
+# brackets. Matches outside links (e.g., in code, or lines of paragraphs that
+# look like definitions) count too, like `UNVERSIONED`
 LINK_TARGET = re.compile(
     rf"\]\({_NEXT_LINE}(?:<([^<>\n]*)>|([^\s)]*))"
-    rf"|^[ \t]{{0,3}}(?:>[ \t]*)*\[(?!\^)(?:\\.|[^\\\]\n])+\]:{_NEXT_LINE}"
+    rf"|^{_CONTAINERS}\[(?!\^)(?:\\.|[^\\\]\n])+\]:{_NEXT_LINE}"
     r"(?:<([^<>\n]*)>|(\S+))",
     re.ASCII | re.MULTILINE,
 )

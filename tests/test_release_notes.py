@@ -436,6 +436,18 @@ def test_check_versioned_links(link: str) -> None:
         ("Intro.\n\n> [Upgrading][up].\n>\n>  [up]: ../upgrading.md\n", 5),
         ("Intro.\n\n> [Upgrading][up].\n>\n> [up]:\n> ../upgrading.md\n", 6),
         ("Intro.\n\n> See [Upgrading](\n> ../upgrading.md).\n", 4),
+        # Reference definitions in list items and other containers, also
+        # nested and indented
+        ("Intro, [a][a].\n\n- [a]: ../x.md\n", 3),
+        ("Intro, [a][a].\n\n* [a]: ../x.md\n", 3),
+        ("Intro, [a][a].\n\n+ [a]: ../x.md\n", 3),
+        ("Intro, [a][a].\n\n1. [a]: ../x.md\n", 3),
+        ("Intro, [a][a].\n\n12) [a]: ../x.md\n", 3),
+        ("Intro, [a][a].\n\n- item\n\n  [a]: ../x.md\n", 5),
+        ("Intro, [a][a].\n\n- item\n\n      [a]: ../x.md\n", 5),
+        ("Intro, [a][a].\n\n> - [a]: ../x.md\n", 3),
+        ("Intro, [a][a].\n\n- > 1. [a]: ../x.md\n", 3),
+        ("Intro, [a][a].\n\n- [a]:\n  ../x.md\n", 4),
         # Lines of paragraphs that look like definitions count too
         ("Intro text that ends\n[Upgrading]: a section name.\n", 2),
         # HTML
