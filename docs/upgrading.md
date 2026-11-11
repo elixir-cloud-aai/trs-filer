@@ -11,8 +11,10 @@ Upgrading from 0.5.0? See [From 0.5.0](#from-050); from 0.4.0, see
 
 ## From 0.5.0
 
-The API supports more of the TRS specification; existing data and configs
-need no changes. Check clients:
+The API implements TRS 2.0.2, and TRS-Filer runs on FOCA 0.23 (see FOCA's
+[migration
+guide](https://github.com/elixir-cloud-aai/foca/blob/dev/docs/migration-0.23.md));
+existing data needs no changes. Check clients and custom configs:
 
 - `GET /tools` filters by `tags` (comma-separated; tools must have all of
   them) instead of refusing the filter with `400 Bad Request`. Tools get
@@ -30,6 +32,25 @@ need no changes. Check clients:
 - The served specification (`openapi.json`, Swagger UI) has the app's
   `info` (title `TRS-Filer`, license and contact), instead of the TRS
   specification's.
+- **TRS 2.0.2 (breaking):** the served specification is that of the TRS
+  release 2.0.2 instead of a commit of TRS `develop` before it (see
+  [Supported TRS version](api.md#supported-trs-version)), and the service
+  info reports TRS version `2.0.2` (`type.version`) instead of `2.0.1`.
+  Custom configs that set `service_info.service.type.version` keep their
+  value; set it to `2.0.2`. The response of `GET
+  /tools/{id}/versions/{version_id}/{type}/files?format=zip` is declared as
+  a binary file (`application/zip`), as it is served; clients generated
+  from the specification may change.
+- The read operations of TRS and the service info are declared public
+  (`security: []`), and TRS's security scheme `BEARER` as an HTTP bearer
+  scheme (it was left out); nothing changes for clients, as no endpoint
+  required a token before. Config overlays with `patches` of
+  `api.specs.trs` must patch the operations of the new specification, and
+  `null` in patches now removes the key instead of setting it to `null`
+  (FOCA 0.23).
+- Versions take the versions of their languages (`descriptor_type_version`
+  of `ToolVersionRegister`, by descriptor type), which they return;
+  registrations with it failed with `400 Bad Request` before.
 
 ## From 0.4.0
 
@@ -127,8 +148,8 @@ clients, custom configs and log checks:
 
 ## Configuration
 
-TRS-Filer runs on FOCA 0.22 and Python 3.13. Custom configs must apply the
-config changes of FOCA 0.14 to 0.22 (see the [FOCA release
+TRS-Filer runs on FOCA 0.23 and Python 3.13. Custom configs must apply the
+config changes of FOCA 0.14 to 0.23 (see the [FOCA release
 notes](https://github.com/elixir-cloud-aai/foca/releases) and migration
 guides), e.g., `exceptions.mapping` instead of the old exception members,
 no `server.environment` or `server.use_reloader`, and no top-level
