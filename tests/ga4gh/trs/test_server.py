@@ -838,6 +838,63 @@ def test_version_description_invalid(client: FlaskClient, tool: dict[str, Any]) 
     assert response.status_code == 400
 
 
+@pytest.mark.parametrize("method", ["POST", "PUT"])
+def test_version_descriptor_type_version(
+    client: FlaskClient, tool: dict[str, Any], method: str
+) -> None:
+    """The language versions of versions are stored, served and replaced.
+
+    `descriptor_type_version` maps descriptor types to the versions of their
+    languages (TRS 2.0.x), as in `ToolVersion`.
+
+    Args:
+        client: Test client.
+        tool: Registered tool, whose version has language versions.
+        method: Method of the request that registers a version.
+    """
+    assert (
+        client.get(VERSION_PATH).get_json()["descriptor_type_version"]
+        == (MOCK_VERSION_NO_ID["descriptor_type_version"])
+    )
+    data = deepcopy(MOCK_VERSION_NO_ID)
+    data["descriptor_type_version"] = {"CWL": ["v1.2"], "WDL": ["1.0", "1.1"]}
+    path = f"{BASE_PATH}/tools/{TOOL_ID}/versions" + (
+        "" if method == "POST" else f"/{VERSION_ID}"
+    )
+    response = client.open(path, method=method, json=data)
+    assert response.status_code == 200
+    version_id = response.get_json()
+    version_path = f"{BASE_PATH}/tools/{TOOL_ID}/versions/{version_id}"
+    assert client.get(version_path).get_json()["descriptor_type_version"] == {
+        "CWL": ["v1.2"],
+        "WDL": ["1.0", "1.1"],
+    }
+    del data["descriptor_type_version"]
+    assert client.put(version_path, json=data).status_code == 200
+    assert "descriptor_type_version" not in client.get(version_path).get_json()
+
+
+@pytest.mark.parametrize(
+    "value",
+    [["v1.2"], {"CWL": "v1.2"}, {"CWL": [1.2]}],
+    ids=["not-a-map", "not-a-list", "not-a-string"],
+)
+def test_version_descriptor_type_version_invalid(
+    client: FlaskClient, tool: dict[str, Any], value: object
+) -> None:
+    """Language versions must map descriptor types to lists of strings.
+
+    Args:
+        client: Test client.
+        tool: Registered tool.
+        value: Invalid language versions.
+    """
+    data = deepcopy(MOCK_VERSION_NO_ID)
+    data["descriptor_type_version"] = value
+    response = client.post(f"{BASE_PATH}/tools/{TOOL_ID}/versions", json=data)
+    assert response.status_code == 400
+
+
 UNKNOWN_VERSIONS = pytest.mark.parametrize(
     "version_path",
     [

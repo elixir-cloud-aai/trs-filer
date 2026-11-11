@@ -2,6 +2,7 @@
 
 from collections.abc import Callable
 from copy import deepcopy
+import hashlib
 from importlib import import_module
 from importlib.metadata import version
 import inspect
@@ -58,7 +59,7 @@ def test_service_info(client: FlaskClient) -> None:
     assert service_info["type"] == {
         "group": "org.ga4gh",
         "artifact": "trs",
-        "version": "2.0.1",
+        "version": "2.0.2",
     }
     assert service_info["organization"] == {
         "name": "Example Organization",
@@ -564,11 +565,180 @@ def test_spec_additions(client: FlaskClient) -> None:
         "^[^,]*$"
     )
     for name in ("ToolVersionRegister", "ToolVersionRegisterId"):
-        assert schemas[name]["properties"]["description"]["type"] == "string"
+        properties = schemas[name]["properties"]
+        assert properties["description"]["type"] == "string"
+        assert properties["descriptor_type_version"] == {
+            "$ref": "#/components/schemas/ToolVersion/properties/"
+            "descriptor_type_version"
+        }
     assert schemas["ToolFileRegister"]["properties"]["file_type"] == {
         "$ref": "#/components/schemas/ToolFile/properties/file_type"
     }
     assert "SMK" in schemas["DescriptorType"]["enum"]
+
+
+# The vendored GA4GH specifications (`api.specs.trs.path`), by file name,
+# with the SHA-256 checksums of the published files
+VENDORED = {
+    # `service-info.yaml` of ga4gh-discovery/ga4gh-service-info at 11d2c12
+    "20200131.11d2c12.service-info.yaml": (
+        "743c549d599d36197a06d18493f62d3c3cf6f7a242c5ebec9e341f95b10dad3b"
+    ),
+    # `openapi/openapi.yaml` of ga4gh/tool-registry-service-schemas at
+    # 4854e2f (tag `2.0.2`)
+    "20250902.4854e2f.openapi.yaml": (
+        "adbe60a993bf2491675184c0564684489817ca7ce000e8f12fe32689cd1dd039"
+    ),
+}
+# The read operations of TRS, by method and path
+TRS_READS = [
+    ("get", path)
+    for path in (
+        "/tools",
+        "/tools/{id}",
+        "/tools/{id}/versions",
+        "/tools/{id}/versions/{version_id}",
+        "/tools/{id}/versions/{version_id}/{type}/descriptor",
+        "/tools/{id}/versions/{version_id}/{type}/descriptor/{relative_path}",
+        "/tools/{id}/versions/{version_id}/{type}/tests",
+        "/tools/{id}/versions/{version_id}/{type}/files",
+        "/tools/{id}/versions/{version_id}/containerfile",
+        "/toolClasses",
+    )
+]
+
+
+def test_vendored_specs_unchanged(app: App) -> None:
+    """The GA4GH specifications are vendored as published, and merged first.
+
+    The app changes them in `additions.openapi.yaml` only, merged last, whose
+    `null` values remove keys (`merge_null_removes`).
+
+    Args:
+        app: FOCA app.
+    """
+    with app.app.app_context():
+        (spec,) = get_config().api.specs
+    assert isinstance(spec.path, list)
+    paths = [Path(path) for path in spec.path]
+    assert [path.name for path in paths] == [*VENDORED, "additions.openapi.yaml"]
+    assert spec.merge_null_removes is True
+    for path in paths[:-1]:
+        assert hashlib.sha256(path.read_bytes()).hexdigest() == VENDORED[path.name]
+    assert sorted(path.name for path in paths[0].parent.glob("2*")) == sorted(VENDORED)
+
+
+def test_spec_security(client: FlaskClient) -> None:
+    """The TRS reads and the service info are public, with a bearer scheme.
+
+    The served specification has TRS's scheme (`BEARER`) as an HTTP bearer
+    scheme only (not the API key scheme of TRS 2.0.2, nor the scheme of the
+    service info specification), no security requirements of its own, and
+    the path item of the service info specification for `/service-info`,
+    instead of the remote reference of TRS. The registration endpoints have
+    no security requirements yet.
+
+    Args:
+        client: Test client.
+    """
+    spec = client.get(f"{BASE_PATH}/openapi.json").get_json()
+    assert spec["components"]["securitySchemes"] == {
+        "BEARER": {"type": "http", "scheme": "bearer"}
+    }
+    assert "security" not in spec
+    service_info = spec["paths"]["/service-info"]
+    assert "$ref" not in service_info
+    assert service_info["get"]["security"] == []
+    assert service_info["get"]["responses"]["200"]["content"]["application/json"][
+        "schema"
+    ] == {"$ref": "#/components/schemas/Service"}
+    for method, path in TRS_READS:
+        assert spec["paths"][path][method]["security"] == [], path
+    for path, item in spec["paths"].items():
+        for method, operation in item.items():
+            if method in HTTP_METHODS and (method, path) not in TRS_READS:
+                assert "security" not in operation or path == "/service-info"
+    zip_response = spec["paths"]["/tools/{id}/versions/{version_id}/{type}/files"][
+        "get"
+    ]["responses"]["200"]["content"]["application/zip"]["schema"]
+    assert zip_response == {"type": "string", "format": "binary"}
+
+
+def test_reads_public(client: FlaskClient) -> None:
+    """The TRS reads are served without a token.
+
+    Args:
+        client: Test client.
+    """
+    assert client.get(f"{BASE_PATH}/tools").status_code == 200
+    assert client.get(f"{BASE_PATH}/toolClasses").status_code == 200
+    assert client.get(f"{BASE_PATH}/service-info").status_code == 200
+
+
+def test_login_for_reads_patch(
+    mongo_client: MongoClient[dict[str, Any]], overlay: Path
+) -> None:
+    """A patch can require a bearer token for a read, with TRS's scheme.
+
+    FOCA's token validation is added to the scheme, as deployments would do;
+    requests without a token are refused before the token is validated.
+
+    Args:
+        mongo_client: MongoDB client.
+        overlay: Config overlay.
+    """
+    overlay.write_text(
+        yaml.safe_dump(
+            {
+                "api": {
+                    "specs": {
+                        "trs": {
+                            "add_security_fields": {
+                                "x-bearerInfoFunc": (
+                                    "foca.security.auth.validate_token"
+                                )
+                            },
+                            "patches": [
+                                {
+                                    "paths": {
+                                        "/tools": {
+                                            "get": {"security": [{"BEARER": []}]}
+                                        }
+                                    }
+                                }
+                            ],
+                        }
+                    }
+                }
+            }
+        )
+    )
+    client = create_app().app.test_client()
+    assert client.get(f"{BASE_PATH}/tools").status_code == 401
+    assert client.get(f"{BASE_PATH}/toolClasses").status_code == 200
+
+
+def test_no_startup_warnings(mongo_client: MongoClient[dict[str, Any]]) -> None:
+    """The app starts with the base config without warnings of its spec.
+
+    The only warning is FOCA's of the placeholders of the service info (see
+    `test_placeholder_warning()`); neither FOCA nor Connexion warn of the
+    specification (e.g., of security schemes, or of operations that the
+    app's changes make public).
+
+    Args:
+        mongo_client: MongoDB client.
+    """
+    records = _Records()
+    loggers = [logging.getLogger(name) for name in ("foca", "connexion", "trs_filer")]
+    for logger in loggers:
+        logger.addHandler(records)
+    try:
+        create_app()
+    finally:
+        for logger in loggers:
+            logger.removeHandler(records)
+    assert [name for name, _ in records.records] == ["foca.api.service_info"]
 
 
 def test_collections(app: App) -> None:

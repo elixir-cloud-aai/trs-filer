@@ -1,11 +1,3 @@
-# GA4GH Tool Registry Service (TRS) API specification, vendored from
-# https://github.com/ga4gh/tool-registry-service-schemas, file
-# `openapi/openapi.yaml` at commit 1dd4bf806f98fa2e3d224d1976f6179de5cd46d6
-# (branch `develop`, 2023-04-05), licensed under the Apache License 2.0
-# (https://github.com/ga4gh/tool-registry-service-schemas/blob/develop/LICENSE).
-# Changes: commented out the `/service-info` path (FOCA serves it, see
-# `additions.openapi.yaml`), the security requirements and their scheme
-# (`BEARER`), and three `example` values.
 openapi: 3.0.0
 info:
   title: GA4GH Tool Discovery API
@@ -29,8 +21,8 @@ tags:
     externalDocs:
       url: https://ga4gh.github.io/tool-registry-service-schemas/
 paths:
-  # /service-info:
-  #   $ref: https://raw.githubusercontent.com/ga4gh-discovery/ga4gh-service-info/v1.0.0/service-info.yaml#/paths/~1service-info
+  /service-info:
+    $ref: https://raw.githubusercontent.com/ga4gh-discovery/ga4gh-service-info/v1.0.0/service-info.yaml#/paths/~1service-info
   "/tools/{id}":
     get:
       summary: List one specific tool, acts as an anchor for self references
@@ -54,8 +46,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
-      # security:
-      #   - BEARER: []
+      security:
+        - BEARER: []
   "/tools/{id}/versions":
     get:
       summary: List versions of a tool
@@ -74,8 +66,8 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/ToolVersion"
-      # security:
-      #   - BEARER: []
+      security:
+        - BEARER: []
   "/tools/{id}/versions/{version_id}":
     get:
       summary: List one specific tool version, acts as an anchor for self references
@@ -99,8 +91,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
-      # security:
-      #   - BEARER: []
+      security:
+        - BEARER: []
   /tools:
     get:
       summary: List all tools
@@ -215,8 +207,8 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/Tool"
-      # security:
-      #   - BEARER: []
+      security:
+        - BEARER: []
   "/tools/{id}/versions/{version_id}/{type}/descriptor":
     get:
       summary: Get the tool descriptor for the specified tool
@@ -245,8 +237,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
-      # security:
-      #   - BEARER: []
+      security:
+        - BEARER: []
   "/tools/{id}/versions/{version_id}/{type}/descriptor/{relative_path}":
     get:
       summary: Get additional tool descriptor files relative to the main file
@@ -291,8 +283,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
-      # security:
-      #   - BEARER: []
+      security:
+        - BEARER: []
   "/tools/{id}/versions/{version_id}/{type}/tests":
     get:
       summary: Get a list of test JSONs
@@ -325,8 +317,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
-      # security:
-      #   - BEARER: []
+      security:
+        - BEARER: []
   "/tools/{id}/versions/{version_id}/{type}/files":
     get:
       summary: Get a list of objects that contain the relative path and file type
@@ -365,17 +357,16 @@ paths:
                   $ref: "#/components/schemas/ToolFile"
             application/zip:
               schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/ToolFile"
+                type: string
+                format: binary
         "404":
           description: The tool can not be output in the specified type.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
-      # security:
-      #   - BEARER: []
+      security:
+        - BEARER: []
   "/tools/{id}/versions/{version_id}/containerfile":
     get:
       summary: Get the container specification(s) for the specified image.
@@ -404,8 +395,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
-      # security:
-      #   - BEARER: []
+      security:
+        - BEARER: []
   /toolClasses:
     get:
       summary: List all tool types
@@ -423,8 +414,8 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/ToolClass"
-      # security:
-      #   - BEARER: []
+      security:
+        - BEARER: []
 externalDocs:
   description: Description of GA4GH Tool Registry (Exchange) Schema
   url: https://github.com/ga4gh/tool-registry-schemas
@@ -477,11 +468,11 @@ components:
         results.
       schema:
         type: string
-  # securitySchemes:
-  #   BEARER:
-  #     type: apiKey
-  #     name: Authorization
-  #     in: header
+  securitySchemes:
+    BEARER:
+      type: apiKey
+      name: Authorization
+      in: header
   schemas:
     Checksum:
       type: object
@@ -701,14 +692,14 @@ components:
           type: string
           description: A docker registry or a URL to a Singularity registry. Used along
             with image_name to locate a specific image.
-          # example:
-          #   - registry.hub.docker.com
+          example:
+            - registry.hub.docker.com
         image_name:
           type: string
           description: Used in conjunction with a registry_url if provided to locate images.
-          # example:
-          #   - quay.io/seqware/seqware_full/1.1
-          #   - ubuntu:latest
+          example:
+            - quay.io/seqware/seqware_full/1.1
+            - ubuntu:latest
         size:
           type: integer
           description: Size of the container in bytes.
@@ -807,11 +798,11 @@ components:
             information, and can include a git hash.  Note that this URL should
             resolve to the raw unwrapped content that would otherwise be
             available in content. One of url or content is required.
-          # example:
-          #   descriptorfile:
-          #     url: https://raw.githubusercontent.com/ICGC-TCGA-PanCancer/pcawg_delly_workflow/ea2a5db69bd20a42976838790bc29294df3af02b/delly_docker/Delly.cwl
-          #   containerfile:
-          #     url: https://raw.githubusercontent.com/ICGC-TCGA-PanCancer/pcawg_delly_workflow/c83478829802b4d36374870843821abe1b625a71/delly_docker/Dockerfile
+          example:
+            descriptorfile:
+              url: https://raw.githubusercontent.com/ICGC-TCGA-PanCancer/pcawg_delly_workflow/ea2a5db69bd20a42976838790bc29294df3af02b/delly_docker/Delly.cwl
+            containerfile:
+              url: https://raw.githubusercontent.com/ICGC-TCGA-PanCancer/pcawg_delly_workflow/c83478829802b4d36374870843821abe1b625a71/delly_docker/Dockerfile
     Error:
       type: object
       required:
@@ -824,3 +815,4 @@ components:
         message:
           type: string
           default: Internal Server Error
+
