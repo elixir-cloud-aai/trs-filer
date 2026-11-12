@@ -23,6 +23,10 @@ HTTP API, see [API](api.md) and the Swagger UI of a deployment.
 
 ::: trs_filer.ga4gh.trs.endpoints.register_tool_classes
 
+## I/O Schemas
+
+::: trs_filer.io_schema
+
 ## Remote files
 
 ::: trs_filer.remote_files

@@ -13,6 +13,7 @@ from trs_filer.errors.exceptions import (
     InvalidRequest,
     NotFound,
 )
+from trs_filer.io_schema import check_io_schema, is_io_schema_file
 from trs_filer.remote_files import fetch_remote_file
 from trs_filer.utils import get_collection, get_custom_config
 
@@ -434,8 +435,13 @@ class RegisterToolVersion:
     def process_files(self) -> None:
         """Process file (meta)data.
 
+        With `custom.io_schema.validation`, GA4GH I/O Schema files are
+        checked against the meta-schema of the profile (see
+        `trs_filer.io_schema.check_io_schema()`).
+
         Raises:
-            InvalidRequest: The files of the version are invalid.
+            InvalidRequest: The files of the version are invalid, or, with
+                `custom.io_schema.validation`, one of its I/O Schema files.
             trs_filer.errors.exceptions.RemoteFileError: The content of a file
                 could not be retrieved from its URL.
         """
@@ -549,6 +555,16 @@ class RegisterToolVersion:
                 raise InvalidRequest(
                     "The type of containerfiles must be a supported image type: "
                     f"{', '.join(self.image_types)}."
+                )
+
+            # check GA4GH I/O Schemas (experimental), once their content is
+            # retrieved and their descriptor type is valid
+            if get_custom_config().io_schema.validation and is_io_schema_file(
+                _file["tool_file"]
+            ):
+                check_io_schema(
+                    content=_file["file_wrapper"]["content"],
+                    descriptor_type=_file["type"],
                 )
 
     def register_metadata(self) -> None:

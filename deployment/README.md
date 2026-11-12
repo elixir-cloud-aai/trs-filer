@@ -387,7 +387,8 @@ order into the base config of the image):
    `MONGO_DBNAME` on the app's Deployment.
 2. The value `trs_filer.config`, rendered into the ConfigMap
    `app-config-overlay-<appName>`: everything else, e.g., the identity
-   provider, the service info or `custom.remote_files` (see
+   provider, the service info, `custom.remote_files` or the experimental
+   check of GA4GH I/O Schemas, `custom.io_schema.validation` (see
    [Configuration](https://trs-filer.readthedocs.io/en/latest/configuration/)).
    Leave out the settings that the Job sets (`custom.service` and
    `db.host`). The app restarts when the value changes (the pod template
