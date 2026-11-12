@@ -9,21 +9,38 @@ specification is served at `/ga4gh/trs/v2/openapi.json`.
 
 ## Supported TRS version
 
-The served specification is TRS
-[`develop` at commit
-1dd4bf8](https://github.com/elixir-cloud-aai/trs-filer/blob/dev/trs_filer/api/20230406.1dd4bf8.openapi.yaml)
-(April 2023), between the releases 2.0.1 and 2.0.2, with the service info of
-the [GA4GH service info
-specification](https://github.com/elixir-cloud-aai/trs-filer/blob/dev/trs_filer/api/20200131.11d2c12.service-info.yaml).
-The service info reports TRS version 2.0.1 (`type.version`), the last
-release that the specification implements; the specification itself says
-`info.version: 2.1.0`, the version that `develop` was heading for at that
-commit. The file's header names its source, its license (Apache 2.0) and
-the parts commented out here. The app's info (title, description, license
-and contact; `info.version` stays the specification's, not the app's) and
-extensions (the registration endpoints, the `tags` of tools) are merged
-into it from
-[`additions.openapi.yaml`](https://github.com/elixir-cloud-aai/trs-filer/blob/dev/trs_filer/api/additions.openapi.yaml).
+TRS-Filer implements [TRS
+2.0.2](https://github.com/ga4gh/tool-registry-service-schemas/releases/tag/2.0.2),
+with the service info of the [GA4GH service info specification
+1.0.0](https://github.com/ga4gh-discovery/ga4gh-service-info/releases/tag/v1.0.0).
+The service info reports TRS version 2.0.2 (`type.version`); the
+specification itself says `info.version: 2.1.0`, as published.
+
+Both specifications are vendored unchanged
+([`20250902.4854e2f.openapi.yaml`](https://github.com/elixir-cloud-aai/trs-filer/blob/dev/trs_filer/api/20250902.4854e2f.openapi.yaml),
+[`20200131.11d2c12.service-info.yaml`](https://github.com/elixir-cloud-aai/trs-filer/blob/dev/trs_filer/api/20200131.11d2c12.service-info.yaml),
+named after the date and commit of their source, which the comments of
+`api.specs.trs` in `config.yaml` name). TRS-Filer's changes and extensions
+are merged into them from
+[`additions.openapi.yaml`](https://github.com/elixir-cloud-aai/trs-filer/blob/dev/trs_filer/api/additions.openapi.yaml),
+where `null` removes a key of the vendored files (FOCA's
+`merge_null_removes`):
+
+- The app's info: title, description, license and contact (`info.version`
+  stays the specification's, not the app's).
+- The read operations of TRS (all `GET` endpoints below) and the service
+  info are public (`security: []`), so that no token is needed to read (see
+  [Access control](access-control.md)).
+- TRS's security scheme `BEARER` is an HTTP bearer scheme (`type: http`,
+  `scheme: bearer`), as on the TRS `develop` branch, instead of the API key
+  scheme of TRS 2.0.2; the service info specification's own scheme
+  (`bearerAuth`) and its global security requirement are removed.
+- `GET /service-info` is the operation of the service info specification,
+  served by FOCA from the config, instead of TRS's reference to the
+  published service info specification (which would be fetched on every
+  start).
+- The registration endpoints and their schemas, and the `tags` of tools
+  (see [Registering tools](#registering-tools)).
 
 ## GA4GH TRS endpoints
 
@@ -128,7 +145,10 @@ extension of TRS-Filer to the `Tool` schema of the specification, which
 declares the filter but not where tools keep their tags, and are returned
 with the tool. Each version lists its descriptor types (`descriptor_type`),
 its container images (`images`) and its files (`files`), and optionally has
-a `description`. Each file has a path and a file type (`tool_file`:
+a `description` and the versions of its languages (`descriptor_type_version`,
+by descriptor type, e.g., `{"CWL": ["v1.2"], "WDL": ["1.0", "1.1"]}`; the
+keys should be descriptor types of the version, which TRS-Filer doesn't
+check). Each file has a path and a file type (`tool_file`:
 `PRIMARY_DESCRIPTOR`, `SECONDARY_DESCRIPTOR`, `TEST_FILE`, `CONTAINERFILE` or
 `OTHER`), its descriptor type or image type (`type`: one of the supported
 [descriptor types](#descriptor-types) for descriptors, test files and other

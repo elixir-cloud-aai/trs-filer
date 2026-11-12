@@ -40,6 +40,35 @@ classes](configuration.md#adding-tool-classes)); until TRS-Filer has users
 and admins, it supports only mode `open`, in which anybody who may register
 tools may add tool classes, too.
 
+The API specification declares the read operations of TRS (the `GET`
+endpoints of [GA4GH TRS endpoints](api.md#ga4gh-trs-endpoints)) and the
+service info public (`security: []`), and TRS's security scheme `BEARER` as
+an HTTP bearer scheme (see [Supported TRS
+version](api.md#supported-trs-version)). A deployment can require a token
+for reads with a [patch of the
+specification](https://foca.readthedocs.io/en/latest/configuration/api/#patching-specifications)
+in a config overlay that sets `security: [{BEARER: []}]` on the operations,
+together with FOCA's token validation for the scheme
+(`add_security_fields`, see FOCA's
+[authentication](https://foca.readthedocs.io/en/latest/authentication/)),
+e.g., for `GET /tools`:
+
+```yaml
+api:
+  specs:
+    trs:
+      add_security_fields:
+        x-bearerInfoFunc: foca.security.auth.validate_token
+      patches:
+        - paths:
+            /tools:
+              get:
+                security:
+                  - BEARER: []
+```
+
+FOCA then validates the tokens as configured in `security.auth`.
+
 Access tokens for writes and ownership of tools are planned (see the [issue
 tracker](https://github.com/elixir-cloud-aai/trs-filer/issues)); this page
 will describe them.

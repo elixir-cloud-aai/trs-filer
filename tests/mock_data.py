@@ -176,6 +176,7 @@ MOCK_VERSION_NO_ID: dict[str, Any] = {
     "author": ["author"],
     "description": "version_description",
     "descriptor_type": ["CWL"],
+    "descriptor_type_version": {"CWL": ["v1.0", "v1.2"]},
     "files": MOCK_FILES,
     "images": MOCK_IMAGES,
     "included_apps": [

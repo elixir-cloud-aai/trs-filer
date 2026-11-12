@@ -1,8 +1,11 @@
-# Merged into the TRS specification (`api.specs.trs.path` in `config.yaml`):
-# the app's info, the registration endpoints and their schemas, and the
-# app's extensions of TRS schemas (`tags` of tools). The registration schemas
-# mirror the read schemas of TRS and reference its enums instead of copying
-# them. `info.version` stays that of the TRS specification
+# Merged into the vendored GA4GH specifications (`api.specs.trs.path` in
+# `config.yaml`), which stay unchanged: the app's info, its changes of the
+# specifications, the registration endpoints and their schemas, and the
+# app's extensions of TRS schemas (`tags` of tools). `null` removes keys of
+# the vendored specifications (`merge_null_removes` in `config.yaml`), so
+# this file can't set values to `null`. The registration schemas mirror the
+# read schemas of TRS and reference its enums instead of copying them.
+# `info.version` stays that of the TRS specification
 info:
   title: 'TRS-Filer'
   description: |
@@ -16,14 +19,44 @@ info:
   contact:
     name: 'ELIXIR On-Cloud'
     email: 'cloud-service@elixir-europe.org'
+# The service info specification requires its bearer scheme (`bearerAuth`)
+# for all operations; TRS declares the security requirements of its
+# operations itself (`BEARER`)
+security: null
+# Read operations of the TRS specification are public: the empty security
+# requirements set here replace theirs (`BEARER`), so that a patch can
+# require login for reads (`security: [{BEARER: []}]`) without changing the
+# vendored specification. The registration endpoints below have no security
+# requirements yet
 paths:
-  # Served by FOCA from the config (`service_info`); the controller set here
-  # takes precedence over the one added to all operations (`api.specs` in
-  # `config.yaml`)
+  # Served by FOCA from the config (`service_info`), with the path item of
+  # the service info specification instead of the remote one that TRS
+  # references (which Connexion would fetch on every start); the controller
+  # set here takes precedence over the one added to all operations
+  # (`api.specs` in `config.yaml`)
   /service-info:
+    $ref: null
     get:
       x-openapi-router-controller: foca.api.service_info
+      security: []
+  "/tools/{id}/versions/{version_id}/{type}/descriptor":
+    get:
+      security: []
+  "/tools/{id}/versions/{version_id}/{type}/descriptor/{relative_path}":
+    get:
+      security: []
+  "/tools/{id}/versions/{version_id}/{type}/tests":
+    get:
+      security: []
+  "/tools/{id}/versions/{version_id}/{type}/files":
+    get:
+      security: []
+  "/tools/{id}/versions/{version_id}/containerfile":
+    get:
+      security: []
   /tools:
+    get:
+      security: []
     post:
       summary: Add a tool.
       description: Create a tool object with a randomly generated unique ID.
@@ -71,6 +104,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
   "/tools/{id}":
+    get:
+      security: []
     put:
       summary: Add or update a tool.
       description: Create a tool object with a predefined ID. Overwrites any
@@ -179,6 +214,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
   "/tools/{id}/versions":
+    get:
+      security: []
     post:
       summary: Add a tool version.
       description: Create a tool version object.
@@ -234,6 +271,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
   "/tools/{id}/versions/{version_id}":
+    get:
+      security: []
     delete:
       summary: Delete a tool version.
       description: Delete an existing tool version object.
@@ -356,6 +395,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
   /toolClasses:
+    get:
+      security: []
     post:
       summary: Create a tool class.
       description: Create a tool class with a randomly generated unique ID.
@@ -509,6 +550,17 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 components:
+  # TRS's scheme as an HTTP bearer scheme, as on TRS `develop` (2.0.2
+  # declares an API key scheme), whose tokens FOCA validates; the service
+  # info specification's own (`bearerAuth`) is removed, as TRS's operations
+  # refer to `BEARER`
+  securitySchemes:
+    BEARER:
+      type: http
+      scheme: bearer
+      name: null
+      in: null
+    bearerAuth: null
   schemas:
     # Extension of the TRS schema: the tags of tools, by which `GET /tools`
     # filters (`tags`)
@@ -778,6 +830,8 @@ components:
           description: The type (or types) of descriptors available.
           items:
             $ref: "#/components/schemas/DescriptorType"
+        descriptor_type_version:
+          $ref: '#/components/schemas/ToolVersion/properties/descriptor_type_version'
         description:
           type: string
           description: The description of the tool version. This allows for
@@ -847,6 +901,8 @@ components:
           description: The type (or types) of descriptors available.
           items:
             $ref: "#/components/schemas/DescriptorType"
+        descriptor_type_version:
+          $ref: '#/components/schemas/ToolVersion/properties/descriptor_type_version'
         description:
           type: string
           description: The description of the tool version. This allows for
