@@ -63,6 +63,43 @@ existing data needs no changes. Check clients and custom configs:
 - Versions take the versions of their languages (`descriptor_type_version`
   of `ToolVersionRegister`, by descriptor type), which they return;
   registrations with it failed with `400 Bad Request` before.
+- **Tokens for writes (breaking):** registering, changing and deleting tools,
+  versions and tool classes (`POST`, `PUT` and `DELETE`, see [Registering
+  tools](api.md#registering-tools)) need an access token (RFC 9068,
+  `at+jwt`) of a trusted OpenID Connect provider, of a user in a group mapped
+  to the role `admin`; without a valid token, they answer `401
+  Unauthorized`, with a token of other users `403 Forbidden`. Reads stay
+  public. The app refuses to start until the deployment sets its identity
+  provider and admin group (see [Access control](access-control.md)). To
+  upgrade:
+    1. Register TRS-Filer's clients (e.g., a portal, a gateway or the
+       scripts that register tools) with your identity provider, so that
+       they get access tokens of type `at+jwt` for an audience of
+       TRS-Filer, with the group claim (or the scope that releases it via
+       user info).
+    2. Add to your config overlay (with the Helm chart: the new value
+       `trs_filer.config`, without which rendering fails)
+       `security.auth.issuers`, `security.auth.audience`,
+       `security.access_control.claim_groups` (and
+       `security.auth.userinfo_claims` if the identity provider releases the
+       claim via user info only) and `security.access_control.group_mapping`
+       with your admin group (see [Deployment
+       configuration](configuration.md#deployment-configuration)).
+    3. Let the clients send the token (`Authorization: Bearer <token>`)
+       with writes.
+    4. Restrictions of writes in front of the app (e.g., methods allowed
+       only from some addresses at the ingress controller) are no longer
+       needed for access control; keep them if you want both.
+
+  FOCA's service clients are not supported (the app refuses to start with
+  them). The rules of access control are stored in the collection
+  `policy_rules` of the app's database; FOCA's permissions API is served at
+  `/admin/access-control/` (see [Permissions
+  API](operations.md#permissions-api)). Docker Compose trusts a fictitious
+  identity provider (`config.dev.yaml`), so writes are refused until you set
+  yours in a local override; for local development without an identity
+  provider, see [Running without
+  authentication](development.md#running-without-authentication).
 
 ## From 0.4.0
 

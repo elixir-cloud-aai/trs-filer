@@ -41,11 +41,19 @@ docker compose logs
 ## Usage
 
 [Endpoints](api.md) can be probed with `curl`, as above, or tried in the
-Swagger UI. To register a first tool, with one version and its CWL
-descriptor:
+Swagger UI. Reads are public; writes need an access token of an admin (see
+[Access control](access-control.md)). The Docker Compose setup trusts a
+fictitious identity provider, so writes are refused (`401 Unauthorized`)
+until you set your own (see [Local
+overrides](configuration.md#local-overrides)) or, on your machine only,
+disable authentication (see [Running without
+authentication](development.md#running-without-authentication)). To
+register a first tool, with one version and its CWL descriptor (leave out
+the `Authorization` header without authentication):
 
 ```bash
 curl -X POST "http://localhost:8080/ga4gh/trs/v2/tools" \
+  -H "Authorization: Bearer <token>" \
   -H "Content-Type: application/json" \
   -d '{
     "organization": "Example Organization",
@@ -79,7 +87,7 @@ the service info (e.g., `id`, `organization.url`) are in reserved example
 domains, as the placeholders are.
 
 !!! warning
-    TRS-Filer has no authentication yet: anybody who can reach the API can
-    register, change and delete tools (see [Access
-    control](access-control.md)). This is why Docker Compose publishes it
-    on the loopback interface only.
+    Docker Compose publishes the app on the loopback interface only, as its
+    development settings accept tokens for any audience, and anybody who can
+    reach the app can write while authentication is disabled (see [Access
+    control](access-control.md)).

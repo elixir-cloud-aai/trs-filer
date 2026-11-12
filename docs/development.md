@@ -28,8 +28,11 @@ newest versions in the ranges of `pyproject.toml` instead of the locked
 ones, so its results can differ from CI's.
 
 The tests (`tests/`, mirroring the package) need no database: app tests
-create the app from the base config (`trs_filer/config.yaml`) and send
-requests through Flask's test client, with an in-memory database
+create the app from the base config (`trs_filer/config.yaml`) and the test
+overlay (`tests/config_overlay.yaml`, with the settings each deployment must
+make, for a fictitious identity provider that the tests mock), and send
+requests through Flask's test client, with access tokens that the tests sign
+(`make_headers()` in `tests/conftest.py`), and with an in-memory database
 ([mongomock](https://github.com/mongomock/mongomock)); they have no network
 access (see `tests/conftest.py`). CI also runs them against MongoDB 7.0; to
 do so locally, set `MONGODB_TEST_URI` to a single-node MongoDB without other
@@ -52,7 +55,9 @@ see the badge in the README). New code, also new scripts, needs tests that
 cover it completely; add tests that fail without your change, and exclude
 unreachable code only with a reason (`# pragma: no cover`). CI also runs
 the app with Docker Compose and sends requests to it (job "Smoke test" of
-`.github/workflows/ci.yml`); this test runs in CI only, with no local
+`.github/workflows/ci.yml`: public reads, writes refused without a token,
+then writes with authentication disabled, see [Running without
+authentication](#running-without-authentication)); this test runs in CI only, with no local
 equivalent other than `docker compose up --build --wait` and requests by
 hand.
 
@@ -82,6 +87,30 @@ suppress a false positive, add a comment with the reason to the line:
 `# noqa: <code>` (ruff), `# type: ignore[<code>]` (mypy),
 `# nosemgrep: <rule-id>`, `# ast-grep-ignore: <rule-id>` or
 `# gitleaks:allow`.
+
+## Running without authentication
+
+Writes need an access token of an admin (see [Access
+control](access-control.md)), also with Docker Compose, whose development
+overlay (`config.dev.yaml`) trusts a fictitious identity provider. To set
+your own, see [Local overrides](configuration.md#local-overrides). To try
+writes locally without an identity provider, disable authentication with the
+overlay
+[`config.noauth.yaml`](https://github.com/elixir-cloud-aai/trs-filer/blob/dev/config.noauth.yaml),
+which sets FOCA's `api.specs.trs.disable_auth` (`false` in the base
+config), after `config.dev.yaml`, via `TRS_FILER_CONFIG_OVERLAY` (which
+`docker-compose.yaml` passes to the app as `FOCA_CONFIG_OVERLAY`):
+
+```bash
+TRS_FILER_CONFIG_OVERLAY=/etc/trs-filer/config.dev.yaml:/etc/trs-filer/config.noauth.yaml \
+  docker compose up --build --wait
+```
+
+All operations are then public, writes too, and FOCA warns on startup that
+authentication is disabled (`Authentication is disabled for spec 'trs'`).
+Run `docker compose up --wait` without the variable to enable it again.
+Only use this on your machine (Docker Compose publishes the app on the
+loopback interface only), never for deployments.
 
 ## Dependencies
 
@@ -153,7 +182,7 @@ helm template trs-filer deployment -f deployment/ci/test-values.yaml
 
 CI's job "Chart" (`.github/workflows/ci.yml`) lints the chart as the
 release workflow does, with the values that users must pass (e.g., the
-name of MongoDB's Secret):
+name of MongoDB's Secret and a fictitious identity provider):
 `helm lint deployment --strict -f deployment/ci/test-values.yaml`. It
 also runs the tests that render it (`tests/test_chart.py`) and that run
 the script of its
@@ -174,7 +203,11 @@ CI's job "Chart install" installs the chart in a cluster: on
 (loaded into the cluster's node, so that nothing is pushed), the values of
 `deployment/ci/test-values.yaml` and a Secret with MongoDB's credentials. It
 waits for the config Job, then checks the API through a port forward: the
-service info, and the registration and retrieval of a tool, whose URL must
+service info, public reads, and that writes need a token (`401`, as the
+test values trust a fictitious identity provider). It then upgrades the
+release with authentication disabled (`trs_filer.config`, see [Running
+without authentication](#running-without-authentication); for this test
+only) and checks the registration and retrieval of a tool, whose URL must
 have the host name that the config Job writes to the app's config. To do the
 same locally, with Docker, kind, `kubectl` and Helm (in Bash):
 

@@ -29,8 +29,10 @@ where `null` removes a key of the vendored files (FOCA's
 - The app's info: title, description, license and contact (`info.version`
   stays the specification's, not the app's).
 - The read operations of TRS (all `GET` endpoints below) and the service
-  info are public (`security: []`), so that no token is needed to read (see
-  [Access control](access-control.md)).
+  info are public (`security: []`), so that no token is needed to read;
+  the [registration endpoints](#registering-tools) require a bearer token
+  (`BEARER`), validated by FOCA (`x-bearerInfoFunc`; see [Access
+  control](access-control.md)).
 - TRS's security scheme `BEARER` is an HTTP bearer scheme (`type: http`,
   `scheme: bearer`), as on the TRS `develop` branch, instead of the API key
   scheme of TRS 2.0.2; the service info specification's own scheme
@@ -216,7 +218,9 @@ versions increments their `meta_version`, and adding, replacing or
 deleting a version increments that of its tool, by default (see [Meta
 versions](configuration.md#meta-versions)).
 
-Anybody who can reach the API can use these endpoints (see [Access
+These endpoints need an access token of an admin (`Authorization: Bearer
+<token>`): without a valid token, they answer `401 Unauthorized`, with a
+token of other users `403 Forbidden` (see [Access
 control](access-control.md)).
 
 ## Errors
@@ -241,6 +245,11 @@ log records carry it as a field, which the default log format doesn't
 show. Responses to requests that Gunicorn refuses before they reach the
 app (e.g., with a malformed request line or oversized headers) don't have
 it.
+
+Writes without a valid access token get `401 Unauthorized`, with a Bearer
+challenge (`WWW-Authenticate`), and writes of users who may not write
+`403 Forbidden`, before their body is validated (see [Access
+control](access-control.md#authentication)).
 
 Requests that don't match the API specification (e.g., an unknown
 descriptor type, or a body without required properties) get `400 Bad
