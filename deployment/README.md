@@ -399,7 +399,11 @@ control](https://trs-filer.readthedocs.io/en/latest/access-control/)), so
 [Deployment
 configuration](https://trs-filer.readthedocs.io/en/latest/configuration/#deployment-configuration));
 rendering fails without trusted token issuers
-(`security.auth.issuers`). E.g., in your values file:
+(`security.auth.issuers`). The chart checks only these; the app checks
+the rest on startup and refuses to start, with the reason in its log, e.g.,
+without an audience or an admin group (check with `kubectl logs` and
+`kubectl rollout status` after installs and upgrades). E.g., in your
+values file:
 
 ```yaml
 trs_filer:

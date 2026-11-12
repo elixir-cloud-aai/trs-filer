@@ -97,7 +97,9 @@ existing data needs no changes. Check clients and custom configs:
        upgrade restarts the app (new config map).
     5. Restrictions of writes in front of the app (e.g., methods allowed
        only from some addresses at the ingress controller) are no longer
-       needed for access control; keep them if you want both.
+       needed for access control; keep them if you want both, and at least
+       until the upgrade is complete: during a rolling update, pods of the
+       old version still accept writes without a token.
 
   FOCA's service clients are not supported (the app refuses to start with
   them). The rules of access control are stored in the collection

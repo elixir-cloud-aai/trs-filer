@@ -95,6 +95,12 @@ Notes:
   check that the identity provider issues such tokens to the clients, and
   that their `aud` matches `audience`: otherwise writes fail with `401
   Unauthorized`.
+- To accept tokens of some clients only (e.g., of a portal or gateway in
+  front of TRS-Filer), list their client IDs in `security.auth.clients`
+  (FOCA compares them with the `client_id` claim of tokens, or `azp`
+  without it); tokens of other clients, or without either claim, get `401
+  Unauthorized`. With several issuers, make sure that clients of one issuer
+  can't claim the IDs of another's.
 
 The policies (`security.access_control.policies`, see FOCA's [access
 control](https://foca.readthedocs.io/en/latest/access-control/#configuring-policies))

@@ -346,6 +346,7 @@ def make_token(
     issuer: str = ISSUER,
     audience: str = AUDIENCE,
     expired: bool = False,
+    client: str | None = None,
 ) -> str:
     """Get an access token for a user, signed by the identity provider.
 
@@ -358,21 +359,26 @@ def make_token(
         audience: Audience of the token (`aud` claim).
         expired: Whether the token expired (10 minutes ago); otherwise, it
             expires in 5 minutes.
+        client: Client that obtained the token (`client_id` claim); `None`
+            for no such claim.
 
     Returns:
         The token.
     """
     now = int(time.time())
     issued = now - 1200 if expired else now
+    claims: dict[str, Any] = {
+        "aud": audience,
+        "sub": user,
+        "scope": "openid entitlements",
+        "iss": issuer,
+        "iat": issued,
+        "exp": now - 600 if expired else now + 300,
+    }
+    if client is not None:
+        claims["client_id"] = client
     return jwt.encode(
-        {
-            "aud": audience,
-            "sub": user,
-            "scope": "openid entitlements",
-            "iss": issuer,
-            "iat": issued,
-            "exp": now - 600 if expired else now + 300,
-        },
+        claims,
         key,
         algorithm="RS256",
         # PyJWT omits `typ` if it is `None` (and sets `JWT` if it is missing)

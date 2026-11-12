@@ -422,6 +422,24 @@ def test_refuses_no_admins(
     create_app()
 
 
+def test_clients_allowlist(
+    mongo_client: MongoClient[dict[str, Any]], overlay: Path
+) -> None:
+    """With `security.auth.clients`, only tokens of these clients may write.
+
+    Args:
+        mongo_client: MongoDB client.
+        overlay: Config overlay.
+    """
+    _overlay(overlay, {"security": {"auth": {"clients": ["portal"]}}})
+    app = create_app()
+    client = app.app.test_client()
+    write = ("POST", "/tools", MOCK_TOOL)
+    assert _write(client, write, make_headers(client="portal")).status_code == 200
+    assert _write(client, write, make_headers(client="other")).status_code == 401
+    assert _write(client, write, make_headers()).status_code == 401
+
+
 def test_refuses_service_clients(
     mongo_client: MongoClient[dict[str, Any]], overlay: Path
 ) -> None:
