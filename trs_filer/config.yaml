@@ -22,6 +22,77 @@ server:
     # of the app; the app refuses to start without a limit
     max_content_length: 1048576
 
+# Security configuration, as in Cloud Registry
+# Cf. https://foca.readthedocs.io/en/latest/configuration/auth/ and
+# https://foca.readthedocs.io/en/latest/configuration/access-control/
+security:
+    auth:
+        add_key_to_claims: True
+        algorithms:
+          - RS256
+        allow_expired: False
+        # Only access tokens as per RFC 9068 (`typ` header `at+jwt`); other
+        # tokens of the issuers, such as ID tokens, are rejected
+        verify_token_type: True
+        # The identity providers, their claims and the groups mapped to roles
+        # are deployment configuration, without defaults (see "Deployment
+        # configuration" in `docs/configuration.md`). Deployments must set:
+        # - `issuers`: the trusted token issuers (`iss` claim); tokens of
+        #   other issuers are rejected, and the app refuses to start without
+        #   any;
+        # - `audience`: the audiences of the apps calling TRS-Filer (`aud`
+        #   claim, usually the client IDs of portals, gateways or scripts);
+        #   FOCA refuses to start without it, unless `verify_audience` is
+        #   false.
+        # E.g.:
+        # issuers:
+        #   - https://login.example.org/oidc/
+        # audience:
+        #   - trs-portal
+        issuers: []
+        # Claims that the identity provider releases via user info only, not
+        # in access tokens, e.g., the group claim (`claim_groups`, needed for
+        # the admin role); none by default. E.g.:
+        # userinfo_claims:
+        #   - groups
+    # Access control: anyone may read (the read operations are public;
+    # deployments may require login for them, see "Requiring login for reads"
+    # in `docs/access-control.md`); only admins may write (register, change
+    # and delete tools, versions and tool classes), until tools have owners
+    # Cf. https://foca.readthedocs.io/en/latest/access-control/
+    access_control:
+        enabled: True
+        enforce: True
+        model: access_control/model.conf
+        db_name: trsStore
+        collection_name: policy_rules
+        # Deployments set the claim with the groups of users (`claim_groups`)
+        # and map their admin groups (values of that claim) to the role
+        # `admin` (`group_mapping`); the app refuses to start without them,
+        # unless `require_admin` is false. E.g.:
+        # claim_groups: groups
+        # group_mapping:
+        #   trs-admins: admin
+        # Refuse to start without admins, i.e., unless a group is mapped to
+        # the role `admin` (`group_mapping`) or a rule of `policies` grants
+        # it (FOCA; false: start with a warning)
+        require_admin: True
+        # Managed on startup (removed rules are deleted); cannot be changed
+        # via the permissions API. Named, so that overlays can change, add or
+        # remove single rules by name (`null` removes a rule). No rules for
+        # writes (`POST`, `PUT` and `DELETE` of tools, versions and tool
+        # classes): only admins may write
+        policies:
+            # Any authenticated user may read: list tools, get a tool, its
+            # versions and their descriptors, tests, files and containerfiles
+            # (`/tools/*`), and list tool classes. Only evaluated if a
+            # deployment requires login for these reads, which are public
+            # otherwise (see "Requiring login for reads" in
+            # `docs/access-control.md`)
+            list-tools: [p, "*", /ga4gh/trs/v2/tools, "GET|HEAD"]
+            get-tools: [p, "*", "/ga4gh/trs/v2/tools/*", "GET|HEAD"]
+            list-tool-classes: [p, "*", /ga4gh/trs/v2/toolClasses, "GET|HEAD"]
+
 # Database configuration
 # Cf. https://foca.readthedocs.io/en/latest/configuration/db/
 # With environment variable `MONGO_DBNAME` set, FOCA uses that database name
@@ -74,6 +145,16 @@ api:
             merge_null_removes: True
             add_operation_fields:
                 x-openapi-router-controller: trs_filer.ga4gh.trs.server
+            # FOCA's token validation, for the operations that require a
+            # token (`security` of `BEARER`: the writes, and reads if login is
+            # required for them)
+            add_security_fields:
+                x-bearerInfoFunc: foca.security.auth.validate_token
+            # `True` removes the security requirements: all operations,
+            # writes too, are public. For local development only (overlay
+            # `config.noauth.yaml`, see "Running without authentication" in
+            # `docs/development.md`), never for deployments
+            disable_auth: False
             connexion:
                 strict_validation: True
                 validate_responses: True
@@ -188,8 +269,9 @@ custom:
     # Who may add tool classes (as `custom.access_control.service_types` of
     # Cloud Registry): `open`, any user who may register tools, explicitly
     # (`POST /toolClasses`) or by registering a tool with a new tool class
-    # (unless `toolclass.validation` is true). `controlled` and `moderated`
-    # need authenticated writes and are rejected on startup until supported
+    # (unless `toolclass.validation` is true); by default, only admins write.
+    # `controlled` and `moderated` matter only once other users may write
+    # (with owners of tools), and are rejected on startup until supported
     access_control:
         tool_classes: open
     # Retrieval of file content from URLs: on registration, for files with a

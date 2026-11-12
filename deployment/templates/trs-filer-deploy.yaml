@@ -17,6 +17,10 @@ spec:
   template:
     metadata:
       creationTimestamp: null
+      # Restarts the app when the `config` value changes, as files mounted
+      # with `subPath` aren't updated in running pods
+      annotations:
+        checksum/config-overlay: {{ include (print $.Template.BasePath "/trs-filer-config-overlay.yaml") . | sha256sum }}
       labels:
         app: {{ .Values.trs_filer.appName }}
     spec:
@@ -41,9 +45,10 @@ spec:
             "MONGO_PASSWORD" "password"
           )) | trim | nindent 10 }}
           {{- end }}
-          # The config that the Job renders, merged into the base config
+          # The config that the Job renders, merged into the base config,
+          # then the `config` value
           - name: FOCA_CONFIG_OVERLAY
-            value: /etc/trs-filer/config.yaml
+            value: /etc/trs-filer/config.yaml:/etc/trs-filer/overlay.yaml
           # Trust `X-Forwarded-*` of the ingress (or route), which terminates
           # TLS, so that links in responses keep `https` (see
           # `trs-filer.forwardedAllowIps`)
@@ -60,6 +65,9 @@ spec:
         volumeMounts:
         - mountPath: /etc/trs-filer/config.yaml
           name: config-yaml
+          subPath: config.yaml
+        - mountPath: /etc/trs-filer/overlay.yaml
+          name: config-overlay
           subPath: config.yaml
         # Writable, as the root file system is read-only by default
         - mountPath: /tmp
@@ -80,3 +88,10 @@ spec:
               path: config.yaml
           name: app-config-{{ .Values.trs_filer.appName }}
         name: config-yaml
+      - configMap:
+          defaultMode: 420
+          items:
+            - key: config.yaml
+              path: config.yaml
+          name: app-config-overlay-{{ .Values.trs_filer.appName }}
+        name: config-overlay

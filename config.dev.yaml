@@ -1,6 +1,24 @@
 # Config overlay for local development with Docker Compose; NOT for
-# deployments, which must set their own service info and public URL instead
-# (see `trs_filer/config.yaml`)
+# deployments, which must set their own service info and public URL, and
+# their identity provider, audience, group claim and admin group instead (see
+# `docs/configuration.md`)
+security:
+  auth:
+    # A fictitious identity provider, as the app refuses to start without
+    # trusted issuers; set your identity provider in `config.local.yaml` to
+    # send requests with tokens (writes need a token of an admin; without a
+    # token, they are refused with `401 Unauthorized`)
+    issuers:
+      - https://login.example.org/oidc/
+    # Accept tokens for any audience (i.e., of any app)
+    verify_audience: False
+  access_control:
+    # Start without admin groups (nobody can write until one is mapped in
+    # `config.local.yaml`)
+    require_admin: False
+    # The claim with the groups of users (an example; set that of your
+    # identity provider in `config.local.yaml`)
+    claim_groups: groups
 custom:
   # Public URL of the app as published by `docker-compose.yaml`, for the
   # `url` properties of tools and versions

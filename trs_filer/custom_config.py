@@ -401,8 +401,9 @@ class AccessControlConfig(FOCABaseConfig):
             by registering a tool with a new tool class (unless
             `custom.toolclass.validation` is set). `controlled` (only admins
             add tool classes) and `moderated` (tool classes of users other
-            than admins are pending until an admin approves them) need
-            authenticated writes and are not supported yet.
+            than admins are pending until an admin approves them) matter
+            only once users other than admins may write (with owners of
+            tools), and are not supported yet.
 
     Attributes:
         tool_classes: Who may add tool classes.

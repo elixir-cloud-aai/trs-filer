@@ -1,18 +1,19 @@
 # TRS filer Helm chart
 
-> **Warning:** TRS-Filer has no authentication yet: anyone who can reach the
-> API can register, replace and delete tools and tool classes. Allow `POST`,
-> `PUT` and `DELETE` only from trusted clients, at the ingress controller or
-> the OpenShift router (see [Ingress and Route](#ingress-and-route)) or at a
-> proxy in front of the cluster (see
-> [Access control](https://trs-filer.readthedocs.io/en/latest/access-control/)).
-> The chart restricts nothing by default. Tokens for writes are planned
-> ([#7](https://github.com/elixir-cloud-aai/trs-filer/issues/7)).
+> **Note:** Writes (registering, changing and deleting tools and tool
+> classes) need an access token of an admin of your OpenID Connect provider;
+> reads are public. Set the provider and the admin group in
+> `trs_filer.config` (see [Configuration](#configuration)): rendering fails
+> without trusted token issuers.
 
 ## Quick start
 
 Set `host_name` (see [Values](#values)): it is **required**, the chart has no
 useful default, and the configuration Job fails (exit 1) on the empty one.
+
+Set your identity provider and admin group in `trs_filer.config` (see
+[Configuration](#configuration)): it is **required**, and rendering fails
+without trusted token issuers.
 
 MongoDB requires authentication: create a Secret with its credentials in the
 namespace first, and pass its name in `mongodb.auth.existingSecret` (see
@@ -50,12 +51,15 @@ If the verification succeeds, install the chart:
 
 ```bash
 helm install trs-filer trs-filer-{{ chart_version }}.tgz -n namespace \
+    -f my-values.yaml \
     --set host_name=trs.example.org \
     --set mongodb.auth.existingSecret=trs-filer-mongodb-credentials
 ```
 
-`namespace` is the name of the namespace where TRS-Filer should be
-installed (created above, with the Secret), and
+`my-values.yaml` sets `trs_filer.config` with your identity provider and
+admin group (see [Configuration](#configuration)). `namespace` is the name
+of the namespace where TRS-Filer should be installed (created above, with
+the Secret), and
 `trs-filer` could be any name: it is referenced later for upgrading or
 uninstalling. Set further values with `--set` or with a file
 (`-f my-values.yaml`; `helm show values trs-filer-{{ chart_version }}.tgz`
@@ -69,6 +73,7 @@ pass your values as above, and run this from the `deployment` folder:
 
 ```bash
 helm install trs-filer . -n namespace \
+    -f my-values.yaml \
     --set host_name=trs.example.org \
     --set mongodb.auth.existingSecret=trs-filer-mongodb-credentials
 ```
@@ -80,6 +85,7 @@ The values of `values.yaml`; the sections below describe them.
 | Value | Default | Description |
 | --- | --- | --- |
 | `host_name` | `""` | **Required.** Host name that the app serves (the app advertises `https://<host_name>`, so serve HTTPS: see `trs_filer.ingress.https` and [Ingress and Route](#ingress-and-route)), used by the Ingress, the Route and the configuration Job. |
+| `trs_filer.config` | `{}` | **Required.** Config overlay of the app, merged after the configuration Job's; must set the identity provider (`security.auth.issuers`, `security.auth.audience`) and the admin group (see [Configuration](#configuration)). |
 | `apiServer` | `kubernetes.default.svc:443` | Address of the Kubernetes API server, which the configuration Job writes the ConfigMap to. |
 | `trs_filer.image` | `elixircloud/trs-filer:latest` | Image of the app (released charts set the release's image). |
 | `trs_filer.imagePullPolicy` | `Always` | Pull policy of the app's image (`Always`, `IfNotPresent` or `Never`), also for the configuration Job; `IfNotPresent` or `Never` for an image loaded into the nodes. |
@@ -112,7 +118,12 @@ The values of `values.yaml`; the sections below describe them.
 
 ## Security notes
 
-- **No authentication in the API**, see the warning at the top.
+- **Writes need an access token of an admin** of the identity provider set
+  in `trs_filer.config`; reads are public (see [Access
+  control](https://trs-filer.readthedocs.io/en/latest/access-control/)).
+  FOCA's permissions API (`/admin/access-control/`, admins only) is served
+  like the TRS API: to keep it off the internet, route only `/ga4gh/trs/v2/`
+  (e.g., with an Ingress or Route of your own).
 - **MongoDB requires credentials** by default (see
   [Authentication](#authentication)); the app connects as a user with
   access to its database only. Its NetworkPolicy (`mongodb.networkPolicy`,
@@ -256,9 +267,11 @@ all paths (`/`) to the app and is configured with:
   Ingress serves plain HTTP: terminate TLS in front of the cluster then, as
   the app advertises `https://<host_name>` URLs (e.g., the `url` of tools).
 
-The chart sets no annotations for particular ingress controllers. Restrict
-the methods that change data (`POST`, `PUT`, `DELETE`) to trusted clients
-with the means of your ingress controller or proxy. For example (an example
+The chart sets no annotations for particular ingress controllers. Writes
+need an access token of an admin (see [Configuration](#configuration)); to
+also allow the methods that change data (`POST`, `PUT`, `DELETE`) only
+from trusted clients, use the means of your ingress controller or proxy.
+For example (an example
 only, adapt it to your setup), with ingress-nginx, which allows them only
 from the network `192.0.2.0/24`:
 
@@ -282,8 +295,8 @@ nodes). If the controller trusts forwarded headers (`use-forwarded-headers`),
 limit them to your proxies (`proxy-real-ip-cidr`, by default `0.0.0.0/0`),
 or anyone can claim an allowed address in `X-Forwarded-For`. A controller
 that doesn't allow snippets ignores the annotation (or its admission webhook
-rejects the Ingress), leaving writes open: check with a `POST` from an
-untrusted address that writes are refused (`403`).
+rejects the Ingress), leaving writes unrestricted at the controller: check
+with a `POST` from an untrusted address that writes are refused (`403`).
 Recent versions of ingress-nginx disable snippet annotations by default (the
 controller must allow them, `allow-snippet-annotations`, and annotations of
 their risk level, `annotations-risk-level: Critical`), as they let anyone
@@ -320,9 +333,10 @@ uses `haproxy.router.openshift.io/ip_whitelist`. The router checks the
 source address that it sees, which is the client's only if it gets
 through a load balancer in front of it (e.g., with the PROXY protocol or
 `externalTrafficPolicy: Local`); otherwise, it is that of the load
-balancer or a node. To keep reads public and restrict only writes,
-restrict them at a proxy in front of the router. Check with a `POST` from
-an untrusted address that writes are refused.
+balancer or a node. Writes need a token anyway; to also restrict them by
+address while keeping reads public, restrict them at a proxy in front of
+the router. Check with a `POST` from an untrusted address that writes are
+refused.
 
 ### Forwarded headers
 
@@ -362,75 +376,63 @@ listing through the Ingress or Route still gives `https` links (e.g.,
 
 ## Configuration
 
-The chart can't configure the app yet, apart from the public URL
-(`https://<host_name>:443`), the MongoDB host and the database (the latter
-via `MONGO_DBNAME` on the app's Deployment): a Job
-(`configmap-job-<appName>-<revision>`, run on every install and upgrade)
-renders the public URL and the MongoDB host into the base config of the
-image and writes the result to
-the ConfigMap `app-config-<appName>`, the app's config overlay
-(`FOCA_CONFIG_OVERLAY`), replacing it as a whole. `values.yaml` has no value
-for the config, and changes to the ConfigMap are lost on the next upgrade.
-So chart deployments serve the **placeholder service info** of the base
-config (`id: org.example.trs-filer`, organization `Example Organization`),
-and FOCA warns of it on startup; other settings (e.g., `custom.remote_files`,
-the identifier character sets, `custom.toolclass.validation` or
-`custom.access_control.tool_classes`, see
-[Configuration](https://trs-filer.readthedocs.io/en/latest/configuration/))
-keep their defaults. The chart will take an overlay as a value once it uses
-FOCA's library chart
+The app's config has two overlays (`FOCA_CONFIG_OVERLAY`, merged in this
+order into the base config of the image):
+
+1. The public URL (`https://<host_name>:443`) and the MongoDB host: a Job
+   (`configmap-job-<appName>-<revision>`, run on every install and upgrade)
+   renders them into the base config of the image and writes the result to
+   the ConfigMap `app-config-<appName>`, replacing it as a whole (changes to
+   the ConfigMap are lost on the next upgrade). The database is set via
+   `MONGO_DBNAME` on the app's Deployment.
+2. The value `trs_filer.config`, rendered into the ConfigMap
+   `app-config-overlay-<appName>`: everything else, e.g., the identity
+   provider, the service info or `custom.remote_files` (see
+   [Configuration](https://trs-filer.readthedocs.io/en/latest/configuration/)).
+   Leave out the settings that the Job sets (`custom.service` and
+   `db.host`). The app restarts when the value changes (the pod template
+   has its checksum).
+
+Writes need an access token of an admin (see [Access
+control](https://trs-filer.readthedocs.io/en/latest/access-control/)), so
+`trs_filer.config` must set the identity provider and the admin group (see
+[Deployment
+configuration](https://trs-filer.readthedocs.io/en/latest/configuration/#deployment-configuration));
+rendering fails without trusted token issuers
+(`security.auth.issuers`). The chart checks only these; the app checks
+the rest on startup and refuses to start, with the reason in its log, e.g.,
+without an audience or an admin group (check with `kubectl logs` and
+`kubectl rollout status` after installs and upgrades). E.g., in your
+values file:
+
+```yaml
+trs_filer:
+  config:
+    security:
+      auth:
+        issuers: ["https://login.example.org/oidc/"]
+        audience: ["trs-portal"]
+        userinfo_claims: ["groups"]
+      access_control:
+        claim_groups: groups
+        group_mapping:
+          trs-admins: admin
+    service_info:
+      service:
+        id: org.example.trs
+        name: Example TRS
+        organization:
+          name: Example Organization
+          url: https://example.org
+        contactUrl: mailto:trs-admins@example.org
+        environment: prod
+```
+
+Without `service_info`, deployments serve the **placeholder service info**
+of the base config (`id: org.example.trs-filer`, organization `Example
+Organization`), and FOCA warns of it on startup. camelCase values and FOCA's
+library chart, which replaces the Job, follow
 ([#135](https://github.com/elixir-cloud-aai/trs-filer/issues/135)).
-
-Until then, deploy a copy of the chart with a second overlay file, which
-FOCA merges after the first one (paths in `FOCA_CONFIG_OVERLAY` are
-separated by `:`); leave out the settings that the Job sets
-(`custom.service` and `db.host`):
-
-1. Add a ConfigMap with your overlay, e.g., the service info, as
-   `templates/trs-filer-config-local.yaml`:
-
-    ```yaml
-    apiVersion: v1
-    kind: ConfigMap
-    metadata:
-      name: app-config-local-{{ .Values.trs_filer.appName }}
-    data:
-      config.yaml: |
-        service_info:
-          service:
-            id: org.example.trs
-            name: Example TRS
-            organization:
-              name: Example Organization
-              url: https://example.org
-            contactUrl: mailto:trs-admins@example.org
-            environment: prod
-    ```
-
-2. In `templates/trs-filer-deploy.yaml`, append its path to
-   `FOCA_CONFIG_OVERLAY`, and mount it there:
-
-    ```yaml
-              - name: FOCA_CONFIG_OVERLAY
-                value: /etc/trs-filer/config.yaml:/etc/trs-filer/local.yaml
-    # ...
-            volumeMounts:
-            # ...
-            - mountPath: /etc/trs-filer/local.yaml
-              name: config-local
-              subPath: config.yaml
-    # ...
-          volumes:
-          # ...
-          - configMap:
-              name: app-config-local-{{ .Values.trs_filer.appName }}
-            name: config-local
-    ```
-
-3. Install or upgrade the release from the copy. Files mounted with
-   `subPath` aren't updated in running pods, so restart the app after
-   changing the overlay (`kubectl rollout restart deploy/<appName> -n
-   namespace`; the app's Deployment is named after `trs_filer.appName`).
 
 ## Upgrades
 

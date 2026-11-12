@@ -15,13 +15,126 @@ guide](https://foca.readthedocs.io/en/latest/deployment/)). Mappings are
 merged recursively; all other values, including lists, replace those of the
 base config.
 
+## Deployment configuration
+
+TRS-Filer works with any OpenID Connect provider that issues access tokens
+as per [RFC 9068](https://www.rfc-editor.org/rfc/rfc9068) (JWTs). The
+identity provider, its claims and the groups mapped to roles are deployment
+configuration: the base config has no defaults for them, so each deployment
+sets them in an overlay (or in the Helm chart's `trs_filer.config` value),
+otherwise the app refuses to start:
+
+- `security.auth.issuers`: the trusted token issuers (the `iss` claim of their
+  tokens, e.g., `https://login.example.org/oidc/`); tokens of other issuers
+  are rejected (see [Authentication](access-control.md#authentication));
+- `security.auth.audience`: the client IDs of the apps whose tokens are
+  accepted (the `aud` claim, e.g., of a portal or gateway that registers
+  tools), unless `security.auth.verify_audience` is `false`, which accepts
+  tokens for any audience (not recommended);
+- `security.access_control.claim_groups`: the claim with the groups of users
+  (e.g., `groups`), needed for admins; add it to
+  `security.auth.userinfo_claims` if the identity provider releases it via
+  user info only, not in access tokens;
+- `security.access_control.group_mapping`: the group(s) whose members are
+  admins (values of the group claim, see [Access
+  control](access-control.md#admins)), or
+  `security.access_control.require_admin: false` to run without admins
+  (nobody can write then).
+
+For example:
+
+```yaml
+security:
+    auth:
+        issuers:
+            - https://login.example.org/oidc/
+        audience:
+            - trs-portal
+        userinfo_claims:
+            - groups
+    access_control:
+        claim_groups: groups
+        group_mapping:
+            trs-admins: admin
+```
+
+### Entitlement-style groups
+
+Some identity providers release groups as entitlements, i.e., URNs, in a
+multi-valued claim (here `entitlement`) other than `groups`, and only via user
+info:
+
+```yaml
+security:
+    auth:
+        issuers:
+            - https://idp.example.org/
+        audience:
+            - <client ID of the portal>
+        userinfo_claims:
+            - entitlement
+    access_control:
+        claim_groups: entitlement
+        group_mapping:
+            "urn:example:group:trs-admins#issuer.example.org": admin
+```
+
+Settings for specific identity providers belong to the documentation of the
+deployment, not here.
+
+Notes:
+
+- The group (the URN above is illustrative) is a value of the claim. Quote
+  such keys in YAML, as they contain `:` and `#`.
+- Without the claim in `userinfo_claims`, no user gets the admin role.
+- Clients must request the scope that releases the claim when logging in
+  (here the one for `entitlement`, besides `openid`), and the identity
+  provider must allow it for the client.
+- TRS-Filer accepts only access tokens with the `typ` header `at+jwt`
+  (`security.auth.verify_token_type`, enabled by default). Before going live,
+  check that the identity provider issues such tokens to the clients, and
+  that their `aud` matches `audience`: otherwise writes fail with `401
+  Unauthorized`.
+- To accept tokens of some clients only (e.g., of a portal or gateway in
+  front of TRS-Filer), list their client IDs in `security.auth.clients`
+  (FOCA compares them with the `client_id` claim of tokens, or `azp`
+  without it); tokens of other clients, or without either claim, get `401
+  Unauthorized`. With several issuers, make sure that clients of one issuer
+  can't claim the IDs of another's.
+
+The policies (`security.access_control.policies`, see FOCA's [access
+control](https://foca.readthedocs.io/en/latest/access-control/#configuring-policies))
+say what each role may do. They are named, so that an overlay can change,
+add or remove single rules by name (FOCA's [named
+entries](https://foca.readthedocs.io/en/latest/configuration/#named-entries));
+the base config has rules for reads only, which apply if login is required
+for them (see [Requiring login for
+reads](access-control.md#requiring-login-for-reads)): writes are for admins.
+An overlay that gives the policies as a list replaces all rules of the base
+config instead; FOCA refuses to start if an overlay gives named rules after
+one that gives a list.
+
+The API specification (`api.specs`) is named `trs`, too, so that an overlay
+can change it by name, e.g., to [require login for
+reads](access-control.md#requiring-login-for-reads).
+
+FOCA's service clients (`security.auth.service_clients`,
+`security.auth.on_behalf_of_header`) are not supported; the app refuses to
+start with them (see [Authentication](access-control.md#authentication)).
+
 ## Local overrides
 
 Docker Compose mounts
 [`config.dev.yaml`](https://github.com/elixir-cloud-aai/trs-filer/blob/dev/config.dev.yaml),
-an overlay for local development (see [Getting
-started](getting-started.md#usage)). To override values locally without
-changing it, put them in `config.local.yaml` and mount it in a
+an overlay for local development that trusts a fictitious token issuer
+(`https://login.example.org/oidc/`; set your own in a local override), sets
+an example group claim (`groups`), accepts tokens for any audience and
+requires no admins, so writes are refused until you set your identity
+provider and admin group (see [Getting started](getting-started.md#usage),
+and [Running without
+authentication](development.md#running-without-authentication) for
+development without an identity provider). To override values locally
+without changing it, put them in `config.local.yaml` and mount it in a
 `docker-compose.override.yaml` (both are ignored by Git):
 
 ```yaml
@@ -51,7 +164,7 @@ custom:
 ```
 
 The Helm chart sets it from its values (see [Deployment](deployment.md));
-it can't set other parts of the config yet (see
+other parts of the config go into its `trs_filer.config` value (see
 [Configuration](deployment.md#configuration) there).
 
 ## Identifiers
@@ -137,16 +250,16 @@ Registry](https://cloud-registry.readthedocs.io/en/latest/configuration/#service
 - `moderated`: tool classes added by users other than admins are pending
   until an admin approves them, and so are the tools that have them.
 
-TRS-Filer has no users and admins yet (see [Access
-control](access-control.md)), so `open` is the only mode it supports for
-now: the app refuses to start with `controlled` or `moderated`, with an
-error that the custom config doesn't match its model, caused by one that
-names the setting (`access_control.tool_classes: Value error, only the
-mode 'open' of adding tool classes is supported yet`).
+Until tools have owners, only admins may write by default (see [Access
+control](access-control.md#admins)), so `open` is the only mode TRS-Filer
+supports for now: the app refuses to start with `controlled` or
+`moderated`, with an error that the custom config doesn't match its model,
+caused by one that names the setting (`access_control.tool_classes: Value
+error, only the mode 'open' of adding tool classes is supported yet`).
 For the same reason, it doesn't limit the number of tool classes that no
 tool has per user, as Cloud Registry does for service types: anybody who
-may write can add tool classes without bound, so restrict writes in front
-of the app, and delete unwanted tool classes (`DELETE /toolClasses/{id}`).
+may write (by default, admins only) can add tool classes without bound;
+delete unwanted tool classes with `DELETE /toolClasses/{id}`.
 
 For example, in a config overlay:
 
@@ -233,6 +346,9 @@ of Docker Compose). FOCA reads the environment variables `MONGO_HOST`,
 complete connection string in `MONGO_URI`, which take precedence over the
 config (see the [FOCA documentation](https://foca.readthedocs.io/en/latest/));
 with `MONGO_DBNAME` set, the app uses that database instead of `trsStore`.
+FOCA keeps the rules of access control in the collection `policy_rules` of
+the same database (`security.access_control.db_name` and
+`collection_name`), and its changes in `policy_rules_changes`.
 
 ## Service info
 

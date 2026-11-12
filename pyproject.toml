@@ -192,4 +192,5 @@ trs_filer = [
     "config.yaml",
     "api/*.yaml",
     "api/patches/*.yaml",
+    "access_control/*.conf",
 ]

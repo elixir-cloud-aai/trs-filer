@@ -9,6 +9,7 @@ from pathlib import Path
 
 from connexion import App
 from foca import Foca, get_config
+from foca.security.auth import require_no_service_clients
 
 from trs_filer.errors.exceptions import InvalidRequest, describe_invalid_request
 
@@ -21,9 +22,14 @@ def create_app() -> App:
     (`service_info`), and limits the size of request bodies
     (`server.max_content_length`). FOCA also warns of placeholders in the
     service info (values in reserved example domains, RFC 2606, as those of
-    `config.yaml`). The app additionally requires a size limit, and answers
-    invalid requests (`trs_filer.errors.exceptions.InvalidRequest`) with
-    their reason as `detail`.
+    `config.yaml`). For access control, FOCA requires trusted token issuers
+    (`security.auth.issuers`) with an audience, and refuses to start without
+    admins (`security.access_control.require_admin`). The app additionally
+    requires a size limit, refuses service clients (FOCA's
+    `require_no_service_clients()`), as only admins write until tools have
+    owners, and answers invalid requests
+    (`trs_filer.errors.exceptions.InvalidRequest`) with their reason as
+    `detail`.
 
     Gunicorn calls this in each worker, after forking (MongoDB clients must
     not be shared across forks), so the checks run in each worker; if they
@@ -34,19 +40,26 @@ def create_app() -> App:
 
     Raises:
         RuntimeError: Request bodies are not limited in size
-            (`server.max_content_length` is null).
+            (`server.max_content_length` is null), or service clients are
+            configured (`security.auth.service_clients`,
+            `security.auth.on_behalf_of_header`), which the app doesn't
+            support.
         ValueError: The custom config is invalid, e.g., it still sets
             `custom.service_info`, or an ID character set is an expression
             (FOCA raises it from a plain `ValueError` that names the invalid
-            setting and the reason, without the invalid value).
+            setting and the reason, without the invalid value), or there are
+            no admins (unless admins are optional,
+            `security.access_control.require_admin`).
         pydantic.ValidationError: FOCA's config is invalid, e.g., the
-            service info.
+            service info, or no token issuers are trusted, or they have no
+            audience.
     """
     foca = Foca(
         config_file=Path(__file__).resolve().parent / "config.yaml",
         custom_config_model="trs_filer.custom_config.CustomConfig",
     )
     app = foca.create_app()
+    require_no_service_clients(app.app)
     # Invalid requests are answered with their reason (more specific than
     # FOCA's handler of all exceptions)
     app.add_error_handler(InvalidRequest, describe_invalid_request)

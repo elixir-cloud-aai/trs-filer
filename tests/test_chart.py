@@ -195,17 +195,41 @@ def test_route_without_route_values() -> None:
 
 
 def test_notes_ingress(tmp_path: Path) -> None:
-    """With the Ingress, the notes give its URLs and the no-auth warning.
+    """With the Ingress, the notes give its URLs and who may write.
 
     Args:
         tmp_path: Directory for the copy of the chart.
     """
     notes = render_notes(tmp_path)
-    # The warning links the issue of authentication (#7)
-    assert "has no authentication yet" in notes
-    assert "trs-filer/issues/7" in notes
+    assert "writes (POST, PUT and DELETE) need an access token" in notes
+    assert "has no authentication" not in notes
+    assert "authentication is disabled" not in notes
     assert "http://trs.example.org/ga4gh/trs/v2/" in notes
     assert "port-forward" not in notes
+
+
+def test_notes_auth_disabled(tmp_path: Path) -> None:
+    """With authentication disabled, the notes warn that everyone may write.
+
+    Args:
+        tmp_path: Directory for the copy of the chart.
+    """
+    notes = render_notes(
+        tmp_path, "--set", "trs_filer.config.api.specs.trs.disable_auth=true"
+    )
+    assert "WARNING: authentication is disabled" in notes
+
+
+def test_notes_config_not_maps(tmp_path: Path) -> None:
+    """The notes render when levels of the `config` value are null or scalars.
+
+    Args:
+        tmp_path: Directory for the copy of the chart.
+    """
+    values = ("trs_filer.config.api=null", "trs_filer.config.api.specs.trs=x")
+    for index, value in enumerate(values):
+        notes = render_notes(tmp_path / str(index), "--set", value)
+        assert "authentication is disabled" not in notes
 
 
 def test_notes_route(tmp_path: Path) -> None:
@@ -875,3 +899,87 @@ def test_app_image_pull_policy(args: tuple[str, ...], expected: str) -> None:
     for kind, name in [("Deployment", "trs-filer"), ("Job", "configmap-job-")]:
         (container,) = _pod(resources, kind, name)["containers"]
         assert container["imagePullPolicy"] == expected, kind
+
+
+def test_config_overlay() -> None:
+    """The `config` value is the app's second config overlay.
+
+    It is rendered into a ConfigMap of its own, merged after the overlay
+    that the config Job writes, and the app restarts when it changes (the
+    checksum of the ConfigMap in the pod template).
+    """
+    resources = render()
+    values = yaml.safe_load(TEST_VALUES.read_text())
+    (config_map,) = (
+        resource
+        for resource in of_kind(resources, "ConfigMap")
+        if resource["metadata"]["name"] == "app-config-overlay-trs-filer"
+    )
+    assert (
+        yaml.safe_load(config_map["data"]["config.yaml"])
+        == (values["trs_filer"]["config"])
+    )
+    (deployment,) = (
+        resource
+        for resource in of_kind(resources, "Deployment")
+        if resource["metadata"]["name"] == "trs-filer"
+    )
+    annotations = deployment["spec"]["template"]["metadata"]["annotations"]
+    assert len(annotations["checksum/config-overlay"]) == 64
+    pod = _pod(resources, "Deployment", "trs-filer")
+    (container,) = pod["containers"]
+    env = {var["name"]: var.get("value") for var in container["env"]}
+    assert env["FOCA_CONFIG_OVERLAY"] == (
+        "/etc/trs-filer/config.yaml:/etc/trs-filer/overlay.yaml"
+    )
+    (mount,) = (
+        m
+        for m in container["volumeMounts"]
+        if m["mountPath"] == "/etc/trs-filer/overlay.yaml"
+    )
+    (volume,) = (v for v in pod["volumes"] if v["name"] == mount["name"])
+    assert volume["configMap"]["name"] == "app-config-overlay-trs-filer"
+
+
+def test_config_overlay_checksum() -> None:
+    """The checksum of the overlay changes with the `config` value."""
+
+    def checksum(*args: str) -> str:
+        (deployment,) = (
+            resource
+            for resource in of_kind(render(*args), "Deployment")
+            if resource["metadata"]["name"] == "trs-filer"
+        )
+        value: str = deployment["spec"]["template"]["metadata"]["annotations"][
+            "checksum/config-overlay"
+        ]
+        return value
+
+    changed = "trs_filer.config.security.auth.audience[0]=other-client"
+    assert checksum() != checksum("--set", changed)
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        pytest.param(("--set", "trs_filer.config=null"), id="without config"),
+        pytest.param(
+            ("--set", "trs_filer.config.security.auth.issuers=null"), id="no issuers"
+        ),
+        pytest.param(
+            ("--set", "trs_filer.config.security.auth.issuers=https://x.example.org/"),
+            id="issuers not a list",
+        ),
+    ],
+)
+def test_config_needs_issuers(args: tuple[str, ...]) -> None:
+    """Rendering fails without trusted token issuers in the `config` value.
+
+    The app would refuse to start without them.
+
+    Args:
+        args: Further arguments of `helm template`.
+    """
+    with pytest.raises(subprocess.CalledProcessError) as error:
+        render(*args)
+    assert "trs_filer.config.security.auth.issuers must be set" in error.value.stderr

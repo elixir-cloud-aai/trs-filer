@@ -8,8 +8,10 @@ A deployment of TRS-Filer consists of:
   [Server](configuration.md#server));
 - MongoDB, which stores the tools, with their versions and files, and the
   tool classes (database `trsStore`, or `trs-filer-db` with the Helm chart,
-  collections `tools` and `toolclasses`; see
-  [Database](configuration.md#database)).
+  collections `tools` and `toolclasses`, and `policy_rules` with the
+  rules of access control; see [Database](configuration.md#database));
+- an OpenID Connect provider of the deployment, whose access tokens
+  TRS-Filer validates for writes (see [Access control](access-control.md)).
 
 The Docker Compose setup and the [Helm chart](deployment.md) run both.
 
@@ -66,6 +68,20 @@ MongoDB that takes consistent snapshots.
 
 The base config creates unique indexes on the identifiers (`id`) of tools
 and tool classes on startup.
+
+## Permissions API
+
+FOCA also serves its permissions API at `/admin/access-control/permissions`
+(not part of the TRS API specification), which lists, adds, changes and
+deletes the stored policy rules directly. Only admins can use it. The
+configured policies (`security.access_control.policies`) are managed on
+startup and can't be changed via the API; rules added via the API (e.g.,
+`{"policy_type": "g", "rule": {"v0": "user:<user-id>", "v1": "admin"}}`,
+which makes a user an admin) apply until they are deleted, also after the
+group mapping changes, so prefer groups (see [Admins](access-control.md#admins)).
+The API is served like the TRS API (e.g., the Helm chart's Ingress routes
+all paths); to keep it off the internet, route only `/ga4gh/trs/v2/`
+through a reverse proxy.
 
 ## Verifying images and charts
 

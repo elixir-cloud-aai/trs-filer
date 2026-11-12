@@ -1,10 +1,14 @@
 """Shared fixtures.
 
-App tests use the app created from `trs_filer/config.yaml` (and an overlay,
-empty unless a test writes to it), with requests through Flask's test client,
-so that request and response validation and error handling are part of every
-test. Unit tests of the registration classes use bare Flask apps
-(`tests/apps.py`).
+App tests use the app created from `trs_filer/config.yaml`, the test overlay
+(`tests/config_overlay.yaml`, with the settings each deployment must make)
+and an overlay that is empty unless a test writes to it, with requests through
+Flask's test client, so that request and response validation and error
+handling are part of every test. The identity provider of the test overlay is
+replaced by a mock (`mock_get()`); requests of the test client `client` carry
+an access token of an admin, those of `anonymous_client` none (see
+`make_headers()` for tokens of other users). Unit tests of the registration
+classes use bare Flask apps (`tests/apps.py`).
 
 The app tests use an in-memory database (mongomock), or, if the environment
 variable `MONGODB_TEST_URI` is set, the MongoDB at that URI (e.g.,
@@ -19,14 +23,19 @@ apps use database `DB`.
 """
 
 from collections.abc import Iterator
+import logging
 import os
 from pathlib import Path
 import socket
+import time
 from typing import Any
 
 from connexion import App
+from cryptography.hazmat.primitives.asymmetric import rsa
 from flask.testing import FlaskClient
 from foca.database import register_mongodb
+from foca.security import auth
+import jwt
 import mongomock
 from mongomock.collection import Collection as MockCollection
 from pymongo import MongoClient, uri_parser
@@ -44,6 +53,33 @@ COLLECTION_CLASS: type[Collection[Any]] | type[MockCollection] = (
     Collection if MONGODB_TEST_URI else MockCollection
 )
 _CONNECT = socket.socket.connect
+# Config overlay with the settings each deployment must make (issuer,
+# audience, group claim, admin group)
+CONFIG_OVERLAY = Path(__file__).parent / "config_overlay.yaml"
+# The trusted issuer of the test overlay, a fictitious identity provider; all
+# its endpoints are mocked (`mock_get()`)
+ISSUER = "https://login.example.org/oidc/"
+AUDIENCE = "client-id"
+USER = "alice@example.org"
+ADMIN = "admin@example.org"
+# Claim with the group memberships of users (`claim_groups` of the test
+# overlay), released via user info only (`userinfo_claims`)
+GROUP_CLAIM = "entitlement"
+# Group mapped to the role `admin` in the test overlay; entitlement-style
+# (URN), so that colons and `#` in groups are covered
+ADMIN_GROUP = "urn:example:group:trs-admins#login.example.org"
+# Users with the roles of the examples of `docs/access-control.md`, whose
+# groups those examples map to `editor` and `reader`
+EDITOR = "editor@example.org"
+READER = "reader@example.org"
+# Group memberships that the identity provider returns as user info
+GROUPS = {
+    USER: ["urn:example:group:trs-users#login.example.org"],
+    ADMIN: [ADMIN_GROUP],
+    EDITOR: ["trs-editors"],
+    READER: ["trs-readers"],
+}
+KEY = rsa.generate_private_key(public_exponent=65537, key_size=2048)
 
 
 def _db_addresses(uri: str) -> frozenset[tuple[str, int]]:
@@ -200,22 +236,223 @@ def mongo_client(
     return db_client
 
 
+class Records(logging.Handler):
+    """Log handler keeping the logger names and messages of its records."""
+
+    def __init__(self) -> None:
+        """Initialize the handler without records."""
+        super().__init__(level=logging.WARNING)
+        self.records: list[tuple[str, str]] = []
+
+    @property
+    def messages(self) -> list[str]:
+        """The messages of the records, in order."""
+        return [message for _, message in self.records]
+
+    def emit(self, record: logging.LogRecord) -> None:
+        """Keep the logger name and message of a record.
+
+        Args:
+            record: Log record.
+        """
+        self.records.append((record.name, record.getMessage()))
+
+
+class MockResponse:
+    """Mock response of `requests.get()`."""
+
+    def __init__(self, data: dict[str, Any], status_code: int = 200) -> None:
+        """Create a response.
+
+        Args:
+            data: JSON body.
+            status_code: HTTP status code.
+        """
+        self.data = data
+        self.status_code = status_code
+
+    def raise_for_status(self) -> None:
+        """Raise an error for error status codes, as `requests` does.
+
+        Raises:
+            requests.HTTPError: The status code is 400 or higher.
+        """
+        if self.status_code >= 400:
+            raise auth.requests.HTTPError(str(self.status_code))
+
+    def json(self) -> dict[str, Any]:
+        """Get the JSON body.
+
+        Returns:
+            The JSON body.
+        """
+        return self.data
+
+
+def mock_get(
+    url: str, headers: dict[str, str] | None = None, **kwargs: Any
+) -> MockResponse:
+    """Mock `requests.get()` for the identity provider (`ISSUER`).
+
+    Serves its discovery, JWK set and user info endpoints; other requests
+    fail.
+
+    Args:
+        url: Requested URL.
+        headers: Request headers; with an access token for user info.
+        kwargs: Other arguments of `requests.get()`; ignored.
+
+    Returns:
+        Response of the endpoint; status `401` for user info requests with
+        an invalid access token.
+
+    Raises:
+        requests.ConnectionError: The URL is not an endpoint of the identity
+            provider.
+    """
+    if url.rstrip("/") == f"{ISSUER}.well-known/openid-configuration":
+        return MockResponse(
+            {
+                "issuer": ISSUER,
+                "jwks_uri": f"{ISSUER}jwk",
+                "userinfo_endpoint": f"{ISSUER}userinfo",
+            }
+        )
+    if url == f"{ISSUER}jwk":
+        jwk = jwt.algorithms.RSAAlgorithm.to_jwk(KEY.public_key(), as_dict=True)
+        return MockResponse({"keys": [{**jwk, "kid": "rsa1", "use": "sig"}]})
+    if url == f"{ISSUER}userinfo":
+        assert headers is not None
+        token = headers["Authorization"].removeprefix("Bearer ")
+        try:
+            claims = jwt.decode(
+                token,
+                KEY.public_key(),
+                algorithms=["RS256"],
+                audience=AUDIENCE,
+                issuer=ISSUER,
+            )
+        except jwt.InvalidTokenError:
+            return MockResponse({"error": "invalid_token"}, status_code=401)
+        sub = claims["sub"]
+        return MockResponse({"sub": sub, GROUP_CLAIM: GROUPS.get(sub, [])})
+    raise auth.requests.ConnectionError(f"Unexpected request in tests: {url}")
+
+
+def make_token(
+    user: str = ADMIN,
+    key: rsa.RSAPrivateKey = KEY,
+    typ: str | None = "at+jwt",
+    issuer: str = ISSUER,
+    audience: str = AUDIENCE,
+    expired: bool = False,
+    client: str | None = None,
+) -> str:
+    """Get an access token for a user, signed by the identity provider.
+
+    Args:
+        user: User identifier (`sub` claim).
+        key: Key that signs the token.
+        typ: Type of the token (`typ` header), `at+jwt` for access tokens
+            (RFC 9068); `None` for no type.
+        issuer: Issuer of the token (`iss` claim).
+        audience: Audience of the token (`aud` claim).
+        expired: Whether the token expired (10 minutes ago); otherwise, it
+            expires in 5 minutes.
+        client: Client that obtained the token (`client_id` claim); `None`
+            for no such claim.
+
+    Returns:
+        The token.
+    """
+    now = int(time.time())
+    issued = now - 1200 if expired else now
+    claims: dict[str, Any] = {
+        "aud": audience,
+        "sub": user,
+        "scope": "openid entitlements",
+        "iss": issuer,
+        "iat": issued,
+        "exp": now - 600 if expired else now + 300,
+    }
+    if client is not None:
+        claims["client_id"] = client
+    return jwt.encode(
+        claims,
+        key,
+        algorithm="RS256",
+        # PyJWT omits `typ` if it is `None` (and sets `JWT` if it is missing)
+        headers={"kid": "rsa1", "typ": typ},
+    )
+
+
+def make_headers(user: str = ADMIN, **kwargs: Any) -> dict[str, str]:
+    """Get request headers with an access token for a user.
+
+    Args:
+        user: User identifier (`sub` claim); by default, an admin.
+        kwargs: Other arguments of `make_token()`.
+
+    Returns:
+        Request headers.
+    """
+    return {"Authorization": f"Bearer {make_token(user, **kwargs)}"}
+
+
+def admin_client(app: App) -> FlaskClient:
+    """Get a test client whose requests carry an access token of an admin.
+
+    Requests can still send headers of their own, e.g., `make_headers()` of
+    other users, which replace the token.
+
+    Args:
+        app: FOCA app.
+
+    Returns:
+        Test client.
+    """
+    test_client = app.app.test_client()
+    test_client.environ_base["HTTP_AUTHORIZATION"] = make_headers()["Authorization"]
+    return test_client
+
+
 @pytest.fixture
-def overlay(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+def mock_idp(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+    """Replace the identity provider by a mock (`mock_get()`).
+
+    FOCA's caches of the identity provider's responses are cleared before
+    and after the test.
+
+    Args:
+        monkeypatch: Patches of the requests of FOCA's token validation.
+
+    Yields:
+        Nothing; the mock applies until the end of the test.
+    """
+    monkeypatch.setattr(auth.requests, "get", mock_get)
+    auth.clear_caches()
+    yield
+    auth.clear_caches()
+
+
+@pytest.fixture
+def overlay(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mock_idp: None) -> Path:
     """Config overlay merged into `config.yaml` by apps created in a test.
 
-    Empty, unless the test writes to it.
+    Merged after the test overlay (`CONFIG_OVERLAY`), whose identity
+    provider is mocked; empty, unless the test writes to it.
 
     Args:
         tmp_path: Temporary directory.
         monkeypatch: Patches of environment variable `FOCA_CONFIG_OVERLAY`.
+        mock_idp: Mock of the identity provider.
 
     Returns:
         Path of the overlay.
     """
     path = tmp_path / "overlay.yaml"
     path.write_text("{}\n")
-    monkeypatch.setenv("FOCA_CONFIG_OVERLAY", str(path))
+    monkeypatch.setenv("FOCA_CONFIG_OVERLAY", f"{CONFIG_OVERLAY}{os.pathsep}{path}")
     return path
 
 
@@ -224,7 +461,7 @@ def app(
     mongo_client: MongoClient[dict[str, Any]],
     overlay: Path,
 ) -> App:
-    """App created from `config.yaml` and the overlay.
+    """App created from `config.yaml`, the test overlay and the overlay.
 
     Args:
         mongo_client: MongoDB client.
@@ -238,7 +475,20 @@ def app(
 
 @pytest.fixture
 def client(app: App) -> FlaskClient:
-    """Test client of the app.
+    """Test client of the app, whose requests carry an admin's access token.
+
+    Args:
+        app: FOCA app.
+
+    Returns:
+        Test client (cf. `admin_client()`).
+    """
+    return admin_client(app)
+
+
+@pytest.fixture
+def anonymous_client(app: App) -> FlaskClient:
+    """Test client of the app, whose requests carry no access token.
 
     Args:
         app: FOCA app.

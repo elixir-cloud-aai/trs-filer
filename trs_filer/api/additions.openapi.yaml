@@ -26,8 +26,9 @@ security: null
 # Read operations of the TRS specification are public: the empty security
 # requirements set here replace theirs (`BEARER`), so that a patch can
 # require login for reads (`security: [{BEARER: []}]`) without changing the
-# vendored specification. The registration endpoints below have no security
-# requirements yet
+# vendored specification (see `api/patches/login-for-reads.yaml`). The
+# registration endpoints below (writes) require a bearer token (`BEARER`)
+# of an admin (see `docs/access-control.md`)
 paths:
   # Served by FOCA from the config (`service_info`), with the path item of
   # the service info specification instead of the remote one that TRS
@@ -98,6 +99,8 @@ paths:
       summary: Add a tool.
       description: Create a tool object with a randomly generated unique ID.
       operationId: postTool
+      security:
+        - BEARER: []
       tags:
         - TRS-Filer
       requestBody:
@@ -148,6 +151,8 @@ paths:
       description: Create a tool object with a predefined ID. Overwrites any
         existing tool object with the same ID.
       operationId: putTool
+      security:
+        - BEARER: []
       tags:
         - TRS-Filer
       parameters:
@@ -202,6 +207,8 @@ paths:
       summary: Delete a tool.
       description: Delete an existing tool object.
       operationId: deleteTool
+      security:
+        - BEARER: []
       tags:
         - TRS-Filer
       parameters:
@@ -257,6 +264,8 @@ paths:
       summary: Add a tool version.
       description: Create a tool version object.
       operationId: postToolVersion
+      security:
+        - BEARER: []
       tags:
         - TRS-Filer
       parameters:
@@ -314,6 +323,8 @@ paths:
       summary: Delete a tool version.
       description: Delete an existing tool version object.
       operationId: deleteToolVersion
+      security:
+        - BEARER: []
       tags:
         - TRS-Filer
       parameters:
@@ -374,6 +385,8 @@ paths:
       description: Create a tool version object with a predefined ID.
         Overwrites any existing tool version object with the same ID.
       operationId: putToolVersion
+      security:
+        - BEARER: []
       tags:
         - TRS-Filer
       parameters:
@@ -438,6 +451,8 @@ paths:
       summary: Create a tool class.
       description: Create a tool class with a randomly generated unique ID.
       operationId: postToolClass
+      security:
+        - BEARER: []
       tags:
         - TRS-Filer
       requestBody:
@@ -484,6 +499,8 @@ paths:
       summary: Delete a tool class.
       description: Delete an existing tool object.
       operationId: deleteToolClass
+      security:
+        - BEARER: []
       tags:
         - TRS-Filer
       parameters:
@@ -537,6 +554,8 @@ paths:
       description: Create a tool class with a predefined unique ID. Overwrites
         any existing tool object with the same ID.
       operationId: putToolClass
+      security:
+        - BEARER: []
       tags:
         - TRS-Filer
       parameters:
