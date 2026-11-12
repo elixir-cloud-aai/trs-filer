@@ -44,7 +44,8 @@ paths:
   # content: the schema of the specification (`type: string`) is removed,
   # because Connexion validates plain text against it as JSON, parsed if it
   # is JSON (e.g., CWL documents in JSON) and decoded as UTF-8, and would
-  # refuse such descriptors
+  # refuse such descriptors. These paths and `{type}/tests` serve JSON or
+  # plain text, by type, and check `Accept`: `406` if it refuses that one
   "/tools/{id}/versions/{version_id}/{type}/descriptor":
     get:
       security: []
@@ -53,6 +54,13 @@ paths:
           content:
             text/plain:
               schema: null
+        "406":
+          description: The tool can't be served as a media type that the client
+            accepts (`Accept`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
   "/tools/{id}/versions/{version_id}/{type}/descriptor/{relative_path}":
     get:
       security: []
@@ -61,6 +69,13 @@ paths:
           content:
             text/plain:
               schema: null
+        "406":
+          description: The tool can't be served as a media type that the client
+            accepts (`Accept`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
       # The parameters of the specification (lists replace those of the
       # vendored specification), with format `path` for `relative_path`, so
       # that Connexion routes paths with `/` to this operation: servers
@@ -86,6 +101,14 @@ paths:
   "/tools/{id}/versions/{version_id}/{type}/tests":
     get:
       security: []
+      responses:
+        "406":
+          description: The tool can't be served as a media type that the client
+            accepts (`Accept`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
   "/tools/{id}/versions/{version_id}/{type}/files":
     get:
       security: []
