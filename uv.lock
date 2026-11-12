@@ -1,5 +1,5 @@
 version = 1
-revision = 5
+revision = 3
 requires-python = ">=3.13"
 resolution-markers = [
     "python_full_version >= '3.15'",
@@ -891,8 +891,8 @@ wheels = [
 
 [[package]]
 name = "foca"
-version = "0.22.0"
-source = { registry = "https://pypi.org/simple" }
+version = "0.22.1.dev4+g93e972171"
+source = { git = "https://github.com/elixir-cloud-aai/foca?rev=93e9721711f7d6412abc69a10f0047c9e95ce490#93e9721711f7d6412abc69a10f0047c9e95ce490" }
 dependencies = [
     { name = "addict" },
     { name = "celery" },
@@ -913,10 +913,6 @@ dependencies = [
     { name = "swagger-ui-bundle" },
     { name = "urllib3" },
     { name = "werkzeug" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/71/f9/7a6d79ffb5ded48aefb3969b71bb6782b9a5681cc93d6abb879899a7e007/foca-0.22.0.tar.gz", hash = "sha256:20caeaf43327b3525f135a3fda2b8fb6146b2a2264156fb043e2130f35e2c271", size = 718720, upload-time = "2026-11-09T07:55:23.689Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/4e/ed/4bd06a6674ca193f4838136df067891e29613210e65a645ac10ab3e25965/foca-0.22.0-py3-none-any.whl", hash = "sha256:5e38071c451f0a70b33802094f333b11bde2010cfe55cf7563e741bdc1a5411e", size = 376230, upload-time = "2026-11-09T07:55:22.024Z" },
 ]
 
 [[package]]
@@ -2356,7 +2352,7 @@ requires-dist = [
     { name = "build", marker = "extra == 'dev'", specifier = ">=1.6" },
     { name = "connexion", specifier = ">=2.15.1,<3.0.0" },
     { name = "coverage", marker = "extra == 'dev'", specifier = ">=7.16" },
-    { name = "foca", specifier = ">=0.22.0,<0.23" },
+    { name = "foca", git = "https://github.com/elixir-cloud-aai/foca?rev=93e9721711f7d6412abc69a10f0047c9e95ce490" },
     { name = "griffelib", marker = "extra == 'docs'", specifier = ">=2.4,<3" },
     { name = "gunicorn", specifier = ">=26.2.0,<27" },
     { name = "mkdocs", marker = "extra == 'docs'", specifier = ">=1.6.1,<2" },
