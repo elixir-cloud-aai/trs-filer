@@ -1,0 +1,46 @@
+# Patch of the API specification (`api.specs.trs`) that requires login for
+# all reads of TRS, except `GET /service-info`: sets the security
+# requirements of the public read operations to a bearer token (`BEARER`,
+# the security scheme of TRS). See "Requiring login for reads" in
+# `docs/access-control.md`
+paths:
+  /tools:
+    get:
+      security:
+        - BEARER: []
+  "/tools/{id}":
+    get:
+      security:
+        - BEARER: []
+  "/tools/{id}/versions":
+    get:
+      security:
+        - BEARER: []
+  "/tools/{id}/versions/{version_id}":
+    get:
+      security:
+        - BEARER: []
+  "/tools/{id}/versions/{version_id}/{type}/descriptor":
+    get:
+      security:
+        - BEARER: []
+  "/tools/{id}/versions/{version_id}/{type}/descriptor/{relative_path}":
+    get:
+      security:
+        - BEARER: []
+  "/tools/{id}/versions/{version_id}/{type}/tests":
+    get:
+      security:
+        - BEARER: []
+  "/tools/{id}/versions/{version_id}/{type}/files":
+    get:
+      security:
+        - BEARER: []
+  "/tools/{id}/versions/{version_id}/containerfile":
+    get:
+      security:
+        - BEARER: []
+  /toolClasses:
+    get:
+      security:
+        - BEARER: []

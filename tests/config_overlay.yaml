@@ -1,0 +1,16 @@
+# Config overlay for app tests, with the settings each deployment must make;
+# the identity provider is fictitious (and mocked by the tests, see
+# `tests/conftest.py`). It releases the groups of users as entitlements
+# (URNs), via user info only
+security:
+    auth:
+        issuers:
+          - https://login.example.org/oidc/
+        audience:
+          - client-id
+        userinfo_claims:
+          - entitlement
+    access_control:
+        claim_groups: entitlement
+        group_mapping:
+            "urn:example:group:trs-admins#login.example.org": admin

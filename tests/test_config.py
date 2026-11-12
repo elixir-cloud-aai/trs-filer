@@ -55,12 +55,19 @@ def test_config_dev_overlay(monkeypatch: pytest.MonkeyPatch) -> None:
     ]
 
 
-def test_config_validation_details() -> None:
+def test_config_validation_details(monkeypatch: pytest.MonkeyPatch) -> None:
     """The base config sends the reasons of rejected requests to clients.
 
     Set explicitly (`exceptions.validation_details`), not left to FOCA's
-    default (`true` since FOCA 0.18), as clients rely on it.
+    default (`true` since FOCA 0.18), as clients rely on it. Parsed with
+    the test overlay, as the base config alone trusts no token issuers.
+
+    Args:
+        monkeypatch: Fixture to set `FOCA_CONFIG_OVERLAY` with.
     """
+    monkeypatch.setenv(
+        "FOCA_CONFIG_OVERLAY", str(ROOT / "tests" / "config_overlay.yaml")
+    )
     config = yaml.safe_load(CONFIG_FILE.read_text())
     assert config["exceptions"]["validation_details"] is True
     assert _parse_config().exceptions.validation_details is True
@@ -70,12 +77,15 @@ def _package_data() -> list[str]:
     """Get the files that the base config references, relative to the package.
 
     Returns:
-        The config itself and the specs of the API.
+        The config itself, the specs of the API, the shipped patch of the
+        spec and the access control model.
     """
     config = yaml.safe_load(CONFIG_FILE.read_text())
     return [
         "config.yaml",
         *(path for spec in config["api"]["specs"].values() for path in spec["path"]),
+        "api/patches/login-for-reads.yaml",
+        config["security"]["access_control"]["model"],
     ]
 
 

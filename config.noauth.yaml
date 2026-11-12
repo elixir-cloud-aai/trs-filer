@@ -1,0 +1,11 @@
+# Config overlay that disables authentication, for local development only
+# (e.g., to register tools without an identity provider); NEVER for
+# deployments: with it, anybody who can reach the app can register, change
+# and delete tools, versions and tool classes. FOCA warns of it on startup.
+# Merge it after `config.dev.yaml` (see "Running without authentication" in
+# `docs/development.md`):
+#   TRS_FILER_CONFIG_OVERLAY=/etc/trs-filer/config.dev.yaml:/etc/trs-filer/config.noauth.yaml docker compose up -d
+api:
+  specs:
+    trs:
+      disable_auth: True

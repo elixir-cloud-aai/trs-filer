@@ -18,22 +18,29 @@ services:
     depends_on:
       mongodb:
         condition: service_healthy
-    # Published on the host's loopback interface only, as anybody who
-    # can reach the app can register, change and delete tools; to publish
-    # it on other interfaces, override `ports` in a
-    # `docker-compose.override.yaml` (with your own config)
+    # Published on the host's loopback interface only, as the development
+    # settings (`config.dev.yaml`) accept tokens for any audience, and
+    # `config.noauth.yaml` lets anybody who can reach the app register,
+    # change and delete tools; to publish it on other interfaces, override
+    # `ports` in a `docker-compose.override.yaml` (with your own config, see
+    # `docs/configuration.md`)
     ports:
       - "127.0.0.1:8080:8080"
-    # Development settings (`config.dev.yaml`): the public URL as
-    # published here
+    # Development settings (`config.dev.yaml`): a fictitious token issuer,
+    # an example group claim, tokens for any audience, no admin groups
+    # required, the public URL as published here. The host's
+    # `TRS_FILER_CONFIG_OVERLAY` replaces the overlays, e.g., to add
+    # `config.noauth.yaml`, which disables authentication (see "Running
+    # without authentication" in `docs/development.md`)
     # The image's command serves the app with Gunicorn; options from the
     # host's `GUNICORN_CMD_ARGS` (e.g., `--workers 2`) override its settings
     # (not `--bind`, which would break the published port and health check)
     environment:
-      FOCA_CONFIG_OVERLAY: /etc/trs-filer/config.dev.yaml
+      FOCA_CONFIG_OVERLAY: ${TRS_FILER_CONFIG_OVERLAY:-/etc/trs-filer/config.dev.yaml}
       GUNICORN_CMD_ARGS: ${GUNICORN_CMD_ARGS:-}
     volumes:
       - ./config.dev.yaml:/etc/trs-filer/config.dev.yaml:ro
+      - ./config.noauth.yaml:/etc/trs-filer/config.noauth.yaml:ro
 
   # Port 27017 is reachable from the app only; to connect from the host,
   # add `ports: ["127.0.0.1:27017:27017"]` in a `docker-compose.override.yaml`

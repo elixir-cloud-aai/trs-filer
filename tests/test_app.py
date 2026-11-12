@@ -20,6 +20,7 @@ from pymongo import MongoClient
 import pytest
 import yaml
 
+from tests.conftest import Records
 from tests.mock_data import BASE_PATH, MOCK_TOOL
 from trs_filer.app import create_app, main
 from trs_filer.custom_config import CustomConfig
@@ -87,28 +88,6 @@ def test_service_info_not_writable(
         assert "service_info" not in (mongo_client[db_name].list_collection_names())
 
 
-class _Records(logging.Handler):
-    """Log handler keeping the logger names and messages of its records."""
-
-    def __init__(self) -> None:
-        """Initialize the handler without records."""
-        super().__init__(level=logging.WARNING)
-        self.records: list[tuple[str, str]] = []
-
-    @property
-    def messages(self) -> list[str]:
-        """The messages of the records, in order."""
-        return [message for _, message in self.records]
-
-    def emit(self, record: logging.LogRecord) -> None:
-        """Keep the logger name and message of a record.
-
-        Args:
-            record: Log record.
-        """
-        self.records.append((record.name, record.getMessage()))
-
-
 def test_placeholder_warning(
     mongo_client: MongoClient[dict[str, Any]],
     overlay: Path,
@@ -125,7 +104,7 @@ def test_placeholder_warning(
         mongo_client: MongoDB client.
         overlay: Config overlay.
     """
-    records = _Records()
+    records = Records()
     loggers = [logging.getLogger(name) for name in ("foca", "trs_filer")]
     for logger in loggers:
         logger.addHandler(records)
@@ -662,15 +641,19 @@ def test_spec_security(client: FlaskClient) -> None:
     scheme only (not the API key scheme of TRS 2.0.2, nor the scheme of the
     service info specification), no security requirements of its own, and
     the path item of the service info specification for `/service-info`,
-    instead of the remote reference of TRS. The registration endpoints have
-    no security requirements yet.
+    instead of the remote reference of TRS, with FOCA's token validation.
+    The registration endpoints (writes) require a bearer token.
 
     Args:
         client: Test client.
     """
     spec = client.get(f"{BASE_PATH}/openapi.json").get_json()
     assert spec["components"]["securitySchemes"] == {
-        "BEARER": {"type": "http", "scheme": "bearer"}
+        "BEARER": {
+            "type": "http",
+            "scheme": "bearer",
+            "x-bearerInfoFunc": "foca.security.auth.validate_token",
+        }
     }
     assert "security" not in spec
     service_info = spec["paths"]["/service-info"]
@@ -685,79 +668,29 @@ def test_spec_security(client: FlaskClient) -> None:
     for path, item in spec["paths"].items():
         for method, operation in item.items():
             if method in HTTP_METHODS and (method, path) not in public:
-                assert "security" not in operation, (method, path)
+                assert operation["security"] == [{"BEARER": []}], (method, path)
     zip_response = spec["paths"]["/tools/{id}/versions/{version_id}/{type}/files"][
         "get"
     ]["responses"]["200"]["content"]["application/zip"]["schema"]
     assert zip_response == {"type": "string", "format": "binary"}
 
 
-def test_reads_public(client: FlaskClient) -> None:
-    """The TRS reads are served without a token.
-
-    Args:
-        client: Test client.
-    """
-    assert client.get(f"{BASE_PATH}/tools").status_code == 200
-    assert client.get(f"{BASE_PATH}/toolClasses").status_code == 200
-    assert client.get(f"{BASE_PATH}/service-info").status_code == 200
-
-
-def test_login_for_reads_patch(
+def test_no_startup_warnings(
     mongo_client: MongoClient[dict[str, Any]], overlay: Path
 ) -> None:
-    """A patch can require a bearer token for a read, with TRS's scheme.
-
-    FOCA's token validation is added to the scheme, as deployments would do;
-    requests without a token are refused before the token is validated.
-
-    Args:
-        mongo_client: MongoDB client.
-        overlay: Config overlay.
-    """
-    overlay.write_text(
-        yaml.safe_dump(
-            {
-                "api": {
-                    "specs": {
-                        "trs": {
-                            "add_security_fields": {
-                                "x-bearerInfoFunc": (
-                                    "foca.security.auth.validate_token"
-                                )
-                            },
-                            "patches": [
-                                {
-                                    "paths": {
-                                        "/tools": {
-                                            "get": {"security": [{"BEARER": []}]}
-                                        }
-                                    }
-                                }
-                            ],
-                        }
-                    }
-                }
-            }
-        )
-    )
-    client = create_app().app.test_client()
-    assert client.get(f"{BASE_PATH}/tools").status_code == 401
-    assert client.get(f"{BASE_PATH}/toolClasses").status_code == 200
-
-
-def test_no_startup_warnings(mongo_client: MongoClient[dict[str, Any]]) -> None:
     """The app starts with the base config without warnings of its spec.
 
-    The only warning is FOCA's of the placeholders of the service info (see
+    With the settings each deployment must make (the test overlay), the only
+    warning is FOCA's of the placeholders of the service info (see
     `test_placeholder_warning()`); neither FOCA nor Connexion warn of the
     specification (e.g., of security schemes, or of operations that the
-    app's changes make public).
+    app's changes make public), nor of the security config.
 
     Args:
         mongo_client: MongoDB client.
+        overlay: Config overlay (empty, after the test overlay).
     """
-    records = _Records()
+    records = Records()
     loggers = [logging.getLogger(name) for name in ("foca", "connexion", "trs_filer")]
     for logger in loggers:
         logger.addHandler(records)

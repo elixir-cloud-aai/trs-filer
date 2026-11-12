@@ -21,7 +21,7 @@ from pymongo.errors import DuplicateKeyError
 from pymongo.results import UpdateResult
 import pytest
 
-from tests.conftest import COLLECTION_CLASS
+from tests.conftest import COLLECTION_CLASS, admin_client
 from tests.mock_data import (
     BASE_PATH,
     MOCK_ID,
@@ -2047,7 +2047,7 @@ def test_tool_class_validation(
         overlay: Config overlay.
     """
     overlay.write_text("custom:\n  toolclass:\n    validation: true\n")
-    client = create_app().app.test_client()
+    client = admin_client(create_app())
     path = f"{BASE_PATH}/tools/{TOOL_ID}"
     response = client.put(path, json=deepcopy(MOCK_TOOL_VERSION_ID))
     assert response.status_code == 400
@@ -2499,7 +2499,7 @@ def _meta_version_client(
         f"      increment: {increment}\n"
         f"      on_version_change: {str(enabled).lower()}\n"
     )
-    client = create_app().app.test_client()
+    client = admin_client(create_app())
     assert get_custom_config().tool.meta_version.on_version_change is enabled
     response = client.put(
         f"{BASE_PATH}/tools/{TOOL_ID}", json=deepcopy(MOCK_TOOL_VERSION_ID)
