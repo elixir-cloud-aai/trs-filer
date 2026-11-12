@@ -412,6 +412,131 @@ def test_check_versioned_links(link: str) -> None:
     assert release_notes.check(f"Intro, [docs]({link}).\n") == []
 
 
+@pytest.mark.parametrize(
+    ("markdown", "line"),
+    [
+        # Inline links and images, also with angle brackets or a title
+        ("Intro, [Upgrading](../upgrading.md#from-100rc1).\n", 1),
+        ("Intro, [Upgrading](upgrading.md).\n", 1),
+        ("Intro, [docs](./index.md 'Docs').\n", 1),
+        ("Intro, [docs](/docs/index.md).\n", 1),
+        ("Intro, [docs](//example.org/docs/).\n", 1),
+        ("Intro, [docs](<../upgrading.md>).\n", 1),
+        ("Intro, ![logo](images/logo.png).\n", 1),
+        ("Intro, [nothing]().\n", 1),
+        # Targets on the line after the text
+        ("Intro, [Upgrading](\n  ../upgrading.md).\n", 2),
+        # In sections, and with link text over lines
+        ("Intro.\n\n## Fixes\n\n- Fix, see [the\n  docs](../x.md) (#1)\n", 6),
+        # Reference definitions
+        ("Intro, [Upgrading][up].\n\n[up]: ../upgrading.md\n", 3),
+        ("Intro, [Upgrading][up].\n\n   [up]:  <upgrading.md> 'Up'\n", 3),
+        ("Intro, [Upgrading][up].\n\n[up]:\n  ../upgrading.md\n", 4),
+        ("Intro.\n\n> [Upgrading][up].\n>\n> [up]: ../upgrading.md\n", 5),
+        ("Intro.\n\n> [Upgrading][up].\n>\n>  [up]: ../upgrading.md\n", 5),
+        ("Intro.\n\n> [Upgrading][up].\n>\n> [up]:\n> ../upgrading.md\n", 6),
+        ("Intro.\n\n> See [Upgrading](\n> ../upgrading.md).\n", 4),
+        # Reference definitions in list items and other containers, also
+        # nested and indented
+        ("Intro, [a][a].\n\n- [a]: ../x.md\n", 3),
+        ("Intro, [a][a].\n\n* [a]: ../x.md\n", 3),
+        ("Intro, [a][a].\n\n+ [a]: ../x.md\n", 3),
+        ("Intro, [a][a].\n\n1. [a]: ../x.md\n", 3),
+        ("Intro, [a][a].\n\n12) [a]: ../x.md\n", 3),
+        ("Intro, [a][a].\n\n- item\n\n  [a]: ../x.md\n", 5),
+        ("Intro, [a][a].\n\n- item\n\n      [a]: ../x.md\n", 5),
+        ("Intro, [a][a].\n\n> - [a]: ../x.md\n", 3),
+        ("Intro, [a][a].\n\n- > 1. [a]: ../x.md\n", 3),
+        ("Intro, [a][a].\n\n- [a]:\n  ../x.md\n", 4),
+        # Lines of paragraphs that look like definitions count too
+        ("Intro text that ends\n[Upgrading]: a section name.\n", 2),
+        # HTML
+        ('Intro, <a href="../upgrading.md">Upgrading</a>.\n', 1),
+        ("Intro, <img src='logo.png' alt='logo'>.\n", 1),
+        ("Intro, <a HREF=upgrading.md>Upgrading</a>.\n", 1),
+        ('Intro, <a href=\n"../x.md">x</a>.\n', 2),
+        ('Intro, <img src=""> logo.\n', 1),
+        ('Intro, <svg><use xlink:href="docs/x.svg"/></svg>.\n', 1),
+        ('Intro, <a/href="docs/x.md">x</a>.\n', 1),
+        (
+            '<picture><source srcset="logo-dark.png 1x, https://x.org/l.png 2x">'
+            '<img src="https://x.org/l.png"></picture> Intro.\n',
+            1,
+        ),
+        # Each attribute and each URL of a srcset on its own, also after a
+        # quoted `>`
+        ('<img src="https://x.org/a.png" srcset="b.png"> Intro.\n', 1),
+        ('<img srcset="https://x.org/a.png 1x, b.png 2x"> Intro.\n', 1),
+        ('Intro, <a title="a > b" href="../x.md">x</a>.\n', 1),
+        # Escaped brackets in reference labels
+        ("Intro, [a][foo\\]].\n\n[foo\\]]: ../guide.md\n", 3),
+        # Destinations end at ASCII whitespace only, and other spaces are
+        # part of them
+        ("Intro, [x](\u00a0../x.md).\n", 1),
+        ("Intro, [x](\u00a0https://example.org/).\n", 1),
+        # Also in code, as the notes are published as written
+        ("Intro.\n\n```md\n[Upgrading](upgrading.md)\n```\n", 4),
+    ],
+)
+def test_check_relative_links(markdown: str, line: int) -> None:
+    """Relative links are rejected: they don't work in the release body."""
+    assert [
+        (finding.line, finding.message.endswith(release_notes.RELATIVE_LINK))
+        for finding in release_notes.check(markdown)
+    ] == [(line, True)]
+
+
+@pytest.mark.parametrize(
+    "markdown",
+    [
+        "Intro, [docs](https://trs-filer.readthedocs.io/en/v1.0.0/).\n",
+        "Intro, [docs](HTTPS://example.org/) and [mail](mailto:a@example.org).\n",
+        "Intro, [docs](<https://example.org/a b>).\n",
+        "Intro, [below](#fixes), <https://example.org/>.\n",
+        "Intro, [docs][d].\n\n[d]: https://example.org/\n",
+        "Intro, [d]: not a definition, and [b] (c).\n",
+        "Intro, with a footnote[^1].\n\n[^1]: The footnote.\n",
+        'Intro, <a href="https://example.org/">docs</a>, <a href="#x">x</a>.\n',
+        # Other attributes
+        '<img data-src="logo.png" src="https://example.org/logo.png"> Intro.\n',
+        # Query parameters of autolinks and URLs
+        "Intro, <https://example.org/search?src=mail>.\n",
+        "Intro, if a<b, see [x](https://example.org/?href=c).\n",
+        # Targets on the next line of block quotes
+        "> [!IMPORTANT]\n> See [the docs](\n> https://example.org/x).\n",
+        "Intro, [a][a].\n\n> [a]:\n> https://example.org/x\n",
+    ],
+)
+def test_check_absolute_links(markdown: str) -> None:
+    """Links with a scheme, and links within the page, are accepted."""
+    assert release_notes.check(markdown) == []
+
+
+def test_check_relative_and_moving_links() -> None:
+    """Relative links and links to versions that move are both reported."""
+    markdown = (
+        "Intro.\n\n## Fixes\n\n- Fix, see [docs](../x.md) (#1)\n"
+        "- Fix, see <https://trs-filer.readthedocs.io/en/latest/> (#2)\n"
+    )
+    assert _messages(markdown) == [(5, "Relative link ('../x.md'):"), (6, "Link to a")]
+
+
+@pytest.mark.parametrize(
+    ("markdown", "target"),
+    [
+        ("Intro, [Upgrading](../upgrading.md#x).\n", "../upgrading.md#x"),
+        ("Intro, [x](\u00a0../x.md).\n", "\u00a0../x.md"),
+        ('Intro, <img srcset=" a.png 1x, https://x.org/b.png 2x">.\n', "a.png"),
+        ('Intro, <a href=" ../x.md ">x</a>.\n', "../x.md"),
+    ],
+)
+def test_check_relative_link_message(markdown: str, target: str) -> None:
+    """The finding names the link target."""
+    assert [finding.message for finding in release_notes.check(markdown)] == [
+        f"Relative link ('{target}'): {release_notes.RELATIVE_LINK}"
+    ]
+
+
 def test_moving_links_as_chart_readme() -> None:
     """The links to versions that move are those of `chart_readme.py`."""
     spec = importlib.util.spec_from_file_location(
