@@ -220,6 +220,18 @@ def test_notes_auth_disabled(tmp_path: Path) -> None:
     assert "WARNING: authentication is disabled" in notes
 
 
+def test_notes_config_not_maps(tmp_path: Path) -> None:
+    """The notes render when levels of the `config` value are null or scalars.
+
+    Args:
+        tmp_path: Directory for the copy of the chart.
+    """
+    values = ("trs_filer.config.api=null", "trs_filer.config.api.specs.trs=x")
+    for index, value in enumerate(values):
+        notes = render_notes(tmp_path / str(index), "--set", value)
+        assert "authentication is disabled" not in notes
+
+
 def test_notes_route(tmp_path: Path) -> None:
     """With the Route, the notes give its `https` URLs.
 

@@ -11,7 +11,13 @@ TRS-Filer is being deployed!
 Reads are public; writes (POST, PUT and DELETE) need an access token of an
 admin of the identity provider in `trs_filer.config` (see "Configuration"
 in the chart's README).
-{{- if dig "api" "specs" "trs" "disable_auth" false (.Values.trs_filer.config | default dict) }}
+{{- /* `trs_filer.config.api.specs.trs.disable_auth`, level by level, as
+levels may be null or not maps */}}
+{{- $noAuth := .Values.trs_filer.config | default dict }}
+{{- range list "api" "specs" "trs" }}
+{{- $noAuth = kindIs "map" $noAuth | ternary (get (kindIs "map" $noAuth | ternary $noAuth dict) .) dict }}
+{{- end }}
+{{- if and (kindIs "map" $noAuth) (get $noAuth "disable_auth") }}
 
 WARNING: authentication is disabled
 (`trs_filer.config.api.specs.trs.disable_auth`): everyone who can reach

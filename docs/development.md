@@ -58,8 +58,8 @@ the app with Docker Compose and sends requests to it (job "Smoke test" of
 `.github/workflows/ci.yml`: public reads, writes refused without a token,
 then writes with authentication disabled, see [Running without
 authentication](#running-without-authentication)); this test runs in CI
-only, with no local equivalent other than `docker compose up --build --wait` and requests by
-hand.
+only, with no local equivalent other than `docker compose up --build
+--wait` and requests by hand.
 
 To try changes in the running app, rebuild it with
 `docker compose up --build -d`. `python -m trs_filer.app` runs the app with

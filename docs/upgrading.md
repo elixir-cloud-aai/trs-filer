@@ -106,7 +106,8 @@ existing data needs no changes. Check clients and custom configs:
   API](operations.md#permissions-api)). Docker Compose trusts a fictitious
   identity provider (`config.dev.yaml`, which requires no admins and
   verifies no audiences), so writes are refused until you set yours in a
-  local override (`TRS_FILER_CONFIG_OVERLAY` selects the overlays); for
+  local override (Compose passes `TRS_FILER_CONFIG_OVERLAY`, if set, to the
+  app as `FOCA_CONFIG_OVERLAY`, which lists the overlays); for
   local development without an identity provider, see [Running without
   authentication](development.md#running-without-authentication).
 

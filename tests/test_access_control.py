@@ -307,6 +307,8 @@ def test_login_for_reads(
         assert response.headers["WWW-Authenticate"].startswith("Bearer")
         response = anonymous.get(f"{BASE_PATH}{path}", headers=make_headers(USER))
         assert response.status_code == 200, path
+        # The rules' "GET|HEAD" is matched as `^(GET|HEAD)$` (model.conf)
+        assert anonymous.head(f"{BASE_PATH}{path}").status_code == 401, path
         response = anonymous.head(f"{BASE_PATH}{path}", headers=make_headers(USER))
         assert response.status_code == 200, path
     for path in ("/service-info", "/openapi.json", "/ui/"):
@@ -546,6 +548,8 @@ def test_editors_example(
         response = _write(client, write, headers)
         expected = 403 if write[1].startswith("/toolClasses") else 200
         assert response.status_code == expected, write
+    # Registering a tool with a new class creates the class, which editors
+    # may do, although they may not write `/toolClasses`
     tool = deepcopy(MOCK_TOOL)
     tool["toolclass"] = {"name": "EditorClass", "description": "New class"}
     response = client.post(f"{BASE_PATH}/tools", json=tool, headers=headers)
@@ -577,6 +581,7 @@ def test_readers_example(
         url = f"{BASE_PATH}{path}"
         assert client.get(url, headers=make_headers(READER)).status_code == 200
         assert client.head(url, headers=make_headers(READER)).status_code == 200
+        assert client.head(url, headers=make_headers(USER)).status_code == 403
         assert client.get(url, headers=make_headers(ADMIN)).status_code == 200
         assert client.get(url, headers=make_headers(USER)).status_code == 403
 
