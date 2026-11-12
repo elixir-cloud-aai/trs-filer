@@ -160,8 +160,9 @@ custom:
 
 Files of tool versions are registered with their content (`content`) or a
 URL (`url`) that TRS-Filer retrieves the content from: on registration, and
-when it serves the files of a version as a ZIP archive and has no stored
-content for one of them. `custom.remote_files` sets how URLs are retrieved:
+when it serves the files of a version as a ZIP archive or a descriptor as
+plain text (`PLAIN_` types) and has no stored content for one of them.
+`custom.remote_files` sets how URLs are retrieved:
 
 | Option | Default | Description |
 | --- | --- | --- |
@@ -177,11 +178,11 @@ Hosts must resolve to public addresses only (also after redirects), unless
 they are listed in `allowed_hosts`; proxy settings of the environment are
 not used. Retrievals that fail (e.g., a refused URL, a timeout, a response
 other than `2xx` or a file that is too large) fail the registration with
-`400 Bad Request`; for ZIP archives, `404 Not Found`. The app logs the
-reason, which names the problem but not the URL (e.g., `InvalidURL: The URL
-has user info`; for errors of lower layers, only their types, such as
-`ConnectionError (caused by MaxRetryError, NameResolutionError, gaierror)`),
-next to the URL without its user info. Name resolution is not limited by the
+`400 Bad Request`; for ZIP archives and plain descriptors, `404 Not
+Found`. The app logs the reason, which names the problem but not the URL
+(e.g., `InvalidURL: The URL has user info`; for errors of lower layers,
+only their types, such as `ConnectionError (caused by MaxRetryError,
+NameResolutionError, gaierror)`), next to the URL without its user info. Name resolution is not limited by the
 timeouts. For example, to register files of a web server on
 the Docker Compose network in a local setup:
 
