@@ -182,9 +182,9 @@ other than `2xx` or a file that is too large) fail the registration with
 Found`. The app logs the reason, which names the problem but not the URL
 (e.g., `InvalidURL: The URL has user info`; for errors of lower layers,
 only their types, such as `ConnectionError (caused by MaxRetryError,
-NameResolutionError, gaierror)`), next to the URL without its user info. Name resolution is not limited by the
-timeouts. For example, to register files of a web server on
-the Docker Compose network in a local setup:
+NameResolutionError, gaierror)`), next to the URL without its user info.
+Name resolution is not limited by the timeouts. For example, to register
+files of a web server on the Docker Compose network in a local setup:
 
 ```yaml
 custom:

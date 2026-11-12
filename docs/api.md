@@ -86,10 +86,13 @@ files rather than the files wrapped with metadata. So:
   and `{type}/descriptor/{relative_path}` with, e.g., `PLAIN_CWL` return
   the content of the `CWL` file as is, with media type `text/plain` (the
   JSON types return the file wrapped with metadata, as `application/json`).
+  The media type says `charset=utf-8`: stored content is sent as UTF-8.
   Files without stored content are retrieved from their `url`, as for ZIP
-  archives (see [Remote files](configuration.md#remote-files)); files
-  without either, or whose URL can't be retrieved, are not found (`404 Not
-  Found`, as JSON).
+  archives, and sent as retrieved, with the same media type (see [Remote
+  files](configuration.md#remote-files)); files without either, or whose
+  URL can't be retrieved, are not found (`404 Not Found`, as JSON). Plain
+  responses tell browsers not to guess another media type
+  (`X-Content-Type-Options: nosniff`).
 - Test files are not served for `PLAIN_` types: `{type}/tests` with the
   `PLAIN_` form of a type finds no files (`404 Not Found`).
 - `{type}/files` doesn't take `PLAIN_` types (`400 Bad Request`), as in the
@@ -110,6 +113,12 @@ unencoded paths too, so these requests find the file `tools/echo.cwl`:
 
 A path that matches a file as it arrives is not decoded again; e.g., a file
 `100%25.cwl` is found with `100%2525.cwl`.
+
+Paths of files are relative, so register them without a leading `/`: the
+server merges the slashes of `descriptor//abs/foo.cwl` (also from
+`%2Fabs%2Ffoo.cwl`) and redirects to `descriptor/abs/foo.cwl`
+(`308 Permanent Redirect`), so a file `/abs/foo.cwl` is found only with
+`%252Fabs%252Ffoo.cwl`.
 
 ## Listing tools
 
