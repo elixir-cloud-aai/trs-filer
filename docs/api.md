@@ -88,7 +88,8 @@ files rather than the files wrapped with metadata. So:
   JSON types return the file wrapped with metadata, as `application/json`).
   The media type says `charset=utf-8`: stored content is sent as UTF-8.
   Files without stored content are retrieved from their `url`, as for ZIP
-  archives, and sent as retrieved, with the same media type (see [Remote
+  archives, and sent as retrieved, not converted, so content that isn't
+  UTF-8 is labelled `charset=utf-8` too (see [Remote
   files](configuration.md#remote-files)); files without either, or whose
   URL can't be retrieved, are not found (`404 Not Found`, as JSON). Plain
   responses tell browsers not to guess another media type

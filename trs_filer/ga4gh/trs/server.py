@@ -472,8 +472,8 @@ def _plain_response(wrapper: dict[str, Any]) -> Response:
     Returns:
         Response with the content of the file, as `text/plain`; browsers
         are told not to guess another media type from the content
-        (`X-Content-Type-Options: nosniff`), as anyone who registers files
-        sets it.
+        (`X-Content-Type-Options: nosniff`), because the content is
+        supplied by whoever registered the file and may look like HTML.
     """
     return Response(
         _file_content(wrapper),

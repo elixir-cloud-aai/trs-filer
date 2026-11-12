@@ -651,12 +651,8 @@ def test_spec_descriptor_changes(app: App, client: FlaskClient) -> None:
     for path in (route, f"{route}/{{relative_path}}"):
         content = served[path]["get"]["responses"]["200"]["content"]
         assert content["text/plain"] == {}
-        assert (
-            content["application/json"]
-            == (
-                vendored[path]["get"]["responses"]["200"]["content"]["application/json"]
-            )
-        )
+        expected_content = vendored[path]["get"]["responses"]["200"]["content"]
+        assert content["application/json"] == expected_content["application/json"]
 
 
 def test_spec_security(client: FlaskClient) -> None:

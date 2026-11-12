@@ -1444,6 +1444,28 @@ def test_toolsIdVersionsVersionIdTypeDescriptorRelativePathGet_percent(
     assert response.status_code == 404
 
 
+@pytest.mark.parametrize("relative_path", ["/abs/foo.cwl", "%2Fabs%2Ffoo.cwl"])
+def test_toolsIdVersionsVersionIdTypeDescriptorRelativePathGet_leading_slash(
+    client: FlaskClient, set_file: Callable[[FileChange], None], relative_path: str
+) -> None:
+    """Paths with a leading slash are found only if encoded twice.
+
+    The server merges the slashes of other requests and redirects them.
+
+    Args:
+        client: Test client.
+        set_file: Changes the stored test file.
+        relative_path: Relative path in the request, with a leading slash.
+    """
+    set_file(lambda file: file["tool_file"].update(path="/abs/foo.cwl"))
+    response = client.get(f"{VERSION_PATH}/CWL/descriptor/{relative_path}")
+    assert response.status_code == 308
+    assert response.headers["Location"].endswith("/CWL/descriptor/abs/foo.cwl")
+    response = client.get(f"{VERSION_PATH}/CWL/descriptor/%252Fabs%252Ffoo.cwl")
+    assert response.status_code == 200
+    assert response.get_json()["content"] == "content"
+
+
 @pytest.mark.parametrize(
     "path",
     [
