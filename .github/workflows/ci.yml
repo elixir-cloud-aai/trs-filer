@@ -484,6 +484,10 @@ jobs:
                 "type": "CWL",
                 "tool_file": {"file_type": "PRIMARY_DESCRIPTOR", "path": "main.cwl"},
                 "file_wrapper": {"content": "cwlVersion: v1.2"}
+              }, {
+                "type": "CWL",
+                "tool_file": {"file_type": "SECONDARY_DESCRIPTOR", "path": "tools/echo.cwl"},
+                "file_wrapper": {"content": "class: CommandLineTool"}
               }]
             }]
           }'
@@ -494,6 +498,20 @@ jobs:
           version="$(jq -r '.versions[0].id' "${body}")"
           check GET "/tools/${id}/versions/${version}/CWL/descriptor" 200 \
             '.content == "cwlVersion: v1.2"'
+          # Files in subdirectories, by encoded and plain relative paths,
+          # through Gunicorn, which decodes paths before routing
+          for path in tools%2Fecho.cwl tools/echo.cwl; do
+            check GET "/tools/${id}/versions/${version}/CWL/descriptor/${path}" 200 \
+              '.content == "class: CommandLineTool"'
+          done
+          # Plain descriptors, as text
+          plain="$(curl --silent --show-error --fail \
+            --write-out '\n%{content_type}' \
+            "${API}/tools/${id}/versions/${version}/PLAIN_CWL/descriptor")"
+          if [ "${plain}" != $'cwlVersion: v1.2\ntext/plain; charset=utf-8' ]; then
+            echo "::error::PLAIN_CWL descriptor: ${plain}"
+            exit 1
+          fi
           check GET /tools 200 "map(.id) == [\"${id}\"]"
           check GET /toolClasses 200 'map(.id) == ["smoke"]'
           check DELETE "/tools/${id}" 200 ". == \"${id}\""

@@ -23,10 +23,20 @@ existing data needs no changes. Check clients and custom configs:
   tools](api.md#listing-tools)).
 - The descriptor type `SMK` (Snakemake) is supported: versions and files of
   type `SMK` are registered, and the `SMK` and `PLAIN_SMK` paths of the
-  descriptor, test and file endpoints behave as those of the other types
-  (plain files aren't served yet), instead of giving `400 Bad Request`
-  (see [Descriptor
+  descriptor, test and file endpoints behave as those of the other types,
+  instead of giving `400 Bad Request` (see [Descriptor
   types](api.md#descriptor-types)).
+- Descriptors are served as plain text (`text/plain`) for the `PLAIN_`
+  types (`{type}/descriptor` and `{type}/descriptor/{relative_path}`, e.g.,
+  `PLAIN_CWL`), instead of `404 Not Found`; tests are still not served for
+  them (see [Descriptor types](api.md#descriptor-types)). The `text/plain`
+  responses of these endpoints have no schema in the served specification.
+- `{type}/descriptor/{relative_path}` finds files in subdirectories by
+  encoded paths (`tools%2Fecho.cwl`, as in the specification) and by plain
+  ones (`tools/echo.cwl`), instead of `404 Not Found`; paths encoded twice
+  (`tools%252Fecho.cwl`), which clients had to send before, still work (see
+  [Relative paths](api.md#relative-paths)). The parameter `relative_path`
+  has format `path` in the served specification.
 - Versions take a `description` (`ToolVersionRegister`), which they
   return; registrations with it failed with `400 Bad Request` before.
 - The served specification (`openapi.json`, Swagger UI) has the app's

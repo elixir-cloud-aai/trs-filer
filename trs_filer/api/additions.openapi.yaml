@@ -39,12 +39,49 @@ paths:
     get:
       x-openapi-router-controller: foca.api.service_info
       security: []
+  # Descriptors of `PLAIN_` types are sent as is (`text/plain`), with any
+  # content: the schema of the specification (`type: string`) is removed,
+  # because Connexion validates plain text against it as JSON, parsed if it
+  # is JSON (e.g., CWL documents in JSON) and decoded as UTF-8, and would
+  # refuse such descriptors
   "/tools/{id}/versions/{version_id}/{type}/descriptor":
     get:
       security: []
+      responses:
+        "200":
+          content:
+            text/plain:
+              schema: null
   "/tools/{id}/versions/{version_id}/{type}/descriptor/{relative_path}":
     get:
       security: []
+      responses:
+        "200":
+          content:
+            text/plain:
+              schema: null
+      # The parameters of the specification (lists replace those of the
+      # vendored specification), with format `path` for `relative_path`, so
+      # that Connexion routes paths with `/` to this operation: servers
+      # decode `%2F` before routing, so encoded paths in subdirectories
+      # (`tools%2Fecho.cwl`) reach the app as `tools/echo.cwl`, as plain
+      # paths do (which the specification allows too)
+      parameters:
+        - $ref: "#/components/parameters/id"
+        - $ref: "#/components/parameters/type"
+        - $ref: "#/components/parameters/version_id"
+        - name: relative_path
+          in: path
+          required: true
+          description: A relative path to the additional file (same directory or
+            subdirectories), for example 'foo.cwl' would return a 'foo.cwl' from
+            the same directory as the main descriptor. 'nestedDirectory/foo.cwl'
+            would return the file  from a nested subdirectory.  Unencoded paths
+            such 'sampleDirectory/foo.cwl' should also be allowed.
+          schema:
+            type: string
+            format: path
+            pattern: .+
   "/tools/{id}/versions/{version_id}/{type}/tests":
     get:
       security: []

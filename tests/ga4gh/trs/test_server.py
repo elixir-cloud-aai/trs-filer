@@ -1069,17 +1069,20 @@ def test_type_BadRequest_unknown(
     assert "'CWL', 'WDL', 'NFL', 'GALAXY', 'SMK'" in reason
 
 
-def _smk_version() -> dict[str, Any]:
-    """Get the mock version with Snakemake (`SMK`) instead of CWL files.
+def _version_of_type(descriptor_type: str) -> dict[str, Any]:
+    """Get the mock version with files of another type instead of CWL files.
+
+    Args:
+        descriptor_type: Descriptor type of the files, e.g., `SMK`.
 
     Returns:
-        Version, with descriptor type `SMK`.
+        Version, with the descriptor type.
     """
     version = deepcopy(MOCK_VERSION_NO_ID)
-    version["descriptor_type"] = ["SMK"]
+    version["descriptor_type"] = [descriptor_type]
     for file in version["files"]:
         if file["type"] == "CWL":
-            file["type"] = "SMK"
+            file["type"] = descriptor_type
     return version
 
 
@@ -1090,7 +1093,7 @@ def test_type_SMK(client: FlaskClient, tool: dict[str, Any]) -> None:
         client: Test client.
         tool: Registered tool.
     """
-    response = client.put(f"{VERSION_PATH}", json=_smk_version())
+    response = client.put(f"{VERSION_PATH}", json=_version_of_type("SMK"))
     assert response.status_code == 200
     response = client.get(f"{VERSION_PATH}")
     assert response.get_json()["descriptor_type"] == ["SMK"]
@@ -1108,8 +1111,10 @@ def test_type_SMK(client: FlaskClient, tool: dict[str, Any]) -> None:
     assert client.get(f"{VERSION_PATH}/CWL/descriptor").status_code == 404
     response = client.get(f"{BASE_PATH}/tools?descriptorType=SMK")
     assert [item["id"] for item in response.get_json()] == [TOOL_ID]
-    # not served as plain files yet, as the other types
-    assert client.get(f"{VERSION_PATH}/PLAIN_SMK/descriptor").status_code == 404
+    # served as plain text, as the other types
+    response = client.get(f"{VERSION_PATH}/PLAIN_SMK/descriptor")
+    assert response.status_code == 200
+    assert response.mimetype == "text/plain"
 
 
 def test_validate_descriptor_type_unsupported() -> None:
@@ -1123,7 +1128,7 @@ def test_validate_descriptor_type_unsupported() -> None:
         server.validate_descriptor_type("FOO")
     assert exc_info.value.description == (
         "The descriptor type is not supported; supported are: CWL, WDL, NFL, "
-        "GALAXY, SMK (their PLAIN_ forms are accepted, but not served yet)."
+        "GALAXY, SMK, and their PLAIN_ forms."
     )
 
 
@@ -1148,21 +1153,180 @@ def test_validate_descriptor_type_logged_escaped(
 PLAIN_TYPES = ["PLAIN_CWL", "PLAIN_WDL", "PLAIN_NFL", "PLAIN_GALAXY", "PLAIN_SMK"]
 
 
-@pytest.mark.parametrize("path", ["descriptor", "descriptor/path_other_cwl", "tests"])
-def test_type_plain_NotFound(
-    client: FlaskClient, tool: dict[str, Any], path: str
+@pytest.mark.parametrize("plain_type", PLAIN_TYPES)
+@pytest.mark.parametrize("path", ["descriptor", "descriptor/path_other_cwl"])
+def test_type_plain(
+    client: FlaskClient, tool: dict[str, Any], plain_type: str, path: str
 ) -> None:
-    """Plain descriptors and tests are not served yet.
+    """Descriptors of `PLAIN_` types are served as plain text.
 
-    The specification allows `PLAIN_` types in these paths, so they are not
-    refused, but no files are found for them.
+    The content of the file of the type without the prefix is sent as is,
+    with media type `text/plain`, as the specification defines.
 
     Args:
         client: Test client.
         tool: Registered tool.
+        plain_type: `PLAIN_` type in the path.
         path: Path below the type.
     """
-    response = client.get(f"{VERSION_PATH}/PLAIN_CWL/{path}")
+    descriptor_type = plain_type.removeprefix("PLAIN_")
+    response = client.put(f"{VERSION_PATH}", json=_version_of_type(descriptor_type))
+    assert response.status_code == 200
+    response = client.get(f"{VERSION_PATH}/{plain_type}/{path}")
+    assert response.status_code == 200
+    assert response.mimetype == "text/plain"
+    # browsers must not guess another media type from the content
+    assert response.headers["X-Content-Type-Options"] == "nosniff"
+    assert response.get_data(as_text=True) == "content"
+
+
+@pytest.mark.parametrize(
+    "content",
+    ['{"cwlVersion": "v1.2", "class": "CommandLineTool"}', "[1, 2]", "42", ""],
+    ids=["object", "array", "number", "empty"],
+)
+def test_type_plain_content_as_is(
+    client: FlaskClient, set_file: Callable[[FileChange], None], content: str
+) -> None:
+    """Plain descriptors are sent as is, also if they are JSON (or empty).
+
+    CWL documents can be JSON documents; their content is not parsed.
+
+    Args:
+        client: Test client.
+        set_file: Changes the stored test file.
+        content: Content of the file.
+    """
+    set_file(lambda file: file["file_wrapper"].update(content=content))
+    response = client.get(f"{VERSION_PATH}/PLAIN_CWL/descriptor/path_test_cwl")
+    assert response.status_code == 200
+    assert response.mimetype == "text/plain"
+    assert response.get_data(as_text=True) == content
+
+
+def test_type_plain_url(
+    app: App,
+    client: FlaskClient,
+    set_file: Callable[[FileChange], None],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Plain descriptors without stored content are retrieved from their URLs.
+
+    Args:
+        app: FOCA app.
+        client: Test client.
+        set_file: Changes the stored test file.
+        monkeypatch: Patches of the retrieval of files.
+    """
+    calls: list[tuple[str, RemoteFilesConfig]] = []
+
+    def _fetch(url: str, config: RemoteFilesConfig) -> RemoteFile:
+        """Record the call and return content.
+
+        Args:
+            url: URL of the file.
+            config: Settings for retrieving files.
+
+        Returns:
+            Retrieved content.
+        """
+        calls.append((url, config))
+        # not UTF-8, sent as is too
+        return RemoteFile(content=b"from-url \xff")
+
+    monkeypatch.setattr("trs_filer.ga4gh.trs.server.fetch_remote_file", _fetch)
+    set_file(_url_only)
+    response = client.get(f"{VERSION_PATH}/PLAIN_CWL/descriptor/path_test_cwl")
+    assert response.status_code == 200
+    assert response.mimetype == "text/plain"
+    assert response.get_data() == b"from-url \xff"
+    with app.app.app_context():
+        assert calls == [
+            ("https://example.com/file.txt", get_custom_config().remote_files)
+        ]
+
+
+def test_type_plain_url_error_NotFound(
+    client: FlaskClient,
+    set_file: Callable[[FileChange], None],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Plain descriptors whose URLs can't be retrieved are not found.
+
+    Args:
+        client: Test client.
+        set_file: Changes the stored test file.
+        monkeypatch: Patches of the retrieval of files.
+    """
+
+    def _raise(url: str, config: RemoteFilesConfig) -> NoReturn:
+        """Fail to retrieve a file.
+
+        Args:
+            url: URL of the file.
+            config: Settings for retrieving files.
+
+        Raises:
+            RemoteFileError: Always.
+        """
+        raise RemoteFileError("refused")
+
+    monkeypatch.setattr("trs_filer.ga4gh.trs.server.fetch_remote_file", _raise)
+    set_file(_url_only)
+    response = client.get(f"{VERSION_PATH}/PLAIN_CWL/descriptor/path_test_cwl")
+    assert response.status_code == 404
+
+
+def test_type_plain_no_content_NotFound(
+    client: FlaskClient, set_file: Callable[[FileChange], None]
+) -> None:
+    """Plain descriptors without content and URL are not found.
+
+    Args:
+        client: Test client.
+        set_file: Changes the stored test file.
+    """
+    set_file(lambda file: file["file_wrapper"].clear())
+    response = client.get(f"{VERSION_PATH}/PLAIN_CWL/descriptor/path_test_cwl")
+    assert response.status_code == 404
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        f"/tools/{UNKNOWN}/versions/{VERSION_ID}/PLAIN_CWL/descriptor",
+        f"/tools/{TOOL_ID}/versions/{UNKNOWN}/PLAIN_CWL/descriptor",
+        f"/tools/{TOOL_ID}/versions/{VERSION_ID}/PLAIN_WDL/descriptor",
+        f"/tools/{TOOL_ID}/versions/{VERSION_ID}/PLAIN_CWL/descriptor/unknown",
+    ],
+    ids=["tool", "version", "type", "path"],
+)
+def test_type_plain_NotFound(
+    client: FlaskClient, tool: dict[str, Any], path: str
+) -> None:
+    """Plain descriptors of unknown tools, versions, types or paths are not found.
+
+    Args:
+        client: Test client.
+        tool: Registered tool.
+        path: Path of an unknown descriptor.
+    """
+    response = client.get(f"{BASE_PATH}{path}")
+    assert response.status_code == 404
+    assert response.mimetype == "application/json"
+
+
+def test_type_plain_tests_NotFound(client: FlaskClient, tool: dict[str, Any]) -> None:
+    """Tests are not served for `PLAIN_` types.
+
+    The specification allows `PLAIN_` types in this path, so they are not
+    refused, but only descriptors are served as plain text.
+
+    Args:
+        client: Test client.
+        tool: Registered tool.
+    """
+    response = client.get(f"{VERSION_PATH}/PLAIN_CWL/tests")
     assert response.status_code == 404
 
 
@@ -1205,17 +1369,99 @@ def test_toolsIdVersionsVersionIdTypeDescriptorRelativePathGet(
     assert response.get_json() == file["file_wrapper"]
 
 
+@pytest.mark.parametrize(
+    "relative_path",
+    ["tools%2Fecho.cwl", "tools/echo.cwl", "tools%252Fecho.cwl"],
+    ids=["encoded", "plain", "double-encoded"],
+)
+@pytest.mark.parametrize("descriptor_type", ["CWL", "PLAIN_CWL"])
+def test_toolsIdVersionsVersionIdTypeDescriptorRelativePathGet_subdirectory(
+    client: FlaskClient,
+    set_file: Callable[[FileChange], None],
+    relative_path: str,
+    descriptor_type: str,
+) -> None:
+    """Files in subdirectories are found by their encoded or plain paths.
+
+    The specification defines the relative path as one path segment, with
+    `/` encoded (`%2F`), and allows plain paths; double-encoded paths
+    (`%252F`) are still found, as before.
+
+    Args:
+        client: Test client.
+        set_file: Changes the stored test file.
+        relative_path: Relative path in the request.
+        descriptor_type: Type in the path.
+    """
+    set_file(lambda file: file["tool_file"].update(path="tools/echo.cwl"))
+    response = client.get(
+        f"{VERSION_PATH}/{descriptor_type}/descriptor/{relative_path}"
+    )
+    assert response.status_code == 200
+    if descriptor_type == "CWL":
+        assert response.get_json()["content"] == "content"
+    else:
+        assert response.get_data(as_text=True) == "content"
+
+
+@pytest.mark.parametrize(
+    "relative_path",
+    ["dir%2Fa%20b.cwl", "dir/a b.cwl", "dir%252Fa%2520b.cwl"],
+    ids=["encoded", "plain", "double-encoded"],
+)
 def test_toolsIdVersionsVersionIdTypeDescriptorRelativePathGet_encoded(
+    client: FlaskClient, set_file: Callable[[FileChange], None], relative_path: str
+) -> None:
+    """Relative paths are percent-decoded, and once more if no file matches.
+
+    Args:
+        client: Test client.
+        set_file: Changes the stored test file.
+        relative_path: Relative path in the request.
+    """
+    set_file(lambda file: file["tool_file"].update(path="dir/a b.cwl"))
+    response = client.get(f"{VERSION_PATH}/CWL/descriptor/{relative_path}")
+    assert response.status_code == 200
+    assert response.get_json()["content"] == "content"
+
+
+def test_toolsIdVersionsVersionIdTypeDescriptorRelativePathGet_percent(
     client: FlaskClient, set_file: Callable[[FileChange], None]
 ) -> None:
-    """Relative paths are percent-decoded once more, as the spec requires.
+    """Paths with percent signs are found by their encoded paths first.
+
+    A path that matches a file once decoded is not decoded again.
 
     Args:
         client: Test client.
         set_file: Changes the stored test file.
     """
-    set_file(lambda file: file["tool_file"].update(path="dir/a b.cwl"))
-    response = client.get(f"{VERSION_PATH}/CWL/descriptor/dir%252Fa%2520b.cwl")
+    set_file(lambda file: file["tool_file"].update(path="100%25.cwl"))
+    response = client.get(f"{VERSION_PATH}/CWL/descriptor/100%2525.cwl")
+    assert response.status_code == 200
+    # decoded once more, the path is that of no file
+    response = client.get(f"{VERSION_PATH}/CWL/descriptor/100%25.cwl")
+    assert response.status_code == 404
+
+
+@pytest.mark.parametrize("relative_path", ["/abs/foo.cwl", "%2Fabs%2Ffoo.cwl"])
+def test_toolsIdVersionsVersionIdTypeDescriptorRelativePathGet_leading_slash(
+    client: FlaskClient, set_file: Callable[[FileChange], None], relative_path: str
+) -> None:
+    """Paths with a leading slash are found only if encoded twice.
+
+    The server merges the slashes of other requests and redirects them.
+
+    Args:
+        client: Test client.
+        set_file: Changes the stored test file.
+        relative_path: Relative path in the request, with a leading slash.
+    """
+    set_file(lambda file: file["tool_file"].update(path="/abs/foo.cwl"))
+    response = client.get(f"{VERSION_PATH}/CWL/descriptor/{relative_path}")
+    assert response.status_code == 308
+    assert response.headers["Location"].endswith("/CWL/descriptor/abs/foo.cwl")
+    response = client.get(f"{VERSION_PATH}/CWL/descriptor/%252Fabs%252Ffoo.cwl")
     assert response.status_code == 200
     assert response.get_json()["content"] == "content"
 

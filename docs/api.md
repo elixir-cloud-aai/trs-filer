@@ -41,6 +41,14 @@ where `null` removes a key of the vendored files (FOCA's
   start).
 - The registration endpoints and their schemas, and the `tags` of tools
   (see [Registering tools](#registering-tools)).
+- The parameter `relative_path` of `{type}/descriptor/{relative_path}` has
+  format `path`, so that paths with `/` (also encoded ones, `%2F`, which
+  servers decode before routing) reach the endpoint (see [Relative
+  paths](#relative-paths)).
+- The `text/plain` responses of `{type}/descriptor` and
+  `{type}/descriptor/{relative_path}` have no schema (instead of `type:
+  string`), so that plain descriptors are sent as is, also ones that are
+  JSON documents (see [Descriptor types](#descriptor-types)).
 
 ## GA4GH TRS endpoints
 
@@ -52,7 +60,7 @@ where `null` removes a key of the vendored files (FOCA's
 | `GET /tools/{id}/versions` | List the versions of a tool. |
 | `GET /tools/{id}/versions/{version_id}` | Get a version of a tool. |
 | `GET /tools/{id}/versions/{version_id}/{type}/descriptor` | Get the primary descriptor of a version, for descriptor type `type` (see [Descriptor types](#descriptor-types)). |
-| `GET /tools/{id}/versions/{version_id}/{type}/descriptor/{relative_path}` | Get another descriptor file of a version, by its path. |
+| `GET /tools/{id}/versions/{version_id}/{type}/descriptor/{relative_path}` | Get another descriptor file of a version, by its path, also in subdirectories (see [Relative paths](#relative-paths)). |
 | `GET /tools/{id}/versions/{version_id}/{type}/tests` | List the test files of a version. |
 | `GET /tools/{id}/versions/{version_id}/{type}/files` | List the files of a version for descriptor type `type` (descriptors, test files and other files, not container recipe files), or, with `format=zip`, get them as a ZIP archive. |
 | `GET /tools/{id}/versions/{version_id}/containerfile` | List the container recipe files (e.g., Dockerfiles) of a version. |
@@ -74,9 +82,44 @@ files rather than the files wrapped with metadata. So:
   (`type`) or a descriptor type of a version (`descriptor_type`), gives
   `400 Bad Request`; use the descriptor type without the prefix (e.g., `CWL`
   for `PLAIN_CWL`).
-- TRS-Filer doesn't serve plain files yet: requests with the `PLAIN_` form
-  of a supported type find no files (`404 Not Found`), and `{type}/files`
-  doesn't take `PLAIN_` types (`400 Bad Request`), as in the specification.
+- Descriptors are served as plain text for `PLAIN_` types: `{type}/descriptor`
+  and `{type}/descriptor/{relative_path}` with, e.g., `PLAIN_CWL` return
+  the content of the `CWL` file as is, with media type `text/plain` (the
+  JSON types return the file wrapped with metadata, as `application/json`).
+  The media type says `charset=utf-8`: stored content is sent as UTF-8.
+  Files without stored content are retrieved from their `url`, as for ZIP
+  archives, and sent as retrieved, not converted, so content that isn't
+  UTF-8 is labelled `charset=utf-8` too (see [Remote
+  files](configuration.md#remote-files)); files without either, or whose
+  URL can't be retrieved, are not found (`404 Not Found`, as JSON). Plain
+  responses tell browsers not to guess another media type
+  (`X-Content-Type-Options: nosniff`).
+- Test files are not served for `PLAIN_` types: `{type}/tests` with the
+  `PLAIN_` form of a type finds no files (`404 Not Found`).
+- `{type}/files` doesn't take `PLAIN_` types (`400 Bad Request`), as in the
+  specification.
+
+## Relative paths
+
+`{type}/descriptor/{relative_path}` finds files by their paths (`path` of
+the files of a version), also in subdirectories. The specification defines
+the relative path as one path segment, with `/` percent-encoded, and allows
+unencoded paths too, so these requests find the file `tools/echo.cwl`:
+
+- `.../CWL/descriptor/tools%2Fecho.cwl` (encoded, as in the specification)
+- `.../CWL/descriptor/tools/echo.cwl` (not encoded)
+- `.../CWL/descriptor/tools%252Fecho.cwl` (encoded twice, as clients had to
+  before TRS-Filer found the other forms): paths that match no file are
+  percent-decoded once more
+
+A path that matches a file as it arrives is not decoded again; e.g., a file
+`100%25.cwl` is found with `100%2525.cwl`.
+
+Paths of files are relative, so register them without a leading `/`: the
+server merges the slashes of `descriptor//abs/foo.cwl` (also from
+`%2Fabs%2Ffoo.cwl`) and redirects to `descriptor/abs/foo.cwl`
+(`308 Permanent Redirect`), so a file `/abs/foo.cwl` is found only with
+`%252Fabs%252Ffoo.cwl`.
 
 ## Listing tools
 
