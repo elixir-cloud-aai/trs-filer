@@ -14,8 +14,10 @@ import re
 import shlex
 import subprocess
 import tomllib
+from typing import Any
 
 from packaging.requirements import Requirement
+import pytest
 from uv import find_uv_bin
 
 ROOT = Path(__file__).parents[1]
@@ -69,19 +71,21 @@ def _pinned(requirements: str) -> dict[str, list[str]]:
     for line in lines:
         if not line or line.lstrip().startswith("#"):
             continue
-        # Direct references (`<name> @ <URL>`, e.g., a FOCA commit) have no
-        # hashes
-        name, _, rest = (
-            line.partition(" @ ")
-            if " @ " in line.split("==")[0]
-            else line.partition("==")
+        # A pin (`<name>==<version>`) or, TEMPORARY while FOCA is pinned to
+        # a commit, a direct reference (`<name> @ <URL>`, without hashes)
+        match = re.match(r"(?P<name>[A-Za-z0-9._-]+)(?: @ |==)(?P<rest>.*)", line)
+        assert match, line
+        packages[match["name"]] = re.findall(
+            r"--hash=sha256:([0-9a-f]{64})", match["rest"]
         )
-        packages[name.strip()] = re.findall(r"--hash=sha256:([0-9a-f]{64})", rest)
     return packages
 
 
 def _foca_commit(requirements: str) -> str | None:
     """Get the FOCA commit of a temporary direct reference, if any.
+
+    TEMPORARY: used while FOCA is pinned to a commit (see
+    `scripts/check_release_pins.py`); remove with the pin's special cases.
 
     Args:
         requirements: Requirements file, as `uv export` writes it.
@@ -259,6 +263,7 @@ def test_runtime_requirements_without_build_requirements() -> None:
     assert "setuptools" not in packages
     assert "setuptools-scm" not in packages
     assert "pytest" not in packages
+    # TEMPORARY: a FOCA commit has no hashes (see `_foca_commit()`)
     unhashed = {"foca"} if _foca_commit(exported) else set()
     for name, hashes in packages.items():
         assert hashes or name in unhashed, name
@@ -278,13 +283,11 @@ def test_config_job_group() -> None:
     assert group in [requirement for requirement in dev if requirement.name == "yq"]
 
 
-def test_image_requirements_of_export() -> None:
-    """The script keeps the export of the image build, but a FOCA commit.
+def _image_requirements_module() -> Any:
+    """Load `scripts/image_requirements.py`, which is not a package.
 
-    As the base image has the locked FOCA release (see
-    `test_locked_foca_is_base_image_foca()`), nothing is left out; a
-    temporary FOCA commit, which the base image has, is left out, with the
-    other requirements kept as they are.
+    Returns:
+        The module.
     """
     spec = importlib.util.spec_from_file_location(
         "image_requirements", ROOT / "scripts/image_requirements.py"
@@ -292,22 +295,45 @@ def test_image_requirements_of_export() -> None:
     assert spec and spec.loader
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
+    return module
+
+
+def test_image_requirements_of_export() -> None:
+    """The script keeps the export of the image build as is, with FOCA's release.
+
+    As the base image has the locked FOCA release (see
+    `test_locked_foca_is_base_image_foca()`), nothing is left out.
+    """
+    exported = _export("--no-dev", "--group", CONFIG_JOB)
+    if _foca_commit(exported) is not None:
+        pytest.skip("FOCA is pinned to a commit (see the next test)")
+    locked = _locked_versions(exported)
+    assert (
+        _image_requirements_module().image_requirements(exported, locked["foca"])
+        == exported
+    )
+
+
+def test_image_requirements_of_export_foca_commit() -> None:
+    """The script leaves out a temporary FOCA commit, and keeps the rest.
+
+    TEMPORARY: runs while FOCA is pinned to a commit, which the base image
+    has; remove with the pin's special cases.
+    """
     exported = _export("--no-dev", "--group", CONFIG_JOB)
     commit = _foca_commit(exported)
     if commit is None:
-        locked = _locked_versions(exported)
-        assert module.image_requirements(exported, locked["foca"]) == exported
-    else:
-        # As setuptools-scm sets it for FOCA's development image
-        installed = f"0.0.1.dev1+g{commit[:9]}"
-        kept = module.image_requirements(exported, installed)
-        assert "foca @" not in kept
-        assert kept == "".join(
-            f"{line}\n"
-            for entry in module.entries(exported)
-            if not entry[0].startswith("foca @")
-            for line in entry
-        )
+        pytest.skip("FOCA is not pinned to a commit")
+    # As setuptools-scm sets it for FOCA's development image
+    installed = f"0.0.1.dev1+g{commit[:9]}"
+    kept = _image_requirements_module().image_requirements(exported, installed)
+    reference = (
+        f"foca @ git+https://github.com/elixir-cloud-aai/foca@{commit}\n"
+        "    # via trs-filer\n"
+    )
+    assert reference in exported
+    assert kept == exported.replace(reference, "")
+    assert _pinned(kept).keys() == _pinned(exported).keys() - {"foca"}
 
 
 def test_downloads_hash_checked() -> None:

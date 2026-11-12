@@ -551,9 +551,9 @@ paths:
                 $ref: '#/components/schemas/Error'
 components:
   # TRS's scheme as an HTTP bearer scheme, as on TRS `develop` (2.0.2
-  # declares an API key scheme, a leftover of its conversion from Swagger 2),
-  # whose tokens FOCA validates; the service info specification's own
-  # (`bearerAuth`) is removed, as TRS's operations refer to `BEARER`
+  # declares an API key scheme), whose tokens FOCA validates; the service
+  # info specification's own (`bearerAuth`) is removed, as TRS's operations
+  # refer to `BEARER`
   securitySchemes:
     BEARER:
       type: http

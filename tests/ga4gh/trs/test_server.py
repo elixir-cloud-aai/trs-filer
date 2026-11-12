@@ -879,20 +879,31 @@ def test_version_descriptor_type_version(
     [["v1.2"], {"CWL": "v1.2"}, {"CWL": [1.2]}],
     ids=["not-a-map", "not-a-list", "not-a-string"],
 )
+@pytest.mark.parametrize("target", ["version", "tool"])
 def test_version_descriptor_type_version_invalid(
-    client: FlaskClient, tool: dict[str, Any], value: object
+    client: FlaskClient, tool: dict[str, Any], value: object, target: str
 ) -> None:
     """Language versions must map descriptor types to lists of strings.
+
+    Both for versions registered on their own (`ToolVersionRegister`) and
+    with their tool (`ToolVersionRegisterId`).
 
     Args:
         client: Test client.
         tool: Registered tool.
         value: Invalid language versions.
+        target: Whether a version or a tool with the version is registered.
     """
-    data = deepcopy(MOCK_VERSION_NO_ID)
-    data["descriptor_type_version"] = value
-    response = client.post(f"{BASE_PATH}/tools/{TOOL_ID}/versions", json=data)
-    assert response.status_code == 400
+    if target == "version":
+        path, data = VERSION_PATH, deepcopy(MOCK_VERSION_NO_ID)
+        version = data
+    else:
+        path, data = f"{BASE_PATH}/tools/{TOOL_ID}", deepcopy(MOCK_TOOL_VERSION_ID)
+        version = data["versions"][0]
+    # The registration is valid with valid language versions
+    assert client.put(path, json=data).status_code == 200
+    version["descriptor_type_version"] = value
+    assert client.put(path, json=data).status_code == 400
 
 
 UNKNOWN_VERSIONS = pytest.mark.parametrize(

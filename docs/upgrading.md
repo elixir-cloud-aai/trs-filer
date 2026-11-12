@@ -47,7 +47,9 @@ existing data needs no changes. Check clients and custom configs:
   required a token before. Config overlays with `patches` of
   `api.specs.trs` must patch the operations of the new specification, and
   `null` in patches now removes the key instead of setting it to `null`
-  (FOCA 0.23).
+  (FOCA 0.23). Config overlays that set `api.specs.trs.path` must list
+  `api/20250902.4854e2f.openapi.yaml` instead of
+  `api/20230406.1dd4bf8.openapi.yaml`, in the order of the base config.
 - Versions take the versions of their languages (`descriptor_type_version`
   of `ToolVersionRegister`, by descriptor type), which they return;
   registrations with it failed with `400 Bad Request` before.

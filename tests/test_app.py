@@ -654,10 +654,11 @@ def test_spec_security(client: FlaskClient) -> None:
     ] == {"$ref": "#/components/schemas/Service"}
     for method, path in TRS_READS:
         assert spec["paths"][path][method]["security"] == [], path
+    public = {*TRS_READS, ("get", "/service-info")}
     for path, item in spec["paths"].items():
         for method, operation in item.items():
-            if method in HTTP_METHODS and (method, path) not in TRS_READS:
-                assert "security" not in operation or path == "/service-info"
+            if method in HTTP_METHODS and (method, path) not in public:
+                assert "security" not in operation, (method, path)
     zip_response = spec["paths"]["/tools/{id}/versions/{version_id}/{type}/files"][
         "get"
     ]["responses"]["200"]["content"]["application/zip"]["schema"]
