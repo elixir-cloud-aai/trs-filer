@@ -339,37 +339,45 @@ jobs:
         run: |
           body="${RUNNER_TEMP}/body.json"
           log="${RUNNER_TEMP}/port-forward.log"
-          # The config Job deletes the app's pods to restart the app with its
-          # config, and completes without waiting for them to go: wait until
-          # they are gone, so that the port forward (which picks a pod of the
-          # Service once) doesn't reach a terminating pod with the old config
-          for _ in $(seq 60); do
-            if ! kubectl get pods -n "${NAMESPACE}" -l app=trs-filer -o json \
-                | jq -e 'any(.items[]; .metadata.deletionTimestamp)' > /dev/null; then
-              break
-            fi
-            sleep 2
-          done
-          kubectl rollout status deployment/trs-filer -n "${NAMESPACE}" \
-            --timeout=300s
           pid=""
           trap '[[ -n "${pid}" ]] && kill "${pid}" 2> /dev/null || true' EXIT
-          # The app has no readiness probe, so it may still be starting; a
-          # port forward ends on a refused connection, so it is restarted
-          # until the app answers
-          for _ in $(seq 60); do
-            if [[ -z "${pid}" ]] || ! kill -0 "${pid}" 2> /dev/null; then
-              kubectl port-forward -n "${NAMESPACE}" service/trs-filer \
-                8080:8080 >> "${log}" 2>&1 &
-              pid=$!
+          # Wait for the app with its config and forward its port
+          connect() {
+            if [[ -n "${pid}" ]]; then
+              kill "${pid}" 2> /dev/null || true
+              pid=""
+            fi
+            # The config Job deletes the app's pods to restart the app with
+            # its config, and completes without waiting for them to go: wait
+            # until they are gone, so that the port forward (which picks a pod
+            # of the Service once) doesn't reach a terminating pod with the
+            # old config
+            for _ in $(seq 60); do
+              if ! kubectl get pods -n "${NAMESPACE}" -l app=trs-filer -o json \
+                  | jq -e 'any(.items[]; .metadata.deletionTimestamp)' > /dev/null; then
+                break
+              fi
               sleep 2
-            fi
-            if curl --fail --silent --max-time 10 --output /dev/null \
-                "${API}/service-info"; then
-              break
-            fi
-            sleep 5
-          done
+            done
+            kubectl rollout status deployment/trs-filer -n "${NAMESPACE}" \
+              --timeout=300s
+            # The app has no readiness probe, so it may still be starting; a
+            # port forward ends on a refused connection, so it is restarted
+            # until the app answers
+            for _ in $(seq 60); do
+              if [[ -z "${pid}" ]] || ! kill -0 "${pid}" 2> /dev/null; then
+                kubectl port-forward -n "${NAMESPACE}" service/trs-filer \
+                  8080:8080 >> "${log}" 2>&1 &
+                pid=$!
+                sleep 2
+              fi
+              if curl --fail --silent --max-time 10 --output /dev/null \
+                  "${API}/service-info"; then
+                break
+              fi
+              sleep 5
+            done
+          }
           # Request a path, with an optional JSON body; check the status and
           # that the JSON response matches a jq filter. As in `smoke` (keep
           # both alike), plus a time limit, as the port forward may hang, and
@@ -391,7 +399,6 @@ jobs:
               return 1
             fi
           }
-          check GET /service-info 200 '.type.artifact == "trs"'
           tool='{
             "name": "kind",
             "organization": "Example",
@@ -407,6 +414,21 @@ jobs:
               }]
             }]
           }'
+          connect
+          # Reads are public; writes need a token of the (fictitious)
+          # identity provider of the test values
+          check GET /service-info 200 '.type.artifact == "trs"'
+          check GET /tools 200 '. == []'
+          check POST /tools 401 '.status == 401' "${tool}"
+          # Writes without authentication (`config` value of the chart,
+          # merged after the config Job's overlay; for this test only, see
+          # "Running without authentication" in `docs/development.md`), to
+          # check the public URL that the config Job sets; the changed value
+          # restarts the app (checksum of its overlay)
+          helm upgrade trs-filer deployment -n "${NAMESPACE}" --reuse-values \
+            --set trs_filer.config.api.specs.trs.disable_auth=true \
+            --wait --wait-for-jobs --timeout 600s
+          connect
           check POST /tools 200 'type == "string"' "${tool}"
           id="$(jq -r . "${body}")"
           check GET "/tools/${id}" 200 \
@@ -491,6 +513,16 @@ jobs:
               }]
             }]
           }'
+          # Writes need a token of the (fictitious) identity provider of
+          # `config.dev.yaml`
+          check POST /tools 401 '.status == 401' "${tool}"
+          check PUT /toolClasses/smoke 401 '.status == 401' '{"name": "Smoke"}'
+          check DELETE /tools/SMOKE1 401 '.status == 401'
+          # Writes without authentication (`config.noauth.yaml`, for local
+          # development; see "Running without authentication" in
+          # `docs/development.md`): restarts the app with it
+          TRS_FILER_CONFIG_OVERLAY=/etc/trs-filer/config.dev.yaml:/etc/trs-filer/config.noauth.yaml \
+            docker compose up -d --wait --wait-timeout 300
           check POST /tools 200 'type == "string"' "${tool}"
           id="$(jq -r . "${body}")"
           check GET "/tools/${id}" 200 \
