@@ -1402,8 +1402,17 @@ def _accept(value: str | None) -> dict[str, str]:
         "application/json; charset=utf-8",
         "text/plain;q=0, application/json",
         "text/plain, application/json;q=0.5",
+        "application/json;q=0, application/json;level=1",
     ],
-    ids=[*ACCEPT_ANY_IDS, "json", "application", "charset", "plain-q0", "lower-q"],
+    ids=[
+        *ACCEPT_ANY_IDS,
+        "json",
+        "application",
+        "charset",
+        "plain-q0",
+        "lower-q",
+        "parameters",
+    ],
 )
 def test_type_accept_json(
     client: FlaskClient, tool: dict[str, Any], path: str, accept: str | None
@@ -1411,8 +1420,9 @@ def test_type_accept_json(
     """Descriptor types are served as JSON if clients accept it.
 
     The type sets the media type, also if clients prefer plain text;
-    parameters of media ranges other than `q` are ignored. Responses depend
-    on `Accept` (`Vary`).
+    parameters of media ranges other than `q` are ignored, so ranges that
+    differ only by them count as one, with the highest quality. Responses
+    depend on `Accept` (`Vary`).
 
     Args:
         client: Test client.
@@ -1515,20 +1525,26 @@ def test_type_accept_NotAcceptable(
 
 
 def test_type_accept_order(client: FlaskClient, tool: dict[str, Any]) -> None:
-    """Invalid types are refused before `Accept`, which is checked first.
+    """Types are validated first, then `Accept`, then the version is looked up.
+
+    So invalid types give `400`, refused media types `406` (also for
+    unknown versions), and unknown versions `404`; the responses after the
+    type is validated depend on `Accept` (`Vary`).
 
     Args:
         client: Test client.
         tool: Registered tool.
     """
+    unknown_path = f"{BASE_PATH}/tools/{UNKNOWN}/versions/{UNKNOWN}/CWL/tests"
     headers = {"Accept": "text/html"}
     response = client.get(f"{VERSION_PATH}/FOO/descriptor", headers=headers)
     assert response.status_code == 400
-    response = client.get(
-        f"{BASE_PATH}/tools/{UNKNOWN}/versions/{UNKNOWN}/CWL/tests",
-        headers=headers,
-    )
+    response = client.get(unknown_path, headers=headers)
     assert response.status_code == 406
+    assert "Accept" in response.vary
+    response = client.get(unknown_path)
+    assert response.status_code == 404
+    assert "Accept" in response.vary
 
 
 def test_type_accept_logged(
@@ -1541,7 +1557,8 @@ def test_type_accept_logged(
         tool: Registered tool.
         caplog: Captured logs.
     """
-    accept = "text/html, " + "x" * 300
+    # Servers refuse line breaks in headers; other control characters pass
+    accept = "text/html\x1b[31m, " + "x" * 300
     with caplog.at_level("INFO", logger=server.logger.name):
         client.get(f"{VERSION_PATH}/CWL/descriptor", headers={"Accept": accept})
     (record,) = [
@@ -1552,7 +1569,7 @@ def test_type_accept_logged(
     assert record.levelname == "INFO"
     assert record.message == (
         "Type 'CWL' is served as application/json, which isn't accepted: "
-        + accept[: server.MAX_LOGGED_ACCEPT]
+        + accept[: server.MAX_LOGGED_ACCEPT].replace("\x1b", "\\x1b")
     )
 
 

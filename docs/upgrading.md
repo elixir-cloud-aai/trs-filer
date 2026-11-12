@@ -39,7 +39,8 @@ existing data needs no changes. Check clients and custom configs:
   their `PLAIN_` forms) get `406 Not Acceptable` instead of a response
   they didn't ask for (e.g., `Accept: text/plain` with `CWL`; use
   `PLAIN_CWL` instead). Clients that send no `Accept`, `*/*`, or the media
-  type of the type are not affected (see [Media types](api.md#media-types)).
+  type of the type are not affected. Their responses carry `Vary: Accept`
+  (see [Media types](api.md#media-types)).
 - `{type}/descriptor/{relative_path}` finds files in subdirectories by
   encoded paths (`tools%2Fecho.cwl`, as in the specification) and by plain
   ones (`tools/echo.cwl`), instead of `404 Not Found`; paths encoded twice

@@ -448,6 +448,10 @@ def _negotiate_type(type: str) -> tuple[str, bool]:
     accept = request.accept_mimetypes
     if accept:
         media_type = PLAIN_MEDIA_TYPE if plain else JSON_MEDIA_TYPE
+        # Werkzeug matches parameters of media ranges exactly, so that
+        # `application/json; charset=utf-8` wouldn't accept JSON; without
+        # them, ranges of the same media type count with their highest
+        # quality
         ranges = MIMEAccept(
             [(value.split(";", 1)[0].strip(), quality) for value, quality in accept]
         )
