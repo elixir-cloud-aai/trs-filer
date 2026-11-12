@@ -8,13 +8,9 @@ and the cluster serves Routes */}}
 {{- end -}}
 TRS-Filer is being deployed!
 
-WARNING: The API has no authentication yet (see
-https://github.com/elixir-cloud-aai/trs-filer/issues/7). Anyone who can
-reach it can register, replace and delete tools and tool classes. Allow
-POST, PUT and DELETE only from trusted clients, at the ingress controller
-(`trs_filer.ingress.annotations`), the OpenShift router
-(`trs_filer.route.annotations`) or a proxy in front of them; see "Ingress
-and Route" in the chart's README.
+Reads are public; writes (POST, PUT and DELETE) need an access token of an
+admin of the identity provider in `trs_filer.config` (see "Configuration"
+in the chart's README).
 {{- if not (include "trs-filer.mongodbAuth" .) }}
 
 WARNING: MongoDB runs without authentication (`mongodb.auth.enabled`):
