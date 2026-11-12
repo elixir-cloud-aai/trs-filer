@@ -5,6 +5,7 @@ provider is mocked (see `tests/conftest.py`): reads are public, writes need
 an access token of an admin.
 """
 
+from copy import deepcopy
 import logging
 import os
 from pathlib import Path
@@ -30,8 +31,12 @@ from tests.conftest import (
     admin_client,
     make_headers,
 )
-from tests.mock_data import MOCK_TOOL, MOCK_TOOL_VERSION_ID, MOCK_VERSION_NO_ID
-from tests.mock_data import BASE_PATH
+from tests.mock_data import (
+    BASE_PATH,
+    MOCK_TOOL,
+    MOCK_TOOL_VERSION_ID,
+    MOCK_VERSION_NO_ID,
+)
 from trs_filer.app import create_app
 
 ROOT = Path(__file__).parents[1]
@@ -103,9 +108,7 @@ def _write(
         Response.
     """
     method, path, body = write
-    return client.open(
-        f"{BASE_PATH}{path}", method=method, json=body, headers=headers
-    )
+    return client.open(f"{BASE_PATH}{path}", method=method, json=body, headers=headers)
 
 
 def _overlay(overlay: Path, config: dict[str, Any]) -> None:
@@ -304,6 +307,8 @@ def test_login_for_reads(
         assert response.headers["WWW-Authenticate"].startswith("Bearer")
         response = anonymous.get(f"{BASE_PATH}{path}", headers=make_headers(USER))
         assert response.status_code == 200, path
+        response = anonymous.head(f"{BASE_PATH}{path}", headers=make_headers(USER))
+        assert response.status_code == 200, path
     for path in ("/service-info", "/openapi.json", "/ui/"):
         assert anonymous.get(f"{BASE_PATH}{path}").status_code == 200, path
 
@@ -342,7 +347,9 @@ def test_login_for_reads_named_rules(
     _overlay(
         overlay,
         {
-            "api": {"specs": {"trs": {"patches": ["api/patches/login-for-reads.yaml"]}}},
+            "api": {
+                "specs": {"trs": {"patches": ["api/patches/login-for-reads.yaml"]}}
+            },
             "security": {
                 "access_control": {"policies": {"get-tools": None}},
             },
@@ -383,6 +390,11 @@ def test_refuses_no_audience(
     _overlay(overlay, {"security": {"auth": {"audience": None}}})
     with pytest.raises(ValidationError, match="require an audience"):
         create_app()
+    _overlay(
+        overlay,
+        {"security": {"auth": {"audience": None, "verify_audience": False}}},
+    )
+    create_app()
 
 
 def test_refuses_no_admins(
@@ -395,11 +407,15 @@ def test_refuses_no_admins(
         overlay: Config overlay.
     """
     _overlay(overlay, {"security": {"access_control": {"group_mapping": None}}})
-    with pytest.raises(ValueError, match="admin"):
+    with pytest.raises(ValueError, match="require_admin' is set"):
         create_app()
     _overlay(
         overlay,
-        {"security": {"access_control": {"group_mapping": None, "require_admin": False}}},
+        {
+            "security": {
+                "access_control": {"group_mapping": None, "require_admin": False}
+            }
+        },
     )
     create_app()
 
@@ -418,9 +434,7 @@ def test_refuses_service_clients(
         {
             "security": {
                 "auth": {
-                    "service_clients": [
-                        {"client_id": "gateway", "issuer": ISSUER}
-                    ]
+                    "service_clients": [{"client_id": "gateway", "issuer": ISSUER}]
                 }
             }
         },
@@ -532,6 +546,12 @@ def test_editors_example(
         response = _write(client, write, headers)
         expected = 403 if write[1].startswith("/toolClasses") else 200
         assert response.status_code == expected, write
+    tool = deepcopy(MOCK_TOOL)
+    tool["toolclass"] = {"name": "EditorClass", "description": "New class"}
+    response = client.post(f"{BASE_PATH}/tools", json=tool, headers=headers)
+    assert response.status_code == 200
+    classes = client.get(f"{BASE_PATH}/toolClasses").get_json()
+    assert "EditorClass" in [tool_class["name"] for tool_class in classes]
     response = _write(client, WRITES[0], make_headers(USER))
     assert response.status_code == 403
 
@@ -556,6 +576,7 @@ def test_readers_example(
     for path in READS:
         url = f"{BASE_PATH}{path}"
         assert client.get(url, headers=make_headers(READER)).status_code == 200
+        assert client.head(url, headers=make_headers(READER)).status_code == 200
         assert client.get(url, headers=make_headers(ADMIN)).status_code == 200
         assert client.get(url, headers=make_headers(USER)).status_code == 403
 
@@ -602,7 +623,7 @@ def test_permissions_api(anonymous_client: FlaskClient) -> None:
     assert response.status_code == 200
     rules = {tuple(rule["rule"].values()) for rule in response.get_json()["results"]}
     assert rules == {
-        ("*", f"{BASE_PATH}/tools", "GET"),
-        ("*", f"{BASE_PATH}/tools/*", "GET"),
-        ("*", f"{BASE_PATH}/toolClasses", "GET"),
+        ("*", f"{BASE_PATH}/tools", "GET|HEAD"),
+        ("*", f"{BASE_PATH}/tools/*", "GET|HEAD"),
+        ("*", f"{BASE_PATH}/toolClasses", "GET|HEAD"),
     }

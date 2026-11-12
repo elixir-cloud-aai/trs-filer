@@ -203,8 +203,21 @@ def test_notes_ingress(tmp_path: Path) -> None:
     notes = render_notes(tmp_path)
     assert "writes (POST, PUT and DELETE) need an access token" in notes
     assert "has no authentication" not in notes
+    assert "authentication is disabled" not in notes
     assert "http://trs.example.org/ga4gh/trs/v2/" in notes
     assert "port-forward" not in notes
+
+
+def test_notes_auth_disabled(tmp_path: Path) -> None:
+    """With authentication disabled, the notes warn that everyone may write.
+
+    Args:
+        tmp_path: Directory for the copy of the chart.
+    """
+    notes = render_notes(
+        tmp_path, "--set", "trs_filer.config.api.specs.trs.disable_auth=true"
+    )
+    assert "WARNING: authentication is disabled" in notes
 
 
 def test_notes_route(tmp_path: Path) -> None:
@@ -940,6 +953,10 @@ def test_config_overlay_checksum() -> None:
         pytest.param(("--set", "trs_filer.config=null"), id="without config"),
         pytest.param(
             ("--set", "trs_filer.config.security.auth.issuers=null"), id="no issuers"
+        ),
+        pytest.param(
+            ("--set", "trs_filer.config.security.auth.issuers=https://x.example.org/"),
+            id="issuers not a list",
         ),
     ],
 )

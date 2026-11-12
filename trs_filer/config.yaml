@@ -89,9 +89,9 @@ security:
             # deployment requires login for these reads, which are public
             # otherwise (see "Requiring login for reads" in
             # `docs/access-control.md`)
-            list-tools: [p, "*", /ga4gh/trs/v2/tools, GET]
-            get-tools: [p, "*", "/ga4gh/trs/v2/tools/*", GET]
-            list-tool-classes: [p, "*", /ga4gh/trs/v2/toolClasses, GET]
+            list-tools: [p, "*", /ga4gh/trs/v2/tools, "GET|HEAD"]
+            get-tools: [p, "*", "/ga4gh/trs/v2/tools/*", "GET|HEAD"]
+            list-tool-classes: [p, "*", /ga4gh/trs/v2/toolClasses, "GET|HEAD"]
 
 # Database configuration
 # Cf. https://foca.readthedocs.io/en/latest/configuration/db/

@@ -247,8 +247,8 @@ app (e.g., with a malformed request line or oversized headers) don't have
 it.
 
 Writes without a valid access token get `401 Unauthorized`, with a Bearer
-challenge (`WWW-Authenticate`), and writes of users who may not write
-`403 Forbidden`, before their body is validated (see [Access
+challenge (`WWW-Authenticate`), before their body is validated, and
+writes of users who may not write `403 Forbidden`, after it (see [Access
 control](access-control.md#authentication)).
 
 Requests that don't match the API specification (e.g., an unknown

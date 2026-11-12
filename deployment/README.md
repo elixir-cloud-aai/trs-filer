@@ -333,9 +333,10 @@ uses `haproxy.router.openshift.io/ip_whitelist`. The router checks the
 source address that it sees, which is the client's only if it gets
 through a load balancer in front of it (e.g., with the PROXY protocol or
 `externalTrafficPolicy: Local`); otherwise, it is that of the load
-balancer or a node. To keep reads public and restrict only writes,
-restrict them at a proxy in front of the router. Check with a `POST` from
-an untrusted address that writes are refused.
+balancer or a node. Writes need a token anyway; to also restrict them by
+address while keeping reads public, restrict them at a proxy in front of
+the router. Check with a `POST` from an untrusted address that writes are
+refused.
 
 ### Forwarded headers
 

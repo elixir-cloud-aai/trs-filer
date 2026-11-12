@@ -11,6 +11,13 @@ TRS-Filer is being deployed!
 Reads are public; writes (POST, PUT and DELETE) need an access token of an
 admin of the identity provider in `trs_filer.config` (see "Configuration"
 in the chart's README).
+{{- if dig "api" "specs" "trs" "disable_auth" false (.Values.trs_filer.config | default dict) }}
+
+WARNING: authentication is disabled
+(`trs_filer.config.api.specs.trs.disable_auth`): everyone who can reach
+the app can register, change and delete tools. Use this for local tests
+only.
+{{- end }}
 {{- if not (include "trs-filer.mongodbAuth" .) }}
 
 WARNING: MongoDB runs without authentication (`mongodb.auth.enabled`):

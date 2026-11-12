@@ -1,8 +1,9 @@
 {{- /* The `trs_filer.config` value, the app's second config overlay (after
 the one that the config Job writes); it must trust token issuers, as the app
 refuses to start without them */}}
-{{- if not (dig "security" "auth" "issuers" list (.Values.trs_filer.config | default dict)) }}
-{{- fail "trs_filer.config.security.auth.issuers must be set: the trusted token issuers of your identity provider, with security.auth.audience, security.access_control.claim_groups and security.access_control.group_mapping (see the chart's README, Configuration)" }}
+{{- $issuers := dig "security" "auth" "issuers" list (.Values.trs_filer.config | default dict) }}
+{{- if or (not $issuers) (not (kindIs "slice" $issuers)) }}
+{{- fail "trs_filer.config.security.auth.issuers must be set to a list (e.g., --set 'trs_filer.config.security.auth.issuers={https://login.example.org/oidc/}'): the trusted token issuers of your identity provider, with security.auth.audience, security.access_control.claim_groups and security.access_control.group_mapping (see the chart's README, Configuration)" }}
 {{- end }}
 apiVersion: v1
 kind: ConfigMap

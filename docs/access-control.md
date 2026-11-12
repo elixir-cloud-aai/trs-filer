@@ -36,7 +36,8 @@ Requests without a valid token are rejected with `401 Unauthorized` and a
 Bearer challenge (`WWW-Authenticate: Bearer`, RFC 6750; with
 `error="invalid_token"` for invalid tokens), before their body is validated;
 requests with a valid token, but without the required role, with `403
-Forbidden`. Both are [problem details](api.md#errors).
+Forbidden`, after their body is validated (invalid bodies get `400 Bad
+Request` first). Both are [problem details](api.md#errors).
 
 Tokens are obtained by logging in with the identity provider through an app
 registered as its client (OpenID Connect), e.g., a portal or gateway, or a
@@ -175,7 +176,8 @@ require login): `list-tools` (`GET /tools`), `get-tools` (`GET` of a tool,
 its versions and their descriptors, tests, files and containerfiles, i.e.,
 of all paths under `/tools/`) and `list-tool-classes` (`GET /toolClasses`).
 `GET /service-info`, the API specification (`openapi.json`) and the Swagger
-UI (`ui/`) stay public.
+UI (`ui/`) stay public. The rules allow `HEAD` too, which Flask serves
+from the `GET` operations and which access control checks as `HEAD`.
 
 To allow reads for some users only, replace these rules by name in the
 overlay, e.g., with rules for a role that a group is mapped to, in addition
@@ -188,9 +190,9 @@ security:
             trs-admins: admin
             trs-readers: reader
         policies:
-            list-tools: [p, reader, /ga4gh/trs/v2/tools, GET]
-            get-tools: [p, reader, "/ga4gh/trs/v2/tools/*", GET]
-            list-tool-classes: [p, reader, /ga4gh/trs/v2/toolClasses, GET]
+            list-tools: [p, reader, /ga4gh/trs/v2/tools, "GET|HEAD"]
+            get-tools: [p, reader, "/ga4gh/trs/v2/tools/*", "GET|HEAD"]
+            list-tool-classes: [p, reader, /ga4gh/trs/v2/toolClasses, "GET|HEAD"]
 ```
 
 If an overlay of the deployment gives the policies as a list, which replaces

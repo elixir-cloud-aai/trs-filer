@@ -87,7 +87,15 @@ existing data needs no changes. Check clients and custom configs:
        configuration](configuration.md#deployment-configuration)).
     3. Let the clients send the token (`Authorization: Bearer <token>`)
        with writes.
-    4. Restrictions of writes in front of the app (e.g., methods allowed
+    4. Custom config overlays that replace the default one (e.g., a
+       `docker-compose.override.yaml` that sets `FOCA_CONFIG_OVERLAY`, or a
+       `config.local.yaml`) must set these keys too, or the app refuses to
+       start. If you deployed a copy of the Helm chart with a config overlay
+       of its own (as the 0.5.0 deployment README described), move that
+       overlay's content into `trs_filer.config` and drop your template
+       changes: the chart now sets `FOCA_CONFIG_OVERLAY` itself. The first
+       upgrade restarts the app (new config map).
+    5. Restrictions of writes in front of the app (e.g., methods allowed
        only from some addresses at the ingress controller) are no longer
        needed for access control; keep them if you want both.
 
@@ -96,9 +104,10 @@ existing data needs no changes. Check clients and custom configs:
   `policy_rules` of the app's database; FOCA's permissions API is served at
   `/admin/access-control/` (see [Permissions
   API](operations.md#permissions-api)). Docker Compose trusts a fictitious
-  identity provider (`config.dev.yaml`), so writes are refused until you set
-  yours in a local override; for local development without an identity
-  provider, see [Running without
+  identity provider (`config.dev.yaml`, which requires no admins and
+  verifies no audiences), so writes are refused until you set yours in a
+  local override (`TRS_FILER_CONFIG_OVERLAY` selects the overlays); for
+  local development without an identity provider, see [Running without
   authentication](development.md#running-without-authentication).
 
 ## From 0.4.0
