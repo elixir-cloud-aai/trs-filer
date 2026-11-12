@@ -369,6 +369,8 @@ def toolsIdVersionsVersionIdTypeDescriptorRelativePathGet(
         "PRIMARY_DESCRIPTOR",
         "SECONDARY_DESCRIPTOR",
     ]
+    # The path as it arrives wins over the decoded one (e.g., for files with
+    # `%` in their paths), so don't decode it unconditionally
     candidates = [relative_path]
     decoded = unquote(relative_path)
     if decoded != relative_path:
@@ -468,9 +470,16 @@ def _plain_response(wrapper: dict[str, Any]) -> Response:
         wrapper: File wrapper of the file.
 
     Returns:
-        Response with the content of the file, as `text/plain`.
+        Response with the content of the file, as `text/plain`; browsers
+        are told not to guess another media type from the content
+        (`X-Content-Type-Options: nosniff`), as anyone who registers files
+        sets it.
     """
-    return Response(_file_content(wrapper), mimetype="text/plain")
+    return Response(
+        _file_content(wrapper),
+        mimetype="text/plain",
+        headers={"X-Content-Type-Options": "nosniff"},
+    )
 
 
 @log_traffic

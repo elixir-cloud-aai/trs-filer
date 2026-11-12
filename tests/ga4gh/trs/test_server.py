@@ -1175,6 +1175,8 @@ def test_type_plain(
     response = client.get(f"{VERSION_PATH}/{plain_type}/{path}")
     assert response.status_code == 200
     assert response.mimetype == "text/plain"
+    # browsers must not guess another media type from the content
+    assert response.headers["X-Content-Type-Options"] == "nosniff"
     assert response.get_data(as_text=True) == "content"
 
 

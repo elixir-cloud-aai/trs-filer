@@ -628,6 +628,37 @@ def test_vendored_specs_unchanged(app: App) -> None:
     assert sorted(path.name for path in paths[0].parent.glob("2*")) == sorted(VENDORED)
 
 
+def test_spec_descriptor_changes(app: App, client: FlaskClient) -> None:
+    """The descriptor endpoints differ from the vendored ones as documented.
+
+    `relative_path` has format `path` (the parameters are copied from the
+    vendored specification, as lists replace lists when merged), and the
+    `text/plain` responses have no schema.
+
+    Args:
+        app: FOCA app.
+        client: Test client.
+    """
+    with app.app.app_context():
+        (spec,) = get_config().api.specs
+    assert isinstance(spec.path, list)
+    vendored = yaml.safe_load(Path(spec.path[1]).read_text())["paths"]
+    served = client.get(f"{BASE_PATH}/openapi.json").get_json()["paths"]
+    route = "/tools/{id}/versions/{version_id}/{type}/descriptor"
+    expected = deepcopy(vendored[f"{route}/{{relative_path}}"]["get"]["parameters"])
+    expected[-1]["schema"]["format"] = "path"
+    assert served[f"{route}/{{relative_path}}"]["get"]["parameters"] == expected
+    for path in (route, f"{route}/{{relative_path}}"):
+        content = served[path]["get"]["responses"]["200"]["content"]
+        assert content["text/plain"] == {}
+        assert (
+            content["application/json"]
+            == (
+                vendored[path]["get"]["responses"]["200"]["content"]["application/json"]
+            )
+        )
+
+
 def test_spec_security(client: FlaskClient) -> None:
     """The TRS reads and the service info are public, with a bearer scheme.
 
