@@ -291,52 +291,39 @@ def toolsIdVersionsVersionIdTypeDescriptorGet(
     type: str,
     id: str,
     version_id: str,
-) -> dict[str, Any]:
+) -> dict[str, Any] | Response:
     """Get the tool descriptor for the specified tool.
 
     Args:
         type: The output type of the descriptor. Allowable values include
-            "CWL", "WDL", "NFL", "GALAXY", "SMK".
+            "CWL", "WDL", "NFL", "GALAXY", "SMK", and their `PLAIN_` forms.
         id: Tool identifier.
         version_id: Identifier to the tool version of the given tool `id`.
 
     Returns:
-        The tool descriptor. Plain types return the bare descriptor while the
-        "non-plain" types return a descriptor wrapped with metadata.
+        The tool descriptor. Plain types return the bare descriptor (as
+        `text/plain`) while the "non-plain" types return a descriptor wrapped
+        with metadata.
 
     Raises:
         InvalidRequest: The descriptor type is invalid.
         NotFound: The tool version or its primary descriptor of the given
-            type does not exist.
+            type does not exist, or, for plain types, its content is not
+            available.
     """
     validate_descriptor_type(type=type)
+    file_type, plain = _split_plain(type)
+    files = _version_files(id=id, version_id=version_id)
     ret: dict[str, Any] = {}
-    db_coll_tools = get_collection("tools")
-    proj = {
-        "_id": False,
-        "versions": {
-            "$elemMatch": {
-                "id": version_id,
-            },
-        },
-    }
-    data = db_coll_tools.find(
-        filter={"id": id},
-        projection=proj,
-    )
-    try:
-        version_files_data = data[0]["versions"][0]["files"]
-        for _d in version_files_data:
-            if (
-                _d["tool_file"]["file_type"] == "PRIMARY_DESCRIPTOR"
-                and _d["type"] == type
-            ):
-                ret = _d["file_wrapper"]
-    except (IndexError, KeyError, TypeError) as exc:
-        raise NotFound from exc
+    for _d in files:
+        if (
+            _d["tool_file"]["file_type"] == "PRIMARY_DESCRIPTOR"
+            and _d["type"] == file_type
+        ):
+            ret = _d["file_wrapper"]
     if not ret:
         raise NotFound
-    return ret
+    return _plain_response(ret) if plain else ret
 
 
 @log_traffic
@@ -345,67 +332,145 @@ def toolsIdVersionsVersionIdTypeDescriptorRelativePathGet(
     id: str,
     version_id: str,
     relative_path: str,
-) -> dict[str, Any]:
+) -> dict[str, Any] | Response:
     """Get additional tool descriptor files relative to the main file.
+
+    The relative path arrives percent-decoded (with `/` for `%2F`, as the
+    parameter has format `path`). Paths that match no file are decoded
+    once more, so that clients that encode paths twice (`%252F`) find them
+    too.
 
     Args:
         type: The output type of the descriptor. Examples of allowable
-            values are "CWL", "WDL", "NFL", "GALAXY", "SMK".
+            values are "CWL", "WDL", "NFL", "GALAXY", "SMK", and their
+            `PLAIN_` forms.
         id: Tool identifier.
         version_id: Tool version identifier.
         relative_path: A relative path to the additional file (same
             directory or subdirectories), for example 'foo.cwl' would return
-            a 'foo.cwl' from the same directory as the main descriptor. Needs
-            to be percent/url encoded/quoted.
+            a 'foo.cwl' from the same directory as the main descriptor;
+            percent-encoded (`nested%2Ffoo.cwl`) or not (`nested/foo.cwl`).
 
     Returns:
         Additional files associated with a given descriptor type of a given
-        tool version.
+        tool version; for plain types, their bare content (as `text/plain`).
 
     Raises:
         InvalidRequest: The descriptor type is invalid.
         NotFound: The tool version or a file with the given path and type
-            does not exist.
+            does not exist, or, for plain types, its content is not available.
     """
-    logger.debug("Encoded relative path: '%s'", relative_path)
-    relative_path = unquote(relative_path)
-    logger.debug("Decoded relative path: '%s'", relative_path)
-    ret: dict[str, Any] = {}
     validate_descriptor_type(type=type)
-    db_coll_tools = get_collection("tools")
-    proj = {
-        "_id": False,
-        "versions": {
-            "$elemMatch": {
-                "id": version_id,
-            },
-        },
-    }
-    data = db_coll_tools.find(
-        filter={"id": id},
-        projection=proj,
-    )
-
+    file_type, plain = _split_plain(type)
+    files = _version_files(id=id, version_id=version_id)
     file_types = [
         "OTHER",
         "TEST_FILE",
         "PRIMARY_DESCRIPTOR",
         "SECONDARY_DESCRIPTOR",
     ]
-    try:
-        version_data = data[0]["versions"][0]["files"]
-        for _d in version_data:
+    candidates = [relative_path]
+    decoded = unquote(relative_path)
+    if decoded != relative_path:
+        candidates.append(decoded)
+    ret: dict[str, Any] = {}
+    for path in candidates:
+        for _d in files:
             if (
-                _d["tool_file"]["path"] == relative_path
+                _d["tool_file"]["path"] == path
                 and _d["tool_file"]["file_type"] in file_types
-                and _d["type"] == type
+                and _d["type"] == file_type
             ):
                 ret = _d["file_wrapper"]
-    except (IndexError, KeyError, TypeError) as exc:
-        raise NotFound from exc
+        if ret:
+            logger.debug("Relative path found: '%s'", escape_log_value(path))
+            break
     if not ret:
         raise NotFound
-    return ret
+    return _plain_response(ret) if plain else ret
+
+
+def _split_plain(type: str) -> tuple[str, bool]:
+    """Split a descriptor type into the type of its files and its form.
+
+    Args:
+        type: Descriptor type, e.g., `CWL` or `PLAIN_CWL`.
+
+    Returns:
+        Type of the files (without the prefix `PLAIN_`) and whether the type
+        is a plain one.
+    """
+    file_type = type.removeprefix("PLAIN_")
+    return file_type, file_type != type
+
+
+def _version_files(id: str, version_id: str) -> list[dict[str, Any]]:
+    """Get the stored files of a tool version.
+
+    Args:
+        id: Tool identifier.
+        version_id: Tool version identifier.
+
+    Returns:
+        Files of the tool version.
+
+    Raises:
+        NotFound: The tool version does not exist or has no files.
+    """
+    data = get_collection("tools").find_one(
+        filter={"id": id},
+        projection={
+            "_id": False,
+            "versions": {"$elemMatch": {"id": version_id}},
+        },
+    )
+    try:
+        files: list[dict[str, Any]] = data["versions"][0]["files"]  # type: ignore[index]
+    except (IndexError, KeyError, TypeError) as exc:
+        raise NotFound from exc
+    return files
+
+
+def _file_content(wrapper: dict[str, Any]) -> bytes:
+    """Get the content of a file, retrieving it from its URL if not stored.
+
+    Args:
+        wrapper: File wrapper of the file.
+
+    Returns:
+        Content of the file; text is encoded as UTF-8.
+
+    Raises:
+        NotFound: The file has neither content nor URL, or the file can't be
+            retrieved from its URL.
+    """
+    content = wrapper.get("content")
+    if content is not None:
+        if isinstance(content, bytes):
+            return content
+        # Text, or else converted to text
+        return str(content).encode("utf-8")
+    if wrapper.get("url"):
+        try:
+            return fetch_remote_file(
+                url=wrapper["url"],
+                config=get_custom_config().remote_files,
+            ).content
+        except RemoteFileError as exc:
+            raise NotFound from exc
+    raise NotFound
+
+
+def _plain_response(wrapper: dict[str, Any]) -> Response:
+    """Get the response with the bare content of a file, for plain types.
+
+    Args:
+        wrapper: File wrapper of the file.
+
+    Returns:
+        Response with the content of the file, as `text/plain`.
+    """
+    return Response(_file_content(wrapper), mimetype="text/plain")
 
 
 @log_traffic
@@ -529,29 +594,8 @@ def toolsIdVersionsVersionIdTypeFilesGet(
             with ZipFile(mem_zip, mode="w", compression=ZIP_DEFLATED) as zf:
                 for file_entry in selected_files:
                     path_in_zip = file_entry["tool_file"]["path"]
-                    wrapper = file_entry.get("file_wrapper", {})
-                    content_bytes: bytes
-                    if "content" in wrapper and wrapper["content"] is not None:
-                        content = wrapper["content"]
-                        if isinstance(content, bytes):
-                            content_bytes = content
-                        elif isinstance(content, str):
-                            content_bytes = content.encode("utf-8")
-                        else:
-                            # Fallback: convert to string then encode
-                            content_bytes = str(content).encode("utf-8")
-                    elif wrapper.get("url"):
-                        try:
-                            content_bytes = fetch_remote_file(
-                                url=wrapper["url"],
-                                config=get_custom_config().remote_files,
-                            ).content
-                        except RemoteFileError as exc:
-                            raise NotFound from exc
-                    else:
-                        # No content available
-                        raise NotFound
-                    zf.writestr(path_in_zip, content_bytes)
+                    content = _file_content(file_entry.get("file_wrapper", {}))
+                    zf.writestr(path_in_zip, content)
             mem_zip.seek(0)
             download_name = f"{id}_{version_id}_{type}.zip"
             return send_file(
@@ -900,10 +944,8 @@ def validate_descriptor_type(type: str) -> None:
             escape_log_value(type),
             valid_types,
         )
-        # The `PLAIN_` types are accepted, but not served yet, so the reason
-        # lists the served types only, and says so
         raise InvalidRequest(
             "The descriptor type is not supported; supported are: "
-            f"{', '.join(RegisterToolVersion.descriptor_types)} (their PLAIN_ "
-            "forms are accepted, but not served yet)."
+            f"{', '.join(RegisterToolVersion.descriptor_types)}, and their "
+            "PLAIN_ forms."
         )
