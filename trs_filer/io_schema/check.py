@@ -46,7 +46,7 @@ def _too_slow(timeout: float) -> InvalidRequest:
     logger.error("I/O Schema file not checked within %s s.", timeout)
     return InvalidRequest(
         f"{PREFIX} could not be checked within the time limit of "
-        f"{timeout:g} s; simplify it (e.g., nest its schemas less deeply)."
+        f"{timeout:g} s; simplify it (e.g., make it smaller)."
     )
 
 
