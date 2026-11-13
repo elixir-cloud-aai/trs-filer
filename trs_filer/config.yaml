@@ -168,6 +168,10 @@ db:
                               _pending: 1
                           options:
                             'sparse': True
+                        # Tools by their tool class (the count of unused
+                        # tool classes, pending flags, deleting tool classes)
+                        - keys:
+                              toolclass.id: 1
                         # Keys of the objects of files in object storage
                         # (`custom.storage`), for the check which objects are
                         # still referred to
@@ -184,6 +188,12 @@ db:
                         # Pending tool classes (`GET /approvals`)
                         - keys:
                               _pending: 1
+                          options:
+                            'sparse': True
+                        # Tool classes by who added them (the count of
+                        # unused tool classes per user)
+                        - keys:
+                              _createdBy: 1
                           options:
                             'sparse': True
 

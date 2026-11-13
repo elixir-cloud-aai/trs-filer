@@ -75,11 +75,14 @@ class RemoteFileError(BadRequest):
     """
 
 
-def describe_invalid_request(exc: InvalidRequest | UnusedToolClassesLimit) -> Response:
+def describe_invalid_request(
+    exc: InvalidRequest | UnusedToolClassesLimit,
+) -> Response:
     """Answer an invalid request with its reason as `detail`.
 
-    Also for `UnusedToolClassesLimit` (`409 Conflict`), whose description
-    says what to do. Error handler of the app for `InvalidRequest` (registered in
+    Error handler of the app for `InvalidRequest`, and for
+    `UnusedToolClassesLimit` (`409 Conflict`), whose description says what
+    to do (registered in
     `trs_filer.app.create_app()`): FOCA's error handler sends the fixed
     problem details of `exceptions` for all other exceptions, including
     other bad requests (e.g., `RemoteFileError`, whose description is not
@@ -88,11 +91,12 @@ def describe_invalid_request(exc: InvalidRequest | UnusedToolClassesLimit) -> Re
     cloud-registry's controllers return.
 
     Args:
-        exc: Invalid request.
+        exc: Invalid request, or a request over the limit of unused tool
+            classes.
 
     Returns:
-        `400 Bad Request` problem details response with the description of
-        the exception as `detail`.
+        Problem details response with the status of the exception (`400`
+        or `409`) and its description as `detail`.
     """
     return problem_response(exc)
 

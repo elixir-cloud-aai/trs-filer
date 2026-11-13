@@ -44,6 +44,8 @@ UNREGISTERED = (
     "or ask an admin to add it."
 )
 NEW_CLASS = {"name": "New", "description": "A new tool class."}
+# The detail of `UnusedToolClassesLimit`, as clients get it (and the docs
+# quote it)
 UNUSED_LIMIT = (
     "You have added {limit} tool classes that no tool has, as many as "
     "allowed; use them for tools, or ask an admin to delete them, before "
@@ -391,6 +393,25 @@ def test_open_mode_keeps_pending(
     assert _doc(tools, tool_id)[PENDING] is True
     assert PENDING not in _doc(tools, other_id)
     assert _doc(mongo_client[DB]["toolclasses"], "other")["_createdBy"] == COLLEAGUE
+
+
+def test_indexes(mongo_client: MongoClient[dict[str, Any]], overlay: Path) -> None:
+    """Tools are indexed by tool class, and tool classes by who added them.
+
+    For the count of unused tool classes per user, and the pending flags.
+
+    Args:
+        mongo_client: MongoDB client.
+        overlay: Config overlay.
+    """
+    _app(overlay, "open")
+    tools = mongo_client[DB]["tools"].index_information().values()
+    assert any(index["key"] == [("toolclass.id", 1)] for index in tools)
+    classes = mongo_client[DB]["toolclasses"].index_information().values()
+    assert any(
+        index["key"] == [("_createdBy", 1)] and index.get("sparse")
+        for index in classes
+    )
 
 
 def test_startup_sync(mongo_client: MongoClient[dict[str, Any]], overlay: Path) -> None:
