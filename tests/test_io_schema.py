@@ -555,7 +555,8 @@ def test_check_io_schema_nested(parameter: dict[str, Any]) -> None:
     Regression test of uniqueg/ga4gh-io-schema #47: against the meta-schema
     of commit 573f65e, validating either schema took more than 70 s (time
     exponential in the depth of nesting); against that of commit d44e8d4,
-    each takes less than 0.1 s.
+    each is checked well within the time limit (about 0.2 s, including the
+    start of the process).
 
     Args:
         parameter: Schema of the only input.

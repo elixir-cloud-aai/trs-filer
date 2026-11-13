@@ -15,12 +15,11 @@ the directory named after the date and commit (`META_SCHEMA_DIR`). Their
 references are resolved from these copies; nothing is fetched.
 
 Validating against the meta-schema takes time that grows about linearly
-with the size of a schema, also with its nesting (since commit d44e8d4;
-before, it grew exponentially with the depth of nesting), but a schema
-that fits in a request can still take many seconds. So it runs in a
-process of its own, with a time limit (`python -m trs_filer.io_schema`,
-see `main()`). This module imports only the validator's packages, so that
-the process starts quickly.
+with the size of a schema, also for deeply nested ones, but a schema that
+fits in a request can still take many seconds. So it runs in a process of
+its own, with a time limit (`python -m trs_filer.io_schema`, see
+`main()`). This module imports only the validator's packages, so that the
+process starts quickly.
 """
 
 from functools import cache

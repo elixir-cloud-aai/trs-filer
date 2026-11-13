@@ -102,7 +102,10 @@ any directory; other files aren't checked. A file is invalid if it:
 - names another meta-schema than that of profile version 0.3.0 in `$schema`
   (`https://raw.githubusercontent.com/uniqueg/ga4gh-io-schema/v0.3.0/schemas/ga4gh-io-profile.schema.json`),
   e.g., of another version of the profile;
-- doesn't validate against that meta-schema; or
+- doesn't validate against that meta-schema (which also checks that UI
+  widgets fit the types of their schemas and that only widgets for inputs
+  or outputs are used where they belong; see the profile's
+  [changelog](https://github.com/uniqueg/ga4gh-io-schema/blob/v0.3/CHANGELOG.md)); or
 - names another descriptor type than its own in
   `x-ga4gh-workflow.descriptor_type`.
 
@@ -127,15 +130,17 @@ retrieved; the check applies to every registration of tools and versions
 (`POST` and `PUT`).
 
 Validating against the meta-schema takes time that grows about linearly
-with the size of a schema, also for deeply nested ones: the example and
-about a hundred inputs in ten groups take well below a second, a thousand
-inputs about half a second, while a file at the default request size limit
-of 1 MiB can take ten seconds or more. So the validation runs in a process
-of its own, which is stopped after `custom.io_schema.timeout` seconds (default: `10`,
-including a fraction of a second to start the process and load the
-meta-schema); files not checked within it are rejected, too (`400 Bad
-Request`). Raise the limit for larger schemas, keeping in mind that
-registrations take as long. The limit applies to each file; the app checks
+with the size of a schema, also for deeply nested ones. Measured on a
+developer laptop, the example and about a hundred inputs in ten groups take
+well below a second, a thousand inputs about half a second; larger files
+take about 10 to 25 s per MiB, depending on their annotations (e.g., UI
+widgets). So the validation runs in a process of its own, which is stopped
+after `custom.io_schema.timeout` seconds (default: `10`, including a
+fraction of a second to start the process and load the meta-schema); files
+not checked within it are rejected, too (`400 Bad Request`). The default
+can thus reject valid files from a few hundred KiB, well below the default
+request size limit of 1 MiB. Raise the limit (e.g., to `30`) if you expect
+larger schemas, keeping in mind that registrations take as long. The limit applies to each file; the app checks
 one file at a time (per Gunicorn worker), and waiting for another check
 counts against the limit. The process takes about 50 to 100 MB of memory
 and about 0.2 s of CPU time to start, so give the app enough of
