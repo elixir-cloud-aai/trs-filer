@@ -30,7 +30,6 @@ from trs_filer.ga4gh.trs import tool_classes
 from trs_filer.ga4gh.trs.tool_classes import (
     PENDING,
     sync_pending_flags,
-    sync_pending_tools,
 )
 from trs_filer.utils import DB
 
@@ -404,6 +403,31 @@ def test_startup_sync(mongo_client: MongoClient[dict[str, Any]], overlay: Path) 
     assert _doc(tools, "noclass")[PENDING] is True
 
 
+def test_added_tool_class_syncs(
+    mongo_client: MongoClient[dict[str, Any]], overlay: Path
+) -> None:
+    """Adding a tool class sets the pending flags of the tools that have it.
+
+    E.g., of a tool whose pending tool class an admin deleted while it was
+    registered: it is pending without a tool class to approve, until an
+    admin adds the tool class again.
+
+    Args:
+        mongo_client: MongoDB client.
+        overlay: Config overlay.
+    """
+    client = admin_client(_app(overlay, "moderated"))
+    tools = mongo_client[DB]["tools"]
+    tools.insert_one({"id": "TOOL", "toolclass": {"id": "gone"}, PENDING: True})
+    tools.insert_one({"id": "OTHER", "toolclass": {"id": "pending"}})
+    assert client.put(f"{TOOL_CLASSES}/gone", json=NEW_CLASS).status_code == 200
+    assert PENDING not in _doc(tools, "TOOL")
+    user = make_headers(USER)
+    response = client.put(f"{TOOL_CLASSES}/pending", json=NEW_CLASS, headers=user)
+    assert response.status_code == 200
+    assert _doc(tools, "OTHER")[PENDING] is True
+
+
 def test_sync_pending_flags_changed(
     app: App, monkeypatch: pytest.MonkeyPatch, mongo_client: MongoClient[dict[str, Any]]
 ) -> None:
@@ -416,12 +440,15 @@ def test_sync_pending_flags_changed(
     """
     tools = mongo_client[DB]["tools"]
     tools.insert_one({"id": "TOOL", "toolclass": {"id": "new"}})
+    # the tool class is pending on the first check (the flag is set), and
+    # approved on the check after the write (the flag is cleared again, and
+    # the third check confirms it)
     states = iter([False, True, True])
     monkeypatch.setattr(tool_classes, "is_approved", lambda id: next(states))
     with app.app.app_context():
         sync_pending_flags("new")
-        sync_pending_tools()
     assert PENDING not in _doc(tools, "TOOL")
+    assert next(states, None) is None
 
 
 def test_noauth_not_moderated(

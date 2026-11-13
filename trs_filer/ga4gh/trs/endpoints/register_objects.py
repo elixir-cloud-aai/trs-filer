@@ -342,7 +342,9 @@ class RegisterTool:
         if stored_class is None and not self.pending:
             self._create_tool_class()
         # the tool class may have been approved (or deleted and added again)
-        # meanwhile
+        # meanwhile; a tool registered as approved can only have become
+        # pending if tool classes are moderated (as pending tool classes are
+        # added only then), so other modes skip the check
         mode = get_custom_config().access_control.tool_classes
         if self.pending or mode == "moderated":
             sync_pending_flags(tool_class_id, {"id": self.data["id"]})

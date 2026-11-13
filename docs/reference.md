@@ -21,6 +21,8 @@ HTTP API, see [API](api.md) and the Swagger UI of a deployment.
 
 ::: trs_filer.ga4gh.trs.permissions
 
+::: trs_filer.ga4gh.trs.tool_classes
+
 ::: trs_filer.ga4gh.trs.endpoints.register_objects
 
 ::: trs_filer.ga4gh.trs.endpoints.register_tool_classes

@@ -135,9 +135,10 @@ def own_tools() -> dict[str, Any]:
     """Get the filter for the tools that the current user has a role on.
 
     Returns:
-        Filter for all tools if the user is an admin or authentication is
-        disabled; otherwise, for the tools the user has a role on (also
-        through groups; cf. FOCA's `resource_filter()`), none without a user.
+        Filter for all tools if authentication is disabled, or (FOCA's
+        `resource_filter()` returns an empty filter for them) the user is an
+        admin; otherwise, for the tools the user has a role on (also through
+        groups), none without a user.
     """
     if auth_disabled():
         return {}

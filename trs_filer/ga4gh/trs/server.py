@@ -1156,7 +1156,8 @@ def putToolClass(
     `_check_add_tool_class()`) may add a tool class with the identifier of
     no tool class, which is pending if the user's tool classes are; only
     those that the policies allow (admins, by default) may replace it (cf.
-    `_check_put()`), which keeps whether it is pending.
+    `_check_put()`), which keeps whether it is pending. Adding a tool class
+    sets the pending flags of the tools that have it.
 
     Args:
         id: Identifier of tool class to be created/updated.
@@ -1185,6 +1186,10 @@ def putToolClass(
         pending=tool_classes_pending(),
     )
     tool_class.register_metadata()
+    if not exists:
+        # tools may have the tool class already (e.g., if it was deleted
+        # while they were registered with it as pending)
+        sync_pending_flags(id)
     return tool_class.data["id"]
 
 

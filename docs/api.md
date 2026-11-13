@@ -306,7 +306,10 @@ An admin approves a tool class with `PUT /toolClasses/{id}/approval` (no
 body; returns the identifier, also if the tool class was approved before;
 `404 Not Found` for unknown ones), which approves the tools that have it.
 To reject a tool class, delete the tools that have it (their owners or an
-admin) and then the tool class (`DELETE /toolClasses/{id}`).
+admin) and then the tool class (`DELETE /toolClasses/{id}`). A tool that
+stays pending without its tool class (e.g., registered while an admin
+deleted it) is approved by adding the tool class again as an admin (`PUT
+/toolClasses/{id}`), or removed by deleting it.
 
 ## Errors
 
