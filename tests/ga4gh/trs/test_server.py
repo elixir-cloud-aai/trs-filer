@@ -8,6 +8,7 @@ data change the stored tool directly.
 from collections.abc import Callable
 from copy import deepcopy
 from io import BytesIO
+import json
 from pathlib import Path
 import re
 from typing import Any, NoReturn
@@ -53,6 +54,15 @@ NOT_FOUND = {
     "title": "Not found",
     "status": 404,
     "detail": "The requested resource wasn't found.",
+}
+NOT_ACCEPTABLE = {
+    "title": "Not acceptable",
+    "status": 406,
+    "detail": (
+        "The resource can't be served as any of the accepted media types; "
+        "descriptor types are served as application/json, their PLAIN_ "
+        "forms as text/plain."
+    ),
 }
 BAD_REQUEST = {
     "title": "Bad request",
@@ -1316,18 +1326,287 @@ def test_type_plain_NotFound(
     assert response.mimetype == "application/json"
 
 
-def test_type_plain_tests_NotFound(client: FlaskClient, tool: dict[str, Any]) -> None:
-    """Tests are not served for `PLAIN_` types.
+@pytest.mark.parametrize("plain_type", PLAIN_TYPES)
+def test_type_plain_tests(
+    client: FlaskClient, tool: dict[str, Any], plain_type: str
+) -> None:
+    """Tests of `PLAIN_` types are served as `text/plain`.
 
-    The specification allows `PLAIN_` types in this path, so they are not
-    refused, but only descriptors are served as plain text.
+    The specification defines the `text/plain` response of `{type}/tests` as
+    the array of file wrappers of the test files, as the JSON response, so
+    the body is that array, with media type `text/plain`; the test files are
+    those of the type without the prefix.
+
+    Args:
+        client: Test client.
+        tool: Registered tool.
+        plain_type: `PLAIN_` type in the path.
+    """
+    descriptor_type = plain_type.removeprefix("PLAIN_")
+    response = client.put(f"{VERSION_PATH}", json=_version_of_type(descriptor_type))
+    assert response.status_code == 200
+    response = client.get(f"{VERSION_PATH}/{plain_type}/tests")
+    assert response.status_code == 200
+    assert response.mimetype == "text/plain"
+    assert response.headers["X-Content-Type-Options"] == "nosniff"
+    expected = client.get(f"{VERSION_PATH}/{descriptor_type}/tests").get_json()
+    assert expected
+    assert json.loads(response.get_data(as_text=True)) == expected
+
+
+def test_type_plain_tests_NotFound(client: FlaskClient, tool: dict[str, Any]) -> None:
+    """Tests of `PLAIN_` types without test files are not found.
 
     Args:
         client: Test client.
         tool: Registered tool.
     """
-    response = client.get(f"{VERSION_PATH}/PLAIN_CWL/tests")
+    response = client.get(f"{VERSION_PATH}/PLAIN_WDL/tests")
     assert response.status_code == 404
+    assert response.mimetype == "application/json"
+
+
+# Paths below the type that the specification offers as `application/json`
+# and `text/plain`, which check `Accept`
+NEGOTIATED_PATHS = ["descriptor", "descriptor/path_other_cwl", "tests"]
+# `Accept` values, if any, that accept both media types
+ACCEPT_ANY = [
+    None,
+    "",
+    "*/*",
+    "application/json, text/plain",
+    "text/html, application/xhtml+xml, application/xml;q=0.9, */*;q=0.8",
+]
+ACCEPT_ANY_IDS = ["absent", "empty", "any", "both", "browser"]
+
+
+def _accept(value: str | None) -> dict[str, str]:
+    """Get the headers of a request with an `Accept` value.
+
+    Args:
+        value: Value of the `Accept` header, or `None` for none.
+
+    Returns:
+        Headers of the request.
+    """
+    return {} if value is None else {"Accept": value}
+
+
+@pytest.mark.parametrize("path", NEGOTIATED_PATHS)
+@pytest.mark.parametrize(
+    "accept",
+    [
+        *ACCEPT_ANY,
+        "application/json",
+        "application/*",
+        "application/json; charset=utf-8",
+        "text/plain;q=0, application/json",
+        "text/plain, application/json;q=0.5",
+        "application/json;q=0, application/json;level=1",
+    ],
+    ids=[
+        *ACCEPT_ANY_IDS,
+        "json",
+        "application",
+        "charset",
+        "plain-q0",
+        "lower-q",
+        "parameters",
+    ],
+)
+def test_type_accept_json(
+    client: FlaskClient, tool: dict[str, Any], path: str, accept: str | None
+) -> None:
+    """Descriptor types are served as JSON if clients accept it.
+
+    The type sets the media type, also if clients prefer plain text;
+    parameters of media ranges other than `q` are ignored, so ranges that
+    differ only by them count as one, with the highest quality. Responses
+    depend on `Accept` (`Vary`).
+
+    Args:
+        client: Test client.
+        tool: Registered tool.
+        path: Path below the type.
+        accept: Value of the `Accept` header, if any.
+    """
+    response = client.get(f"{VERSION_PATH}/CWL/{path}", headers=_accept(accept))
+    assert response.status_code == 200
+    assert response.mimetype == "application/json"
+    assert response.get_json()
+    assert "Accept" in response.vary
+
+
+@pytest.mark.parametrize("path", NEGOTIATED_PATHS)
+@pytest.mark.parametrize(
+    "accept",
+    [
+        *ACCEPT_ANY,
+        "text/plain",
+        "text/*",
+        "text/plain; charset=utf-8",
+        "application/json;q=0, text/plain",
+    ],
+    ids=[*ACCEPT_ANY_IDS, "plain", "text", "charset", "json-q0"],
+)
+def test_type_plain_accept(
+    client: FlaskClient, tool: dict[str, Any], path: str, accept: str | None
+) -> None:
+    """`PLAIN_` types are served as plain text if clients accept it.
+
+    Args:
+        client: Test client.
+        tool: Registered tool.
+        path: Path below the type.
+        accept: Value of the `Accept` header, if any.
+    """
+    response = client.get(f"{VERSION_PATH}/PLAIN_CWL/{path}", headers=_accept(accept))
+    assert response.status_code == 200
+    assert response.mimetype == "text/plain"
+    assert "Accept" in response.vary
+
+
+@pytest.mark.parametrize("path", NEGOTIATED_PATHS)
+@pytest.mark.parametrize(
+    ("descriptor_type", "accept"),
+    [
+        ("CWL", "text/html"),
+        ("CWL", "text/plain"),
+        ("CWL", "text/*, application/xml"),
+        ("CWL", "application/json;q=0, */*"),
+        ("CWL", "*/*;q=0"),
+        ("CWL", "garbage"),
+        ("PLAIN_CWL", "application/json"),
+        ("PLAIN_CWL", "application/*"),
+        ("PLAIN_CWL", "text/plain;q=0"),
+        ("PLAIN_CWL", "text/plain;q=0, */*"),
+    ],
+    ids=[
+        "json-html",
+        "json-plain",
+        "json-other",
+        "json-q0",
+        "json-none",
+        "json-malformed",
+        "plain-json",
+        "plain-application",
+        "plain-q0",
+        "plain-q0-any",
+    ],
+)
+def test_type_accept_NotAcceptable(
+    client: FlaskClient,
+    tool: dict[str, Any],
+    path: str,
+    descriptor_type: str,
+    accept: str,
+) -> None:
+    """Clients that don't accept the media type of the type are refused.
+
+    Descriptor types are served as JSON only, their `PLAIN_` forms as plain
+    text only, as the specification defines; `q=0` means not acceptable,
+    also if a wildcard accepts the media type. The problem details are sent
+    as JSON, and depend on `Accept` (`Vary`).
+
+    Args:
+        client: Test client.
+        tool: Registered tool.
+        path: Path below the type.
+        descriptor_type: Type in the path.
+        accept: Value of the `Accept` header.
+    """
+    response = client.get(
+        f"{VERSION_PATH}/{descriptor_type}/{path}", headers={"Accept": accept}
+    )
+    assert response.status_code == 406
+    assert response.mimetype == "application/json"
+    assert response.get_json() == NOT_ACCEPTABLE
+    assert "Accept" in response.vary
+
+
+def test_type_accept_order(client: FlaskClient, tool: dict[str, Any]) -> None:
+    """Types are validated first, then `Accept`, then the version is looked up.
+
+    So invalid types give `400`, refused media types `406` (also for
+    unknown versions), and unknown versions `404`; the responses after the
+    type is validated depend on `Accept` (`Vary`).
+
+    Args:
+        client: Test client.
+        tool: Registered tool.
+    """
+    unknown_path = f"{BASE_PATH}/tools/{UNKNOWN}/versions/{UNKNOWN}/CWL/tests"
+    headers = {"Accept": "text/html"}
+    response = client.get(f"{VERSION_PATH}/FOO/descriptor", headers=headers)
+    assert response.status_code == 400
+    response = client.get(unknown_path, headers=headers)
+    assert response.status_code == 406
+    assert "Accept" in response.vary
+    response = client.get(unknown_path)
+    assert response.status_code == 404
+    assert "Accept" in response.vary
+
+
+def test_type_accept_logged(
+    client: FlaskClient, tool: dict[str, Any], caplog: pytest.LogCaptureFixture
+) -> None:
+    """Refused `Accept` values are logged escaped and truncated, as info.
+
+    Args:
+        client: Test client.
+        tool: Registered tool.
+        caplog: Captured logs.
+    """
+    # Servers refuse line breaks in headers; other control characters pass
+    accept = "text/html\x1b[31m, " + "x" * 300
+    with caplog.at_level("INFO", logger=server.logger.name):
+        response = client.get(
+            f"{VERSION_PATH}/CWL/descriptor", headers={"Accept": accept}
+        )
+    assert response.status_code == 406
+    (record,) = [
+        record
+        for record in caplog.records
+        if record.name == server.logger.name and "isn't accepted" in record.message
+    ]
+    assert record.levelname == "INFO"
+    assert record.message == (
+        "Type 'CWL' is served as application/json, which isn't accepted: "
+        + accept[: server.MAX_LOGGED_ACCEPT].replace("\x1b", "\\x1b")
+    )
+
+
+def test_type_accept_files_ignored(client: FlaskClient, tool: dict[str, Any]) -> None:
+    """`Accept` is ignored by paths that offer one media type per request.
+
+    The files of a version are listed as JSON, or sent as a ZIP archive with
+    `format=zip`; the specification offers no plain text for them.
+
+    Args:
+        client: Test client.
+        tool: Registered tool.
+    """
+    response = client.get(f"{VERSION_PATH}/CWL/files", headers={"Accept": "text/html"})
+    assert response.status_code == 200
+    assert response.mimetype == "application/json"
+
+
+@pytest.mark.parametrize("path", NEGOTIATED_PATHS)
+def test_type_not_acceptable_documented(client: FlaskClient, path: str) -> None:
+    """The served specification documents the `406` responses.
+
+    Args:
+        client: Test client.
+        path: Path below the type.
+    """
+    spec = client.get(f"{BASE_PATH}/openapi.json").get_json()
+    template = "/tools/{id}/versions/{version_id}/{type}/" + path.replace(
+        "path_other_cwl", "{relative_path}"
+    )
+    responses = spec["paths"][template]["get"]["responses"]
+    assert responses["406"]["content"]["application/json"]["schema"] == {
+        "$ref": "#/components/schemas/Error"
+    }
 
 
 @pytest.mark.parametrize("plain_type", PLAIN_TYPES)

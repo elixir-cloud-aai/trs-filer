@@ -2,17 +2,20 @@
 
 import inspect
 from io import BytesIO
+import json
 import logging
 from typing import Any
 from urllib.parse import unquote, urlencode
 from zipfile import ZIP_DEFLATED, ZipFile
 
-from flask import Response, request, send_file
+from flask import Response, after_this_request, request, send_file
 from foca.utils.logging import escape_log_value, log_traffic
+from werkzeug.datastructures import MIMEAccept
 
 from trs_filer.errors.exceptions import (
     InternalServerError,
     InvalidRequest,
+    NotAcceptable,
     NotFound,
     RemoteFileError,
 )
@@ -33,6 +36,14 @@ MAX_LIMIT = 1000
 # Reasons of `400 Bad Request` for invalid offsets and limits of `GET /tools`
 OFFSET_INVALID = "The offset must be a non-negative integer."
 LIMIT_INVALID = "The limit must be at least 1."
+# Media types of the paths that the specification offers as JSON and plain
+# text (`{type}/descriptor`, `{type}/descriptor/{relative_path}`,
+# `{type}/tests`): JSON for the descriptor types, plain text for their
+# `PLAIN_` forms
+JSON_MEDIA_TYPE = "application/json"
+PLAIN_MEDIA_TYPE = "text/plain"
+# Longest part of `Accept` headers that is logged
+MAX_LOGGED_ACCEPT = 200
 
 
 @log_traffic
@@ -307,12 +318,14 @@ def toolsIdVersionsVersionIdTypeDescriptorGet(
 
     Raises:
         InvalidRequest: The descriptor type is invalid.
+        NotAcceptable: The client doesn't accept the media type of the
+            type.
         NotFound: The tool version or its primary descriptor of the given
             type does not exist, or, for plain types, its content is not
             available.
     """
     validate_descriptor_type(type=type)
-    file_type, plain = _split_plain(type)
+    file_type, plain = _negotiate_type(type)
     files = _version_files(id=id, version_id=version_id)
     ret: dict[str, Any] = {}
     for _d in files:
@@ -353,15 +366,18 @@ def toolsIdVersionsVersionIdTypeDescriptorRelativePathGet(
 
     Returns:
         Additional files associated with a given descriptor type of a given
-        tool version; for plain types, their bare content (as `text/plain`).
+        tool version; for plain types, their bare content (as
+        `text/plain`).
 
     Raises:
         InvalidRequest: The descriptor type is invalid.
+        NotAcceptable: The client doesn't accept the media type of the
+            type.
         NotFound: The tool version or a file with the given path and type
             does not exist, or, for plain types, its content is not available.
     """
     validate_descriptor_type(type=type)
-    file_type, plain = _split_plain(type)
+    file_type, plain = _negotiate_type(type)
     files = _version_files(id=id, version_id=version_id)
     file_types = [
         "OTHER",
@@ -404,6 +420,63 @@ def _split_plain(type: str) -> tuple[str, bool]:
     """
     file_type = type.removeprefix("PLAIN_")
     return file_type, file_type != type
+
+
+def _negotiate_type(type: str) -> tuple[str, bool]:
+    """Check that the client accepts the media type of a descriptor type.
+
+    The specification serves descriptor types as JSON (wrapped with
+    metadata) and their `PLAIN_` forms as plain text, so the type sets the
+    media type, and `Accept` only has to allow it. Parameters of media
+    ranges (e.g., `charset`) are ignored, their quality (`q`) is not; no
+    `Accept`, or an empty one, accepts any media type. Responses say that
+    they depend on `Accept` (`Vary`), also errors.
+
+    Args:
+        type: Descriptor type, e.g., `CWL` or `PLAIN_CWL`.
+
+    Returns:
+        Type of the files (without the prefix `PLAIN_`) and whether to serve
+        them as plain text.
+
+    Raises:
+        NotAcceptable: The client doesn't accept the media type of the
+            type.
+    """
+    after_this_request(_vary_accept)
+    file_type, plain = _split_plain(type)
+    accept = request.accept_mimetypes
+    if accept:
+        media_type = PLAIN_MEDIA_TYPE if plain else JSON_MEDIA_TYPE
+        # Werkzeug matches parameters of media ranges exactly, so that
+        # `application/json; charset=utf-8` wouldn't accept JSON; without
+        # them, ranges of the same media type count with their highest
+        # quality
+        ranges = MIMEAccept(
+            [(value.split(";", 1)[0].strip(), quality) for value, quality in accept]
+        )
+        if ranges.best_match([media_type]) is None:
+            logger.info(
+                "Type '%s' is served as %s, which isn't accepted: %s",
+                escape_log_value(type),
+                media_type,
+                escape_log_value(request.headers.get("Accept", "")[:MAX_LOGGED_ACCEPT]),
+            )
+            raise NotAcceptable
+    return file_type, plain
+
+
+def _vary_accept(response: Response) -> Response:
+    """Tell caches that a response depends on `Accept`.
+
+    Args:
+        response: Response.
+
+    Returns:
+        The response, with `Accept` in `Vary`.
+    """
+    response.vary.add("Accept")
+    return response
 
 
 def _version_files(id: str, version_id: str) -> list[dict[str, Any]]:
@@ -470,14 +543,27 @@ def _plain_response(wrapper: dict[str, Any]) -> Response:
         wrapper: File wrapper of the file.
 
     Returns:
-        Response with the content of the file, as `text/plain`; browsers
-        are told not to guess another media type from the content
-        (`X-Content-Type-Options: nosniff`), because the content is
-        supplied by whoever registered the file and may look like HTML.
+        Response with the content of the file, as `text/plain` (see
+        `_text_response()`).
+    """
+    return _text_response(_file_content(wrapper))
+
+
+def _text_response(body: bytes | str) -> Response:
+    """Get a `text/plain` response.
+
+    Args:
+        body: Body of the response.
+
+    Returns:
+        Response with the body, as `text/plain`; browsers are told not to
+        guess another media type from the content
+        (`X-Content-Type-Options: nosniff`), because the content is supplied
+        by whoever registered the files and may look like HTML.
     """
     return Response(
-        _file_content(wrapper),
-        mimetype="text/plain",
+        body,
+        mimetype=PLAIN_MEDIA_TYPE,
         headers={"X-Content-Type-Options": "nosniff"},
     )
 
@@ -487,57 +573,40 @@ def toolsIdVersionsVersionIdTypeTestsGet(
     type: str,
     id: str,
     version_id: str,
-) -> list[dict[str, Any]]:
+) -> list[dict[str, Any]] | Response:
     """Get a list of test JSONs.
 
     Args:
         type: The output type of the descriptor. Examples of allowable
-            values are "CWL", "WDL", "NFL", "GALAXY", "SMK".
+            values are "CWL", "WDL", "NFL", "GALAXY", "SMK", and their
+            `PLAIN_` forms.
         id: Tool identifier.
         version_id: Tool version identifier.
 
     Returns:
         List of JSONs associated with a given descriptor type of a given
-        tool version.
+        tool version; for plain types, the same list as `text/plain`, as
+        the specification defines the plain response (an array of file
+        wrappers).
 
     Raises:
         InvalidRequest: The descriptor type is invalid.
+        NotAcceptable: The client doesn't accept the media type of the
+            type.
         NotFound: The tool version or test files of the given type do not
             exist.
     """
     validate_descriptor_type(type=type)
-
-    db_coll_tools = get_collection("tools")
-
-    proj = {
-        "_id": False,
-        "versions": {
-            "$elemMatch": {
-                "id": version_id,
-                "files": {
-                    "$elemMatch": {
-                        "type": type,
-                        "tool_file.file_type": "TEST_FILE",
-                    },
-                },
-            },
-        },
-    }
-
-    data = db_coll_tools.find(
-        filter={"id": id},
-        projection=proj,
-    )
-
-    try:
-        ret_array = []
-        version_data = data[0]["versions"][0]["files"]
-        for _d in version_data:
-            if _d["tool_file"]["file_type"] == "TEST_FILE" and _d["type"] == type:
-                ret_array.append(_d["file_wrapper"])
-    except (IndexError, KeyError, TypeError) as exc:
-        raise NotFound from exc
-    return ret_array
+    file_type, plain = _negotiate_type(type)
+    files = _version_files(id=id, version_id=version_id)
+    ret = [
+        _d["file_wrapper"]
+        for _d in files
+        if _d["tool_file"]["file_type"] == "TEST_FILE" and _d["type"] == file_type
+    ]
+    if not ret:
+        raise NotFound
+    return _text_response(json.dumps(ret)) if plain else ret
 
 
 @log_traffic
