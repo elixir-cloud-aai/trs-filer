@@ -154,7 +154,9 @@ def test_check_io_schema_without_workflow() -> None:
     check_io_schema(json.dumps(schema), "CWL", timeout=TIMEOUT)
 
 
-@pytest.mark.parametrize("content", ["", "{", "not JSON", "[1,"])
+@pytest.mark.parametrize(
+    "content", ["", "{", "not JSON", "[1,", '{"a": NaN}', '{"a": -Infinity}']
+)
 def test_check_io_schema_not_json(content: str) -> None:
     """Files that are not JSON are rejected.
 
@@ -551,3 +553,21 @@ def test_check_io_schema_validation_fails(
     monkeypatch.setattr(check_module.subprocess, "run", run)
     with pytest.raises(InternalServerError):
         check_io_schema(json.dumps(_schema()), "WDL", timeout=TIMEOUT)
+
+
+def test_find_problem_bounded_errors(monkeypatch: pytest.MonkeyPatch) -> None:
+    """At most `MAX_ERRORS` errors are considered.
+
+    Args:
+        monkeypatch: Patches of the limit.
+    """
+    monkeypatch.setattr(io_schema, "MAX_ERRORS", 1)
+    schema = _schema()
+    schema["properties"].pop("inputs")
+    schema["$id"] = "hello/1.0.0"
+    # without the limit, the error of `required` would be chosen
+    assert find_problem(schema) == (
+        "The I/O Schema file (ga4gh-io.schema.json) doesn't validate against "
+        "the meta-schema of the GA4GH I/O Profile 0.3.0 at $['$id'] (keyword "
+        "'format')."
+    )

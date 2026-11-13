@@ -22,6 +22,7 @@ the validator's packages, so that the process starts quickly.
 """
 
 from functools import cache
+from itertools import islice
 import json
 from pathlib import Path, PurePosixPath
 import re
@@ -49,6 +50,8 @@ META_SCHEMA_ID = (
 )
 #: Formats that the meta-schema uses (`format`), which are asserted.
 META_SCHEMA_FORMATS = ["uri"]
+#: Errors of a schema that are considered for the reason, at most.
+MAX_ERRORS = 100
 #: Beginning of the reasons for rejecting an I/O Schema file.
 PREFIX = f"The I/O Schema file ({IO_SCHEMA_FILE_NAME})"
 # Names of properties that reasons may contain: short, without characters of
@@ -198,7 +201,8 @@ def find_problem(schema: dict[str, Any]) -> str | None:
         Why the schema is invalid, or `None` if it is valid.
     """
     try:
-        errors = list(_validator().iter_errors(schema))
+        # at most `MAX_ERRORS` errors are kept, to bound the memory
+        errors = list(islice(_validator().iter_errors(schema), MAX_ERRORS))
         if not errors:
             return None
         error = _most_specific(errors)

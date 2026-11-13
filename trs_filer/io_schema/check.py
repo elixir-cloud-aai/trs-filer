@@ -10,6 +10,7 @@ import subprocess
 import sys
 import threading
 import time
+from typing import NoReturn
 
 from trs_filer.errors.exceptions import InternalServerError, InvalidRequest
 from trs_filer.io_schema import META_SCHEMA_ID, PREFIX
@@ -19,6 +20,18 @@ logger = logging.getLogger(__name__)
 # One validation process per app process at a time, so that concurrent
 # registrations don't add up the memory and CPU of their validations
 _SLOTS = threading.BoundedSemaphore(1)
+
+
+def _reject_constant(name: str) -> NoReturn:
+    """Reject the constants that Python's JSON parser accepts, but JSON hasn't.
+
+    Args:
+        name: The constant (`NaN`, `Infinity` or `-Infinity`).
+
+    Raises:
+        ValueError: Always.
+    """
+    raise ValueError(f"Not a JSON value: {name}")
 
 
 def _too_slow(timeout: float) -> InvalidRequest:
@@ -122,7 +135,7 @@ def check_io_schema(content: str, descriptor_type: str, timeout: float) -> None:
     """
     try:
         encoded = content.encode("utf-8")
-        schema = json.loads(content)
+        schema = json.loads(content, parse_constant=_reject_constant)
     except (ValueError, RecursionError) as exc:
         logger.error("I/O Schema file is not valid JSON.")
         raise InvalidRequest(f"{PREFIX} is not valid JSON.") from exc

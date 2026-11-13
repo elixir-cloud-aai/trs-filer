@@ -154,7 +154,8 @@ after the date and commit of the source) and update `PROFILE_VERSION` and
 TRS-Filer doesn't check the identifiers and the checksum of
 `x-ga4gh-workflow` against the tool version (identifiers may be generated
 on registration). Tool versions stored before the check was enabled are not
-checked.
+checked, nor those registered with replicas of the app that don't check yet
+while the option is rolled out.
 
 In the Helm chart, set the option in `trs_filer.config` (see the chart's
 [Configuration](deployment.md#configuration)):
