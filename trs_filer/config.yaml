@@ -335,3 +335,15 @@ custom:
         total_timeout: 30
         max_size: 1048576
         max_redirects: 5
+    # GA4GH I/O Schemas (experimental): files of type `OTHER` named
+    # `ga4gh-io.schema.json` that describe the inputs and outputs of a
+    # workflow (https://github.com/uniqueg/ga4gh-io-schema); stored and served
+    # like other files. With `validation`, they are checked on registration
+    # against the vendored meta-schema of the GA4GH I/O Profile 0.3.0
+    # (`trs_filer/io_schema/`) and rejected with `400 Bad Request` if invalid
+    # (see `docs/io-schema.md`). Validation takes time that grows steeply
+    # with the nesting of schemas, so it runs in a process of its own;
+    # files not checked within `timeout` seconds are rejected, too
+    io_schema:
+        validation: False
+        timeout: 10

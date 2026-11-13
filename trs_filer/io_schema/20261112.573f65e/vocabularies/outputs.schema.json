@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/uniqueg/ga4gh-io-schema/v0.3.0/schemas/vocabularies/outputs.schema.json",
+  "title": "GA4GH IO Profile Output Keywords",
+  "description": "Keywords that tell clients where to find the outputs of a run when the engine doesn't report them by name.",
+  "properties": {
+    "x-ga4gh-output-glob": {
+      "$ref": "#/$defs/outputGlob"
+    }
+  },
+  "dependentSchemas": {
+    "x-ga4gh-output-glob": {
+      "$comment": "A glob finds files or directories, so it belongs on a file reference or on a list of file references (a schema whose items are one; tuples with prefixItems are not lists). It has a meaning only on the schema of a property of outputs; elsewhere, clients ignore it; this is deliberately not enforced.",
+      "required": [
+        "type"
+      ],
+      "properties": {
+        "type": {
+          "enum": [
+            "string",
+            "array"
+          ]
+        }
+      },
+      "if": {
+        "properties": {
+          "type": {
+            "const": "string"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "x-ga4gh-file"
+        ]
+      },
+      "else": {
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "prefixItems": false,
+          "items": {
+            "$comment": "The file vocabulary makes a schema with x-ga4gh-file a string schema.",
+            "type": "object",
+            "required": [
+              "x-ga4gh-file"
+            ]
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "outputGlob": {
+      "type": "string",
+      "description": "Glob pattern, relative to the output directory of the run, that finds the output among the files of the run when the engine doesn't report the output by name. Segments are separated by /; * matches any characters within a segment, ? one character, and a segment ** any number of segments. Not allowed: absolute paths, empty segments, . and .. segments, a colon in the first segment, backslashes, control characters (C0, DEL, C1), line and paragraph separators, brackets and braces.",
+      "$comment": "pattern: non-empty segments without backslashes, brackets, braces and control characters; not: no . or .. segment, no ** that is not a whole segment, no colon in the first segment (it would look like a URI scheme), and no control characters anywhere (Python's $ also matches before a final newline, ECMA-262's doesn't, so the anchors alone don't reject one).",
+      "pattern": "^[^/\\\\\\[\\]{}\\u0000-\\u001f\\u007f-\\u009f\\u2028\\u2029]+(/[^/\\\\\\[\\]{}\\u0000-\\u001f\\u007f-\\u009f\\u2028\\u2029]+)*$",
+      "not": {
+        "pattern": "(^|/)[.][.]?(/|$)|[^/][*][*]|[*][*][^/]|^[^/]*:|[\\u0000-\\u001f\\u007f-\\u009f\\u2028\\u2029]"
+      }
+    }
+  }
+}

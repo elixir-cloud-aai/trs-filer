@@ -100,6 +100,7 @@ nav:
   - Getting started: getting-started.md
   - Configuration: configuration.md
   - API: api.md
+  - I/O Schemas: io-schema.md
   - Access control: access-control.md
   - Deployment: deployment.md
   - Operations: operations.md

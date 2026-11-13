@@ -245,7 +245,9 @@ files](configuration.md#remote-files)), and optionally its checksums
 (`file_wrapper.checksum`). The schemas (`ToolRegister`,
 `ToolVersionRegister`, `FilesRegister`, `ToolClassRegister`) are in the
 specification and the Swagger UI; [Getting started](getting-started.md#usage)
-has an example.
+has an example. Workflows can be registered with a GA4GH I/O Schema of
+their inputs and outputs, a file of type `OTHER` (experimental, see [I/O
+Schemas](io-schema.md)).
 
 Registering an object with the identifier of a stored one (`PUT`) replaces
 it, also with identical content. Tools store a copy of their tool class: of

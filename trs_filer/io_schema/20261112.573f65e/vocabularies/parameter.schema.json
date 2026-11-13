@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/uniqueg/ga4gh-io-schema/v0.3.0/schemas/vocabularies/parameter.schema.json",
+  "title": "GA4GH IO Profile Parameter Keywords",
+  "description": "Keywords that bind a parameter of an IO schema (a property of inputs or outputs) to the parameter of the engine, where their names or types differ.",
+  "properties": {
+    "x-ga4gh-parameter": {
+      "type": "object",
+      "description": "The engine's parameter for this property of inputs or outputs.",
+      "minProperties": 1,
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The name of the parameter in the engine, relative to the entry point (e.g., align.threads for an input of the WDL call align); defaults to the name of the property."
+        },
+        "type": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The type of the parameter as declared in the workflow language (e.g., Array[File]+ or Pair[Int,String] in WDL, File[]? in CWL), for translators and converters that need more than the JSON Schema type."
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

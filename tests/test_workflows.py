@@ -232,6 +232,44 @@ def test_release_chart_checked() -> None:
     assert 'gh release upload "${TAG}" dist/*' in steps["Create release"]["run"]
 
 
+def test_release_chart_packaged() -> None:
+    """The release packages the chart with the library and the published image.
+
+    The package has the release version as `version` and `appVersion` (the
+    default tag of the image), the library chart in the version of
+    `Chart.lock`, and the published image (`IMAGE_NAME`, also in forks with
+    another `DOCKERHUB_ORG`) without a tag of its own; the packaged files are
+    checked, not only the copy that is packaged.
+    """
+    steps = _load(WORKFLOWS / "release.yml")["jobs"]["prepare"]["steps"]
+    step = {step["name"]: step for step in steps}["Package chart"]
+    assert step["env"] == {
+        "VERSION": "${{ steps.version.outputs.version }}",
+        "CHART_VERSION": "${{ steps.version.outputs.chart_version }}",
+    }
+    commands = _commands(step)
+    package = next(c for c in commands if c.startswith("helm package"))
+    assert '--version "${CHART_VERSION}"' in package
+    assert '--app-version "${VERSION}"' in package
+    assert 'image="${IMAGE_NAME}"' in commands
+    rewrite = next(c for c in commands if "yq -i" in c)
+    assert rewrite == (
+        "IMAGE=\"${image}\" yq -i '.trsFiler.image = strenv(IMAGE)'"
+        ' "${chart}/values.yaml"'
+    )
+    script = " ".join(step["run"].replace("\\\n", " ").split())
+    packaged = 'tar -xzOf "${package}" trs-filer/'
+    assert (
+        f'{packaged}charts/foca-common/Chart.yaml | yq .version)"' in script
+        and "\"$(yq '.dependencies[0].version' deployment/Chart.lock)\"" in script
+    )
+    assert f'{packaged}values.yaml | yq .trsFiler.image)" == "${{image}}" ]]' in script
+    assert f'{packaged}values.yaml | yq .trsFiler.tag)" == "" ]]' in script
+    assert f'{packaged}Chart.yaml | yq .appVersion)" == "${{VERSION}}" ]]' in script
+    # No legacy value is set
+    assert "trs_filer" not in step["run"]
+
+
 def test_release_tag_checked_first() -> None:
     """The release tag is checked before any script of the tagged commit runs.
 
@@ -840,12 +878,10 @@ def test_chart_job() -> None:
         )
         for command in lint
     )
-    # Also without authentication and a host name (the defaults otherwise
-    # needed for rendering)
+    # Also without authentication (the Secret otherwise needed for rendering)
     assert any(
         command.startswith("helm lint deployment --strict ")
         and "--set mongodb.auth.enabled=false" in command
-        and "--set host_name=" in command
         for command in lint
     )
     # The release lints with the same values
@@ -858,8 +894,45 @@ def test_chart_job() -> None:
         for command in release_commands
     )
     tests = _commands(steps["Test chart"])
-    assert any("tests/test_update_config_map.py" in command for command in tests)
     assert any("tests/test_chart.py" in command for command in tests)
+
+
+@pytest.mark.parametrize(
+    ("workflow", "job"),
+    [
+        ("ci.yml", "test"),
+        ("ci.yml", "chart"),
+        ("ci.yml", "chart-install"),
+        ("release.yml", "prepare"),
+    ],
+)
+def test_chart_dependencies_checked(workflow: str, job: str) -> None:
+    """Jobs that render the chart build the library chart and check its digest.
+
+    OCI tags of the library chart (`foca-common`) can be pushed again, so the
+    downloaded package is checked against `deployment/charts.sha256`, before
+    the chart is linted, tested, installed or packaged.
+
+    Args:
+        workflow: File name of the workflow.
+        job: ID of the job.
+    """
+    steps = _load(WORKFLOWS / workflow)["jobs"][job]["steps"]
+    commands = [command for step in steps for command in _commands(step)]
+    build = commands.index("helm dependency build deployment")
+    # `(cd deployment && sha256sum -c charts.sha256)`, split at `&&`
+    assert commands[build + 1 : build + 3] == [
+        "(cd deployment",
+        "sha256sum -c charts.sha256)",
+    ]
+    uses = [
+        index
+        for index, command in enumerate(commands)
+        if command.startswith(("helm lint", "helm install", "helm package"))
+        or "pytest " in command
+    ]
+    assert uses
+    assert min(uses) > build
 
 
 def test_chart_install_job() -> None:
@@ -899,12 +972,13 @@ def test_chart_install_job() -> None:
     (install,) = [c for c in commands if c.startswith("helm install ")]
     for option in [
         "-f deployment/ci/test-values.yaml",
-        '--set trs_filer.image="${IMAGE}"',
-        "--set trs_filer.imagePullPolicy=Never",
+        '--set trsFiler.image="${IMAGE}"',
+        "--set trsFiler.imagePullPolicy=Never",
         "--wait",
-        "--wait-for-jobs",
     ]:
         assert option in install, option
+    # No Jobs to wait for: the chart renders the config overlay itself
+    assert "--wait-for-jobs" not in install
     # The Secret and the host name of the test values
     values = yaml.safe_load((ROOT / "deployment/ci/test-values.yaml").read_text())
     secret = values["mongodb"]["auth"]["existingSecret"]
@@ -912,7 +986,7 @@ def test_chart_install_job() -> None:
         c.startswith(f"kubectl create secret generic {secret} ") for c in commands
     )
     steps = {step.get("name"): step for step in job["steps"]}
-    assert steps["Check API"]["env"]["HOST"] == values["host_name"]
+    assert steps["Check API"]["env"]["HOST"] == values["hostName"]
     assert "${HOST}" in steps["Check API"]["run"]
     # Torn down also after failures
     assert steps["Tear down cluster"]["if"] == "always()"

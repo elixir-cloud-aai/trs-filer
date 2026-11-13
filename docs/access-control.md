@@ -263,7 +263,7 @@ api:
                 - api/patches/login-for-reads.yaml
 ```
 
-With the Helm chart, put the same in the `trs_filer.config` value. Requests
+With the Helm chart, put the same in the `config` value. Requests
 to the patched reads without a valid token are then rejected with `401
 Unauthorized`; any authenticated user may read, by the default policies (in
 `security.access_control.policies`, which are only evaluated for reads that
@@ -313,16 +313,16 @@ on tools (`/tools/{id}/permissions`).
 
 Authentication applies to every request that reaches the app, also from
 inside the cluster. Still, with the default values of the Helm chart
-(`trs_filer.networkPolicy.enabled: false`), every pod in the cluster can call
-the app's Service (`<appName>`, port 8080) directly, set `X-Forwarded-*`
-headers, which change the scheme of the links in responses (and, via the
-`SCRIPT_NAME` header, their path; `trs_filer.forwardedAllowIps: "*"`), and
-set the `Host` header, which changes their host. To let only the ingress
-controller or router connect, enable `trs_filer.networkPolicy` with their
-pods or namespace in `trs_filer.networkPolicy.ingressFrom`, in a cluster
-whose network plugin enforces NetworkPolicies, and narrow
-`trs_filer.forwardedAllowIps` (see [Security
-notes](deployment.md#security-notes) and [Network
+(`trsFiler.networkPolicy.enabled: false`), every pod in the cluster can call
+the app's Service (`<app>`, port 8080) directly and set the `Host` header,
+which changes the host of the links in responses; if `FORWARDED_ALLOW_IPS`
+trusts their addresses, also `X-Forwarded-*` headers, which change their
+scheme (and, via the `SCRIPT_NAME` header, their path). To let only the
+ingress controller or router connect, enable `trsFiler.networkPolicy` with
+their pods or namespace in `trsFiler.networkPolicy.ingressFrom`, in a
+cluster whose network plugin enforces NetworkPolicies, and trust forwarded
+headers only from them (see [Forwarded
+headers](deployment.md#forwarded-headers) and [Network
 policies](deployment.md#network-policies)).
 
 FOCA's permissions API (`/admin/access-control/`, for admins only, see

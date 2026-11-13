@@ -73,6 +73,13 @@ existing data needs no changes. Check clients and custom configs:
 - Versions take the versions of their languages (`descriptor_type_version`
   of `ToolVersionRegister`, by descriptor type), which they return;
   registrations with it failed with `400 Bad Request` before.
+- GA4GH I/O Schemas of workflows (experimental) are documented: files of
+  type `OTHER` named `ga4gh-io.schema.json`, stored and served as before.
+  The new option `custom.io_schema.validation` (`false` by default, so
+  nothing changes) checks them on registration, each in a process of its
+  own (about 50 to 100 MB of memory, one at a time), within
+  `custom.io_schema.timeout` seconds (see [Checking I/O
+  Schemas](io-schema.md#checking-io-schemas)).
 - **Tokens for writes (breaking):** registering, changing and deleting tools,
   versions and tool classes (`POST`, `PUT` and `DELETE`, see [Registering
   tools](api.md#registering-tools)) need an access token (RFC 9068,
@@ -89,8 +96,8 @@ existing data needs no changes. Check clients and custom configs:
        they get access tokens of type `at+jwt` for an audience of
        TRS-Filer, with the group claim (or the scope that releases it via
        user info).
-    2. Add to your config overlay (with the Helm chart: the new value
-       `trs_filer.config`, without which rendering fails)
+    2. Add to your config overlay (with the Helm chart: the value
+       `config`, without which rendering fails)
        `security.auth.issuers`, `security.auth.audience`,
        `security.access_control.claim_groups` (and
        `security.auth.userinfo_claims` if the identity provider releases the
@@ -104,9 +111,8 @@ existing data needs no changes. Check clients and custom configs:
        `config.local.yaml`) must set these keys too, or the app refuses to
        start. If you deployed a copy of the Helm chart with a config overlay
        of its own (as the 0.5.0 deployment README described), move that
-       overlay's content into `trs_filer.config` and drop your template
-       changes: the chart now sets `FOCA_CONFIG_OVERLAY` itself. The first
-       upgrade restarts the app (new config map).
+       overlay's content into `config` and drop your template changes: the
+       chart sets `FOCA_CONFIG_OVERLAY` itself.
     5. Restrictions of writes in front of the app (e.g., methods allowed
        only from some addresses at the ingress controller) are no longer
        needed for access control; keep them if you want both, and at least
@@ -160,11 +166,57 @@ existing data needs no changes. Check clients and custom configs:
     4. Nothing to do for the new internal fields of tools (`_createdBy`,
        `_createdAt` and `_updatedAt`, not served): tools stored before get
        `_updatedAt` on their next change, but neither who registered them
-       nor when. During a rolling update (the chart's default strategy),
-       instances of the old version serve these fields of tools that the
-       new version writes, i.e., who registered them: to avoid that, scale
-       the old version down before the new one takes writes (e.g., `kubectl
-       scale deployment <name> --replicas=0`, then upgrade).
+       nor when. Instances of the old version that still run next to the
+       new one (e.g., in a rolling update of a setup of your own) serve
+       these fields of tools that the new version writes, i.e., who
+       registered them: stop them before the new version takes writes. With
+       the Helm chart, the new release replaces the old one anyway (see
+       below).
+
+- **Helm chart (breaking):** the chart is a thin chart over FOCA's library
+  chart `foca-common`, with camelCase values, and **releases of earlier
+  charts can't be upgraded**: uninstall them and install the new chart,
+  moving the data, as described in [From earlier
+  charts](deployment.md#from-earlier-charts) (`helm upgrade` fails for
+  them). Rendering fails for the earlier values, which are renamed or
+  removed:
+    - `host_name` is `hostName`, `trs_filer` is `trsFiler`, and
+      `trs_filer.config` is the top-level `config`.
+    - `trs_filer.image` is split into `trsFiler.image` (by default
+      `docker.io/elixircloud/trs-filer`) and `trsFiler.tag` (by default
+      the chart's `appVersion`: `dev` in the repository, the release
+      version in released charts).
+    - `trs_filer.appName` is removed: resources are named after the
+      release (`<app>`, e.g., `trs-filer`, and `<app>-mongodb` for
+      MongoDB, was `mongodb-<appName>`; `fullnameOverride` sets `<app>`),
+      with the standard labels instead of `app: <appName>` (see [Names and
+      labels](deployment.md#names-and-labels)).
+    - The config Job, its ServiceAccount, Role and RoleBinding
+      (`<appName>-configurer`) and `apiServer` are removed: the chart
+      renders the config overlay (ConfigMap `<app>-config`) itself, and no
+      pod gets a service account token. The image has no `curl`, `jq`, `yq`
+      or `update-config-map.sh` any more.
+    - `trs_filer.forwardedAllowIps` (by default `*`) is removed: Gunicorn
+      trusts `X-Forwarded-*` headers from the local host only, so the
+      `self_link` and `next_page` headers of listings get `http` behind a
+      proxy that terminates TLS, until `FORWARDED_ALLOW_IPS` is set to the
+      proxy's addresses in `trsFiler.extraEnv` (see [Forwarded
+      headers](deployment.md#forwarded-headers)). The `url` of tools comes
+      from `hostName` and keeps `https`.
+    - `mongodb.dbName` (by default `trs-filer-db`) is removed: the app's
+      database is `trsStore`, that of the base config, also for the rules
+      of access control; the restore moves the data there.
+      `mongodb.volumeSize` is `mongodb.persistence.size`.
+
+  New values: `trsFiler.gunicorn` (Gunicorn's settings), `trsFiler.replicas`
+  with a PodDisruptionBudget, `trsFiler.extraEnv`, `extraEnvFrom` and
+  `rolloutOnSecrets`, probes (`trsFiler.probePath` and the probe specs),
+  `trsFiler.preStopSleepSeconds`, a Gateway API HTTPRoute
+  (`trsFiler.httpRoute`), `mongodb.persistence` and an external MongoDB
+  (`mongodb.enabled: false`); `values.schema.json` checks the values (see
+  [Deployment](deployment.md)). The chart in the repository needs `helm
+  dependency build deployment` before installing; released charts contain
+  the library chart.
 
 ## From 0.4.0
 
@@ -217,7 +269,7 @@ clients, custom configs and log checks:
   the locked versions of its dependencies (`uv.lock`), with hash checks.
 - Helm chart, security contexts: all pods run as non-root users with a
   read-only root file system ([Security
-  contexts](deployment.md#security-contexts)). MongoDB runs as user and
+  context](deployment.md#security-context)). MongoDB runs as user and
   group 999 from the start (before, its entrypoint started as root and
   switched to that user); the data that it wrote belongs to that user
   already, and `fsGroup` keeps the volume writable for it (with storage
@@ -354,8 +406,9 @@ before, the reason was only logged.
 Without `MONGO_DBNAME`, the image uses the database `trsStore` (as
 configured) instead of `trs-filer-db`. Deployments with data in
 `trs-filer-db` (e.g., the Docker Compose setup of earlier versions) set
-`MONGO_DBNAME=trs-filer-db`, or move the data (see below); the Helm chart
-sets it already (value `mongodb.dbName`, by default `trs-filer-db`).
+`MONGO_DBNAME=trs-filer-db`, or move the data (see below). The Helm charts
+up to 0.5.0 set it (value `mongodb.dbName`, by default `trs-filer-db`); the
+current chart uses `trsStore` (see [Helm chart](#helm-chart)).
 
 MongoDB 4.4 or later is required (Docker Compose and the Helm chart use
 7.0). MongoDB 7.0 can't open data files of 3.6, which earlier Compose
@@ -379,10 +432,10 @@ version at a time. For the Helm chart, see [Helm chart](#helm-chart).
   always binds `0.0.0.0:8080`.
 - Forwarded headers (`X-Forwarded-*`) are trusted from Gunicorn's default
   (`127.0.0.1`) only, no longer from every client: behind a proxy that
-  terminates TLS, set `FORWARDED_ALLOW_IPS` to its addresses (the Helm
-  chart sets it, by default to `*`; narrow it with the value
-  `trs_filer.forwardedAllowIps`, see [Forwarded
-  headers](deployment.md#forwarded-headers)).
+  terminates TLS, set `FORWARDED_ALLOW_IPS` to its addresses (with the
+  Helm chart, in `trsFiler.extraEnv`, see [Forwarded
+  headers](deployment.md#forwarded-headers); the charts up to 0.5.0 set it,
+  by default to `*`).
 - The image runs as user 1000 (also with a read-only root file system and a
   writable `/tmp`) and reports its version (e.g., in the service info) from
   the build argument `SETUPTOOLS_SCM_PRETEND_VERSION`.
@@ -400,29 +453,30 @@ overrides](configuration.md#local-overrides)).
 ## Helm chart
 
 Releases attach the chart (see [Verifying images and
-charts](operations.md#verifying-images-and-charts)); upgrade with it, and
-your values file, as described in [Deployment](deployment.md#upgrades).
-Releases installed from the chart in the repository before (from the tag
-`v0.3.0` or from `dev`) may need more steps, depending on two things, which
-you check **before** the upgrade:
+charts](operations.md#verifying-images-and-charts)). Releases of earlier
+charts (that of the tag `v0.3.0`, of 0.4.0 and 0.5.0, and those on `dev`
+before the library chart) can't be upgraded to the current chart: uninstall
+them and install it, moving the data by dump and restore, as described in
+[From earlier charts](deployment.md#from-earlier-charts). Check two things
+**before** you start, as charts before 0.4.0 differ from the commands
+there:
 
-- **The name of MongoDB's claim** (`kubectl get pvc -n <namespace>`): the
-  chart calls MongoDB's Deployment, Service and PersistentVolumeClaim
-  `mongodb-<appName>` (`trs_filer.appName`, by default `trs-filer`); charts
-  before July 2024, including that of `v0.3.0`, called them `mongodb`. Helm
-  deletes resources that are no longer in the chart, so upgrading such a
-  release **deletes the claim `mongodb`** and, with the reclaim policy
-  `Delete` (the default of most storage classes), its volume and the data,
-  and starts MongoDB on a new, empty claim.
+- **The names of MongoDB's Deployment and claim** (`kubectl get deploy,pvc
+  -n <namespace>`): the charts up to 0.5.0 called them `mongodb-<appName>`
+  (`trs_filer.appName`, by default `trs-filer`); charts before July 2024,
+  including that of `v0.3.0`, called them `mongodb`. Use that name (`OLD`
+  below) in the dump. Charts before 0.4.0 ran MongoDB without
+  authentication: leave out `-u`, `-p` and `--authenticationDatabase` in
+  the dump, and create the Secret with MongoDB's credentials before
+  installing the current chart (see
+  [Installation](deployment.md#installation)).
 - **The running MongoDB version**: the chart runs MongoDB 7.0
-  (`mongodb.image`, see [MongoDB](deployment.md#mongodb)). Charts before
-  January 2026 ran `mongo:3.6`, whose data files 7.0 can't open; the chart
-  on `dev` since then ran the floating `mongo:noble` (MongoDB 8.2, 8.3 or
-  9.0, depending on when the pod last started), whose data 7.0 can't open
-  either (MongoDB doesn't support downgrades). Check the version (and the
-  feature compatibility version) of the running server (with `mongosh`,
-  or `mongo`, the old shell, in images before 6.0); `OLD` is the MongoDB
-  Deployment (`mongodb` or `mongodb-<appName>`):
+  (`mongodb.image`, see [Version](deployment.md#version)). Charts before
+  January 2026 ran `mongo:3.6`; the chart on `dev` since then ran the
+  floating `mongo:noble` (MongoDB 8.2, 8.3 or 9.0, depending on when the pod
+  last started). The dump and restore move the data to the new version;
+  check the version (and the feature compatibility version) of the running
+  server (with `mongosh`, or `mongo`, the old shell, in images before 6.0):
 
     ```bash
     kubectl exec deploy/OLD -n <namespace> -- sh -c \
@@ -435,181 +489,53 @@ you check **before** the upgrade:
     --previous`): set an image that can open the data (e.g., `kubectl set
     image deploy/OLD OLD=docker.io/library/mongo:8.3 -n <namespace>`; the
     container is named after the Deployment), wait until it runs, then
-    continue here.
+    dump. If the `mongorestore` of an old image refuses `--dryRun`, leave
+    out the check of the dump, and compare the counts below after the
+    restore instead. If the restore into 7.0 fails on the options of an
+    index, restore with `--noIndexRestore`: the app creates its indexes on
+    startup; or set
+    `mongodb.image` to the dumped major and minor version (mind the kernel
+    requirements of 8.x, see [Version](deployment.md#version)).
 
-Then:
+Also count the documents of each collection before the dump, for a
+comparison after the restore (in `trs-filer-db`, and in `trsStore` after
+it):
 
-- **Claim `mongodb-<appName>` and MongoDB 7.0:** upgrade as usual.
-- **Claim `mongodb-<appName>` and MongoDB 8.x or 9.0:** set `mongodb.image`
-  in the values file to the running major and minor version (e.g.,
-  `docker.io/library/mongo:8.2`, as `db.version()` reports it; mind the
-  kernel requirements of 8.x, see [MongoDB](deployment.md#mongodb)) and
-  upgrade; or move the data to 7.0 by dump and restore as below.
-- **Otherwise** (claim `mongodb`, or MongoDB 3.6): dump the data before the
-  upgrade and restore it afterwards, as below.
+```bash
+kubectl exec deploy/OLD -n <namespace> -- sh -c \
+  '"$(command -v mongosh || echo mongo)" --quiet trs-filer-db --eval "db.getCollectionNames().forEach(c => print(c, db[c].countDocuments ? db[c].countDocuments({}) : db[c].count()))"'
+```
 
-### Dump and restore
-
-The app is down from the first to the last step. The commands are for the
-release `trs-filer` with the default `trs_filer.appName` (`trs-filer`, the
-name of the app's Deployment and the label `app` of its pods; MongoDB's
-Deployment and claim are `mongodb-trs-filer`) and database
-(`trs-filer-db`, `mongodb.dbName`); replace them if yours differ. `OLD` is
-the MongoDB Deployment, and claim, before the upgrade (`mongodb` or
-`mongodb-trs-filer`). Clients can reach the app whenever it runs, also with
-the empty database between the upgrade (step 4, which starts the app again)
-and step 5, and the restore replaces what they write then: keep clients
-away during the migration (e.g., by blocking the host at a proxy in front
-of the cluster, or in a maintenance window).
-
-1. Stop the app and wait until its pod is gone, so that the data doesn't
-   change during the dump:
-
-    ```bash
-    kubectl scale deploy/trs-filer -n <namespace> --replicas=0
-    kubectl wait pod -l app=trs-filer -n <namespace> --for=delete --timeout=120s
-    ```
-
-2. Count the documents of each collection, for a comparison after the
-   restore, and dump the database to a local file; check that `mongodump`
-   succeeds (the command prints `Dump OK`):
-
-    ```bash
-    kubectl exec deploy/OLD -n <namespace> -- sh -c \
-      '"$(command -v mongosh || echo mongo)" --quiet trs-filer-db --eval "db.getCollectionNames().forEach(c => print(c, db[c].countDocuments ? db[c].countDocuments({}) : db[c].count()))"'
-    kubectl exec deploy/OLD -n <namespace> -- \
-      mongodump --quiet --db trs-filer-db --archive > trs-filer-db.archive \
-    && echo "Dump OK"
-    ```
-
-3. Keep the old volume as a fallback: set the reclaim policy of its
-   PersistentVolume to `Retain`, which keeps the volume (with the data) when
-   its claim is deleted:
-
-    ```bash
-    kubectl patch pv "$(kubectl get pvc OLD -n <namespace> \
-      -o jsonpath='{.spec.volumeName}')" \
-      -p '{"spec": {"persistentVolumeReclaimPolicy": "Retain"}}'
-    ```
-
-    - With the claim `mongodb`, also annotate the claim, so that Helm keeps
-      it (Helm checks the annotation on the claim in the cluster before
-      deleting it on upgrades):
-      `kubectl annotate pvc mongodb -n <namespace> helm.sh/resource-policy=keep`.
-    - With the claim `mongodb-trs-filer` (and MongoDB 3.6, or a version to
-      leave), the upgrade keeps the claim, so MongoDB would start on the old
-      data files; delete MongoDB's Deployment and the claim (the volume is
-      retained), so that the upgrade creates them anew, with an empty volume:
-      `kubectl delete deploy/mongodb-trs-filer pvc/mongodb-trs-filer -n <namespace>`.
-
-4. Create the Secret with MongoDB's credentials (see
-   [Authentication](deployment.md#authentication); MongoDB creates the users
-   on the new, empty volume), update the values file (see
-   [Values](#values); with `mongodb.auth.existingSecret`) and upgrade the
-   release with the chart of the release, e.g.:
-
-    ```bash
-    helm upgrade trs-filer trs-filer-{{ chart_version }}.tgz -n <namespace> -f values.yaml
-    ```
-
-    The chart of the tag `v0.3.0` deploys the app with the API
-    `extensions/v1beta1`, which Kubernetes no longer serves since 1.16; if
-    `helm upgrade` fails because the release's manifest contains removed
-    APIs, map them first with the
-    [mapkubeapis](https://github.com/helm/helm-mapkubeapis) plugin
-    (`helm mapkubeapis trs-filer -n <namespace>`).
-
-5. Stop the app again, so that it doesn't write during the restore, and
-   wait until MongoDB has initialized the new volume (its entrypoint first
-   runs a temporary server for the init script, then starts MongoDB) and
-   accepts connections:
-
-    ```bash
-    kubectl scale deploy/trs-filer -n <namespace> --replicas=0
-    kubectl wait pod -l app=trs-filer -n <namespace> --for=delete --timeout=120s
-    timeout 300 sh -c 'until kubectl logs deploy/mongodb-trs-filer -n <namespace> \
-      | grep -q "ready for start up"; do sleep 2; done' \
-    && timeout 120 sh -c 'until kubectl exec deploy/mongodb-trs-filer -n <namespace> -- \
-      mongosh --quiet --eval "db.runCommand({ping: 1}).ok"; do sleep 2; done' \
-    && echo "MongoDB ready"
-    ```
-
-    Continue only if `MongoDB ready` is printed; otherwise check MongoDB's
-    pod and log (`kubectl get pods`, `kubectl logs`): e.g., after a failed
-    init, MongoDB restarts without it and doesn't print the line.
-
-6. Restore the dump, replacing the collections that the app has created,
-   and count the documents again:
-
-    ```bash
-    kubectl exec -i deploy/mongodb-trs-filer -n <namespace> -- sh -c \
-      'mongorestore --quiet --drop --archive \
-        -u "$MONGO_INITDB_ROOT_USERNAME" -p "$MONGO_INITDB_ROOT_PASSWORD" \
-        --authenticationDatabase admin' < trs-filer-db.archive \
-    && kubectl exec deploy/mongodb-trs-filer -n <namespace> -- sh -c \
-      'mongosh --quiet trs-filer-db \
-        -u "$MONGO_INITDB_ROOT_USERNAME" -p "$MONGO_INITDB_ROOT_PASSWORD" \
-        --authenticationDatabase admin \
-        --eval "db.getCollectionNames().forEach(c => print(c, db[c].countDocuments({})))"'
-    ```
-
-    (With `mongodb.auth.enabled: false`, leave out `-u`, `-p` and
-    `--authenticationDatabase`.)
-
-    If the restore fails on the options of an index, restore with
-    `--noIndexRestore`: the app creates its indexes on startup. The restore
-    is repeatable (`--drop`).
-
-7. Only if the restore succeeded and the counts match those of step 2,
-   start the app:
-
-    ```bash
-    kubectl scale deploy/trs-filer -n <namespace> --replicas=1
-    ```
-
-Once the new release works, delete the old claim `mongodb` (if any:
-`kubectl delete pvc mongodb -n <namespace>`), the retained volume
-(`kubectl delete pv <name>`; this deletes only the PersistentVolume object:
-delete its storage, e.g., the disk, with your storage provider) and the
-local dump. The `service_info`
-collection of the dump is no longer used (see [Service
-info](#service-info)).
+The claim `mongodb` of charts before July 2024 isn't annotated to be kept:
+before uninstalling, keep its volume as a fallback by setting the reclaim
+policy of its PersistentVolume to `Retain`
+(`kubectl patch pv "$(kubectl get pvc mongodb -n <namespace> -o
+jsonpath='{.spec.volumeName}')" -p '{"spec": {"persistentVolumeReclaimPolicy":
+"Retain"}}'`), and delete the volume once the new release works (`kubectl
+delete pv <name>` deletes only the PersistentVolume object: delete its
+storage, e.g., the disk, with your storage provider). The chart of the tag
+`v0.3.0` deploys the app with the API `extensions/v1beta1`, which
+Kubernetes no longer serves since 1.16; if `helm uninstall` fails because
+the release's manifest contains removed APIs, map them first with the
+[mapkubeapis](https://github.com/helm/helm-mapkubeapis) plugin (`helm
+mapkubeapis trs-filer -n <namespace>`). The `service_info` collection of
+the dump is no longer used (see [Service info](#service-info)).
 
 ### Values
 
-Since the chart of `v0.3.0`, the values changed:
-
-- `clusterType` is removed: the chart creates an Ingress
-  (`trs_filer.ingress.enabled`, by default `true`; HTTPS via cert-manager
-  with `trs_filer.ingress.https`) or, with the Ingress disabled, an
-  OpenShift Route (with TLS at the router), as `v0.3.0` did with
-  `clusterType: openshift`. `trs_filer.route.enabled` (by default `true`)
-  turns the Route off, e.g., for a Route of your own, and
-  `trs_filer.route.annotations` sets its annotations (see [Ingress and
-  Route](deployment.md#ingress-and-route)).
-- `host_name` has no default (it was a test host); set it.
-- `trs_filer.image` is `elixircloud/trs-filer` (released charts set the
-  release's image), no longer `lvarin/trs-filer:0.1.0`.
-- `trs_filer.resources` and `mongodb.resources` set the requests and limits
-  of the app and of MongoDB.
-- `trs_filer.forwardedAllowIps` (by default `*`, as before; also kept by
-  upgrades with `--reuse-values`) sets the addresses whose `X-Forwarded-*`
-  headers the app trusts; narrow it (see [Forwarded
-  headers](deployment.md#forwarded-headers)).
-- `mongodb.image` is `docker.io/library/mongo:7.0` (was `mongo:3.6`, and
-  `mongo:noble` on `dev`), pulled as `mongodb.imagePullPolicy` says;
-  `mongodb.dbName` sets the app's database (`trs-filer-db` if empty).
-
-The chart annotates MongoDB's claim with `helm.sh/resource-policy: keep`
-(see [MongoDB](deployment.md#mongodb)), and replaces MongoDB's pod with the
-`Recreate` strategy.
-MongoDB's init script (ConfigMap `mongo-init-script-<appName>`, was
-`mongo-init-script`) creates the collections of the app's database only
-(no `service_info`, and nothing in `trsStore`); it runs on an empty volume
-only, so existing databases are not changed. The app gets the MongoDB host
-from `MONGO_HOST` (the Service `mongodb-<appName>`), also if the config Job
-fails. The chart in the repository has the placeholder version `0.0.0`
-(was `2.0.0`); released charts have the release's version.
+Rendering fails for the values of the charts up to 0.5.0 (see [From
+earlier charts](deployment.md#from-earlier-charts) for the renamed ones).
+Values of the chart of `v0.3.0` have no successor: `clusterType` is removed,
+as the chart creates an Ingress (`trsFiler.ingress.enabled`, by default
+`true`; HTTPS via cert-manager with `trsFiler.ingress.https`), a Gateway
+API HTTPRoute (`trsFiler.httpRoute`) or, with neither, an OpenShift Route
+(with TLS at the router), as `v0.3.0` did with `clusterType: openshift` (see
+[Exposing the app](deployment.md#exposing-the-app)). `hostName` has no
+default (`host_name` was a test host). The default image is
+`elixircloud/trs-filer` (was `lvarin/trs-filer:0.1.0`), and MongoDB's is
+`docker.io/library/mongo:7.0` (was `mongo:3.6`, and `mongo:noble` on `dev`).
+The chart in the repository has the placeholder version `0.0.0` (was
+`2.0.0`); released charts have the release's version.
 
 ## Images from `dev` since FOCA 0.17
 
