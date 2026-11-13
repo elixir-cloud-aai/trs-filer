@@ -1,0 +1,59 @@
+{
+  "organization": "Example Organization",
+  "name": "hello",
+  "description": "Greets someone, once or several times.",
+  "toolclass": {
+    "id": "workflow",
+    "name": "Workflow",
+    "description": "A workflow."
+  },
+  "versions": [
+    {
+      "id": "1.0.0",
+      "name": "hello",
+      "descriptor_type": [
+        "WDL"
+      ],
+      "descriptor_type_version": {
+        "WDL": [
+          "1.1"
+        ]
+      },
+      "is_production": false,
+      "files": [
+        {
+          "tool_file": {
+            "path": "hello.wdl",
+            "file_type": "PRIMARY_DESCRIPTOR"
+          },
+          "type": "WDL",
+          "file_wrapper": {
+            "content": "version 1.1\n\nworkflow hello {\n  input {\n    String name\n    Int times = 1\n  }\n\n  call greet {\n    input:\n      name = name,\n      times = times\n  }\n\n  output {\n    File greeting = greet.greeting\n  }\n}\n\ntask greet {\n  input {\n    String name\n    Int times\n  }\n\n  command <<<\n    for i in $(seq ~{times}); do\n      echo \"Hello, ~{name}!\"\n    done > greeting.txt\n  >>>\n\n  output {\n    File greeting = \"greeting.txt\"\n  }\n\n  runtime {\n    docker: \"ubuntu:24.04\"\n  }\n}\n",
+            "checksum": [
+              {
+                "type": "sha-256",
+                "checksum": "d9fd1db6e20b9373a4ccecf4ea40145eb00b9fea36d111b6248c8696e28310d4"
+              }
+            ]
+          }
+        },
+        {
+          "tool_file": {
+            "path": "ga4gh-io.schema.json",
+            "file_type": "OTHER"
+          },
+          "type": "WDL",
+          "file_wrapper": {
+            "content": "{\n  \"$schema\": \"https://raw.githubusercontent.com/uniqueg/ga4gh-io-schema/v0.3.0/schemas/ga4gh-io-profile.schema.json\",\n  \"$id\": \"https://example.org/schemas/hello/wdl/1.0.0\",\n  \"title\": \"Hello\",\n  \"description\": \"Greets someone, once or several times.\",\n  \"x-ga4gh-workflow\": {\n    \"trs_tool_id\": \"HELLO\",\n    \"trs_version_id\": \"1.0.0\",\n    \"descriptor_type\": \"WDL\",\n    \"descriptor_type_version\": \"1.1\",\n    \"primary_descriptor_path\": \"hello.wdl\",\n    \"checksum\": [\n      {\n        \"type\": \"sha-256\",\n        \"checksum\": \"d9fd1db6e20b9373a4ccecf4ea40145eb00b9fea36d111b6248c8696e28310d4\"\n      }\n    ],\n    \"entry_point\": \"hello\"\n  },\n  \"type\": \"object\",\n  \"properties\": {\n    \"inputs\": {\n      \"type\": \"object\",\n      \"properties\": {\n        \"name\": {\n          \"type\": \"string\",\n          \"minLength\": 1,\n          \"title\": \"Name\",\n          \"description\": \"Who to greet.\",\n          \"x-ga4gh-parameter\": {\n            \"type\": \"String\"\n          }\n        },\n        \"times\": {\n          \"type\": \"integer\",\n          \"minimum\": 1,\n          \"maximum\": 10,\n          \"default\": 1,\n          \"title\": \"Times\",\n          \"description\": \"How often to greet.\",\n          \"x-ga4gh-ui-widget\": \"slider\",\n          \"x-ga4gh-parameter\": {\n            \"type\": \"Int\"\n          }\n        }\n      },\n      \"required\": [\"name\"],\n      \"additionalProperties\": false\n    },\n    \"outputs\": {\n      \"type\": \"object\",\n      \"properties\": {\n        \"greeting\": {\n          \"type\": \"string\",\n          \"title\": \"Greeting\",\n          \"x-ga4gh-file\": {\n            \"kind\": \"file\",\n            \"mediaType\": \"text/plain\"\n          },\n          \"x-ga4gh-parameter\": {\n            \"type\": \"File\"\n          }\n        }\n      }\n    }\n  }\n}\n",
+            "checksum": [
+              {
+                "type": "sha-256",
+                "checksum": "a1a9f0e8423e74671d7cf482b01ee6d49868f60ca25b42a9f7b33dada6a25cf2"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

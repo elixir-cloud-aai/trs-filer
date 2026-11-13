@@ -27,6 +27,13 @@ trs_filer:
   #   service_info:
   #     service:
   #       id: org.example.trs
+  #   # Check GA4GH I/O Schemas on registration (experimental, see
+  #   # docs/io-schema.md)
+  #   custom:
+  #     io_schema:
+  #       validation: true
+  #       # Time limit of checking a file, in seconds
+  #       timeout: 10
   config: {}
   ingress:
     enabled: true

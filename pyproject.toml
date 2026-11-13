@@ -112,6 +112,15 @@ dependencies = [
     # once released, before the next release of TRS-Filer
     "foca @ git+https://github.com/elixir-cloud-aai/foca@93e9721711f7d6412abc69a10f0047c9e95ce490",
     "gunicorn>=26.2.0,<27",
+    # Checks of GA4GH I/O Schema files against the vendored meta-schema
+    # (`trs_filer/io_schema/`), JSON Schema Draft 2020-12 with
+    # `$dynamicRef`; references resolved with `referencing`, and the format
+    # `uri` checked with `rfc3986-validator`, as by the profile's validator.
+    # Not `jsonschema[format-nongpl]`, whose `rfc3987-syntax` takes a second
+    # of CPU time to import
+    "jsonschema>=4.26,<5",
+    "referencing>=0.37",
+    "rfc3986-validator>=0.1.1",
     # Remote files are retrieved with connection classes of urllib3 2.x
     # (`trs_filer/remote_files.py`)
     "requests>=2.31,<3",
@@ -131,6 +140,7 @@ dev = [
     "pytest>=9.1",
     # Used by the tests; builds use `build-system.requires`
     "setuptools-scm>=10.3",
+    "types-jsonschema>=4.26",
     "types-PyYAML>=6.0.12",
     "types-requests>=2.31",
     # Locks the dependencies (`uv lock`, checked in CI); also the version of
@@ -193,4 +203,6 @@ trs_filer = [
     "api/*.yaml",
     "api/patches/*.yaml",
     "access_control/*.conf",
+    "io_schema/*/*.json",
+    "io_schema/*/vocabularies/*.json",
 ]

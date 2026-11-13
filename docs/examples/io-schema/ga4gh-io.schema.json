@@ -1,0 +1,67 @@
+{
+  "$schema": "https://raw.githubusercontent.com/uniqueg/ga4gh-io-schema/v0.3.0/schemas/ga4gh-io-profile.schema.json",
+  "$id": "https://example.org/schemas/hello/wdl/1.0.0",
+  "title": "Hello",
+  "description": "Greets someone, once or several times.",
+  "x-ga4gh-workflow": {
+    "trs_tool_id": "HELLO",
+    "trs_version_id": "1.0.0",
+    "descriptor_type": "WDL",
+    "descriptor_type_version": "1.1",
+    "primary_descriptor_path": "hello.wdl",
+    "checksum": [
+      {
+        "type": "sha-256",
+        "checksum": "d9fd1db6e20b9373a4ccecf4ea40145eb00b9fea36d111b6248c8696e28310d4"
+      }
+    ],
+    "entry_point": "hello"
+  },
+  "type": "object",
+  "properties": {
+    "inputs": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "title": "Name",
+          "description": "Who to greet.",
+          "x-ga4gh-parameter": {
+            "type": "String"
+          }
+        },
+        "times": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10,
+          "default": 1,
+          "title": "Times",
+          "description": "How often to greet.",
+          "x-ga4gh-ui-widget": "slider",
+          "x-ga4gh-parameter": {
+            "type": "Int"
+          }
+        }
+      },
+      "required": ["name"],
+      "additionalProperties": false
+    },
+    "outputs": {
+      "type": "object",
+      "properties": {
+        "greeting": {
+          "type": "string",
+          "title": "Greeting",
+          "x-ga4gh-file": {
+            "kind": "file",
+            "mediaType": "text/plain"
+          },
+          "x-ga4gh-parameter": {
+            "type": "File"
+          }
+        }
+      }
+    }
+  }
+}

@@ -17,6 +17,8 @@
   server and the service info.
 - [API](api.md): the GA4GH TRS endpoints, the endpoints that register tools,
   versions and tool classes, and errors.
+- [I/O Schemas](io-schema.md): publishing and checking GA4GH I/O Schemas of
+  workflows (experimental).
 - [Access control](access-control.md): who can read and change the
   registry, and how to restrict it.
 - [Deployment](deployment.md): the Helm chart for Kubernetes.

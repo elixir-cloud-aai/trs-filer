@@ -306,6 +306,22 @@ custom:
     allowed_hosts: [files.local]
 ```
 
+## I/O Schemas
+
+`custom.io_schema.validation` (experimental, `false` by default) checks
+GA4GH I/O Schema files (files of type `OTHER` named `ga4gh-io.schema.json`)
+on registration against the meta-schema of the GA4GH I/O Profile 0.3.0,
+and rejects invalid ones with `400 Bad Request` (see [Checking I/O
+Schemas](io-schema.md#checking-io-schemas)); `custom.io_schema.timeout`
+(default: `10`) is the time limit of checking a file, in seconds:
+
+```yaml
+custom:
+    io_schema:
+        validation: true
+        timeout: 10
+```
+
 ## Request size limit
 
 Request bodies are limited to `server.max_content_length` bytes (default:

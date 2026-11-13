@@ -1,0 +1,111 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/uniqueg/ga4gh-io-schema/v0.3.0/schemas/ga4gh-io-profile.schema.json",
+  "title": "GA4GH IO Profile Meta-Schema",
+  "description": "Meta-schema for validating GA4GH workflow and tool IO JSON Schema profiles. The top level requires the inputs/outputs wrapper and may carry the top-level keywords of the workflow vocabulary; every schema, at any depth, must follow the rules of $defs/node, which combines one vocabulary file per keyword group.",
+  "allOf": [
+    {
+      "$ref": "https://raw.githubusercontent.com/uniqueg/ga4gh-io-schema/v0.3.0/schemas/ga4gh-io-profile-node#/$defs/keywords"
+    },
+    {
+      "$ref": "https://raw.githubusercontent.com/uniqueg/ga4gh-io-schema/v0.3.0/schemas/vocabularies/workflow.schema.json"
+    }
+  ],
+  "type": "object",
+  "required": [
+    "$schema",
+    "properties"
+  ],
+  "properties": {
+    "$schema": {
+      "description": "IO schemas must name this meta-schema.",
+      "const": "https://raw.githubusercontent.com/uniqueg/ga4gh-io-schema/v0.3.0/schemas/ga4gh-io-profile.schema.json"
+    },
+    "$id": {
+      "description": "The identifier of the IO schema: an absolute URI that is stable and versioned, never the URL of a branch.",
+      "type": "string",
+      "format": "uri",
+      "pattern": "^[A-Za-z][A-Za-z0-9+.-]*:",
+      "not": {
+        "description": "URLs of branches at GitHub and GitLab: refs/heads/ or a common branch name (main, master, dev, develop, HEAD) in place of a tag or commit. A best-effort check: it is case-sensitive and doesn't know other branch names.",
+        "pattern": "^https?://(?:[^/@]+@)?(?:raw\\.githubusercontent\\.com(?::\\d+)?/[^/]+/[^/]+/|(?:www\\.)?github\\.com(?::\\d+)?/[^/]+/[^/]+/(?:blob|raw|tree)/|gitlab\\.com(?::\\d+)?/(?:(?!-/)[^/]+/)+-/(?:blob|raw|tree)/)(?:refs/heads/|(?:main|master|dev|develop|HEAD)/)"
+      }
+    },
+    "type": {
+      "const": "object"
+    },
+    "properties": {
+      "type": "object",
+      "properties": {
+        "inputs": {
+          "description": "JSON Schema block defining the expected input parameters for the workflow or tool."
+        },
+        "outputs": {
+          "description": "JSON Schema block defining the outputs of the workflow or tool: an object schema whose properties are the outputs. Optional; without it, the schema describes no outputs.",
+          "$comment": "The outputs are the direct properties of this schema, so that normalisers find them without resolving references or applicators.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "object"
+            },
+            "$ref": false,
+            "$dynamicRef": false,
+            "allOf": false,
+            "anyOf": false,
+            "oneOf": false,
+            "not": false,
+            "if": false,
+            "then": false,
+            "else": false,
+            "dependentSchemas": false
+          }
+        }
+      },
+      "required": [
+        "inputs"
+      ]
+    }
+  },
+  "$comment": "The top level takes the keywords of every schema from $defs/node (without its check of unevaluated keywords), adds the top-level keywords, and rejects other x-ga4gh-* keywords itself. Nested schemas get all of $defs/node, so top-level keywords are rejected there.",
+  "patternProperties": {
+    "^(?!x-ga4gh-)": true
+  },
+  "unevaluatedProperties": false,
+  "$defs": {
+    "node": {
+      "$id": "https://raw.githubusercontent.com/uniqueg/ga4gh-io-schema/v0.3.0/schemas/ga4gh-io-profile-node",
+      "$dynamicAnchor": "meta",
+      "title": "GA4GH IO Profile Schema Rules",
+      "description": "Applies to every schema of an IO schema, at any depth: JSON Schema Draft 2020-12 plus the x-ga4gh-* keywords of the vocabularies. Keywords starting with x-ga4gh- that no vocabulary defines are rejected.",
+      "$ref": "#/$defs/keywords",
+      "$comment": "Every keyword that doesn't start with x-ga4gh- counts as evaluated; the vocabularies evaluate the x-ga4gh-* keywords they define; any other x-ga4gh-* keyword is unevaluated and rejected.",
+      "patternProperties": {
+        "^(?!x-ga4gh-)": true
+      },
+      "unevaluatedProperties": false,
+      "$defs": {
+        "keywords": {
+          "title": "GA4GH IO Profile Keywords",
+          "description": "The keywords of every schema: JSON Schema Draft 2020-12 plus the x-ga4gh-* keywords of the vocabularies. Used by $defs/node and, without the check of unevaluated keywords, by the top level.",
+          "allOf": [
+            {
+              "$ref": "https://json-schema.org/draft/2020-12/schema"
+            },
+            {
+              "$ref": "https://raw.githubusercontent.com/uniqueg/ga4gh-io-schema/v0.3.0/schemas/vocabularies/annotations.schema.json"
+            },
+            {
+              "$ref": "https://raw.githubusercontent.com/uniqueg/ga4gh-io-schema/v0.3.0/schemas/vocabularies/file.schema.json"
+            },
+            {
+              "$ref": "https://raw.githubusercontent.com/uniqueg/ga4gh-io-schema/v0.3.0/schemas/vocabularies/parameter.schema.json"
+            },
+            {
+              "$ref": "https://raw.githubusercontent.com/uniqueg/ga4gh-io-schema/v0.3.0/schemas/vocabularies/outputs.schema.json"
+            }
+          ]
+        }
+      }
+    }
+  }
+}
