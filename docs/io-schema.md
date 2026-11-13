@@ -103,8 +103,10 @@ any directory; other files aren't checked. A file is invalid if it:
   (`https://raw.githubusercontent.com/uniqueg/ga4gh-io-schema/v0.3.0/schemas/ga4gh-io-profile.schema.json`),
   e.g., of another version of the profile;
 - doesn't validate against that meta-schema (which also checks that UI
-  widgets fit the types of their schemas and that only widgets for inputs
-  or outputs are used where they belong; see the profile's
+  widgets fit the types of their schemas, and that the parameters directly
+  under `inputs` and `outputs` use only widgets for inputs and outputs,
+  respectively; nested schemas and definitions aren't checked for this; see
+  the profile's
   [changelog](https://github.com/uniqueg/ga4gh-io-schema/blob/v0.3/CHANGELOG.md)); or
 - names another descriptor type than its own in
   `x-ga4gh-workflow.descriptor_type`.
