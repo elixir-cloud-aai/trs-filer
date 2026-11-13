@@ -1,39 +1,161 @@
-# TRS filer Helm chart
+# Helm chart
+
+The chart deploys TRS-Filer on Kubernetes (and OpenShift): the app and a
+MongoDB database. It is a thin chart over FOCA's library chart `foca-common`
+(the version in `Chart.yaml`), which renders the resources from the values
+described here and in `values.yaml` (see the [library chart's
+documentation](https://github.com/elixir-cloud-aai/foca/blob/chart-v0.5.0/docs/helm-chart.md)).
+The chart in the repository downloads the library chart with `helm
+dependency build` (see [Installation](#installation)).
 
 > **Note:** Writes (registering, changing and deleting tools and tool
 > classes) need an access token of an admin of your OpenID Connect provider;
-> reads are public. Set the provider and the admin group in
-> `trs_filer.config` (see [Configuration](#configuration)): rendering fails
-> without trusted token issuers.
+> reads are public. Set the provider and the admin group in `config` (see
+> [Configuration](#configuration)): rendering fails without them.
 
-## Quick start
+## Configuration
 
-Set `host_name` (see [Values](#values)): it is **required**, the chart has no
-useful default, and the configuration Job fails (exit 1) on the empty one.
+The image contains the app's complete base config
+([`trs_filer/config.yaml`](https://github.com/elixir-cloud-aai/trs-filer/blob/dev/trs_filer/config.yaml)).
+The chart renders a config overlay into the `<app>-config` ConfigMap (see
+[Names and labels](#names-and-labels)), which FOCA merges into the base
+config on startup (via `FOCA_CONFIG_OVERLAY`):
 
-Set your identity provider and admin group in `trs_filer.config` (see
-[Configuration](#configuration)): it is **required**, and rendering fails
-without trusted token issuers.
+- `custom.service` is set to the public URL of the app, `https://<hostName>`
+  on port 443, which the app puts into the `url` of tools and versions;
+  `hostName` is **required** (rendering fails without it). Serve the app over
+  HTTPS for it (see [Exposing the app](#exposing-the-app)).
+- `db.host` is set to the release's MongoDB Service (`<app>-mongodb`),
+  unless MongoDB is external (see [External MongoDB](#external-mongodb)).
+- `config` overrides keys of the base config; it takes precedence over the
+  generated values. Mappings are merged recursively, all other values
+  (including lists) replace those of the base config (see
+  [Configuration](https://trs-filer.readthedocs.io/en/latest/configuration/)).
+  `server.host` and `server.port` have no effect, as they apply to the
+  development server only (see [Server](#server)).
+
+The identity provider is deployment configuration, without defaults (see
+[Access control](https://trs-filer.readthedocs.io/en/latest/access-control/)
+and [Deployment
+configuration](https://trs-filer.readthedocs.io/en/latest/configuration/#deployment-configuration)).
+Rendering fails, as the app would refuse to start, unless each deployment
+sets:
+
+- access control, enabled and enforced (as by default:
+  `config.security.access_control.enabled` and `enforce`), so that only
+  admins can write;
+- the trusted token issuers (`config.security.auth.issuers`): URLs, or maps
+  of the URL (`issuer`) and settings of the issuer (e.g., `audience`,
+  `claim_groups`, `userinfo_claims`);
+- the audience (`config.security.auth.audience`), unless
+  `config.security.auth.verify_audience` is `false`, which accepts tokens for
+  any audience, or each issuer is a map with an `audience` of its own;
+- an admin group mapped to the role `admin`
+  (`config.security.access_control.group_mapping`), unless
+  `config.security.access_control.require_admin` is `false`; the chart
+  counts only group mappings, so set it to `false` if only rules of
+  `config.security.access_control.policies` grant the role;
+- the claim with the groups of users
+  (`config.security.access_control.claim_groups`, or `claim_groups` of an
+  issuer), if groups are mapped.
+
+The app checks the other settings on startup and refuses to start, with the
+reason in its log (check with `kubectl logs` and `kubectl rollout status`
+after installs and upgrades).
+
+Keep the values of each deployment in its own values file outside this
+repository (e.g., `values-prod.yaml` in the deployment's infrastructure
+repository), for example:
+
+```yaml
+hostName: trs.example.org
+mongodb:
+  auth:
+    existingSecret: trs-filer-mongodb-credentials
+config:
+  security:
+    auth:
+      # Trusted token issuers (`iss` claim)
+      issuers: ["https://login.example.org/oidc/"]
+      # Client IDs of the apps that register tools
+      audience: ["trs-portal"]
+      # Claims released via user info only, not in access tokens
+      userinfo_claims: ["groups"]
+    access_control:
+      # Claim with the groups of users
+      claim_groups: groups
+      group_mapping:
+        trs-admins: admin
+  service_info:
+    service:
+      id: org.example.trs
+      name: Example TRS
+      organization:
+        name: Example Organization
+        url: https://example.org
+      contactUrl: mailto:trs-admins@example.org
+      environment: prod
+```
+
+Other settings go into `config` too, e.g., `custom.remote_files` or the
+experimental check of GA4GH I/O Schemas, `custom.io_schema.validation` (see
+[Configuration](https://trs-filer.readthedocs.io/en/latest/configuration/)).
+Without `service_info`, deployments serve the **placeholder service info**
+of the base config (`id: org.example.trs-filer`, organization `Example
+Organization`), and FOCA warns of it on startup. Pods are restarted when the
+ConfigMap changes. Don't edit the ConfigMap with `kubectl edit`: Helm
+overwrites it on the next upgrade. As `config` is stored in a ConfigMap, it
+must not contain secrets; pass them as environment variables from Secrets
+(`trsFiler.extraEnv`, `trsFiler.extraEnvFrom`, see [Server](#server)).
+
+## Image
+
+The app image is `trsFiler.image` (default `docker.io/elixircloud/trs-filer`)
+with tag `trsFiler.tag`, which defaults to the chart's `appVersion`. Charts
+attached to [GitHub
+releases](https://github.com/elixir-cloud-aai/trs-filer/releases) have the
+release version as `version` and `appVersion`, so they deploy the image of
+their release. In the repository, both are placeholders, and `appVersion`
+is `dev`: the chart deploys the latest image of branch `dev`, which changes
+with every commit. Deployments from the repository should set the tag of a
+release (e.g., `{{ version }}`) or of a commit on `dev` (`sha-<commit>`, the
+full commit SHA) in the values file:
+
+```yaml
+trsFiler:
+  tag: sha-0123456789abcdef0123456789abcdef01234567
+```
+
+`trsFiler.image` may also include a tag or digest (e.g.,
+`docker.io/elixircloud/trs-filer:{{ version }}`, as in earlier charts); then
+`trsFiler.tag` must be empty. See [Versioning and
+releases](https://trs-filer.readthedocs.io/en/latest/development/#versioning-and-releases)
+for the image tags.
+
+The image is pulled on every start of a pod (`trsFiler.imagePullPolicy:
+Always`), so that moving tags such as `dev` deploy the latest image; set
+`IfNotPresent` for fixed tags or digests, or `Never` for images loaded into
+the nodes (e.g., with `kind load`).
+
+## Installation
 
 MongoDB requires authentication: create a Secret with its credentials in the
-namespace first, and pass its name in `mongodb.auth.existingSecret` (see
-[Authentication](#authentication)); otherwise, rendering the chart fails.
-E.g., with random passwords:
+namespace first, and set its name in `mongodb.auth.existingSecret` (see
+[Authentication](#authentication)); otherwise, rendering fails. E.g., with
+random passwords:
 
 ```bash
-kubectl create namespace namespace
-kubectl create secret generic trs-filer-mongodb-credentials -n namespace \
+kubectl create namespace <namespace>
+kubectl create secret generic trs-filer-mongodb-credentials -n <namespace> \
     --from-literal=root-username=root \
     --from-literal=root-password="$(openssl rand -hex 24)" \
     --from-literal=username=trs-filer \
     --from-literal=password="$(openssl rand -hex 24)"
 ```
 
-### Install a release
-
 Install the chart attached to a release (`trs-filer-{{ chart_version }}.tgz`
-of the latest release, `{{ version }}`), which sets the release's image. It is
-signed and has a build attestation: download and verify it before you
+of the latest release, `{{ version }}`), which sets the release's image. It
+is signed and has a build attestation: download and verify it before you
 install it (see [Verifying images and
 charts](https://trs-filer.readthedocs.io/en/latest/operations/#verifying-images-and-charts)
 for the signature check with cosign and the details).
@@ -50,233 +172,139 @@ gh attestation verify trs-filer-{{ chart_version }}.tgz \
 If the verification succeeds, install the chart:
 
 ```bash
-helm install trs-filer trs-filer-{{ chart_version }}.tgz -n namespace \
-    -f my-values.yaml \
-    --set host_name=trs.example.org \
-    --set mongodb.auth.existingSecret=trs-filer-mongodb-credentials
+helm install trs-filer trs-filer-{{ chart_version }}.tgz -n <namespace> \
+    -f values-prod.yaml
 ```
 
-`my-values.yaml` sets `trs_filer.config` with your identity provider and
-admin group (see [Configuration](#configuration)). `namespace` is the name
-of the namespace where TRS-Filer should be installed (created above, with
-the Secret), and
-`trs-filer` could be any name: it is referenced later for upgrading or
-uninstalling. Set further values with `--set` or with a file
-(`-f my-values.yaml`; `helm show values trs-filer-{{ chart_version }}.tgz`
-prints the defaults).
-
-### Install from source
-
-To install the chart of a checkout of the repository (e.g., the branch `dev`,
-whose default image is `elixircloud/trs-filer:latest`), edit `values.yaml` or
-pass your values as above, and run this from the `deployment` folder:
+The package contains the library chart. To install the chart from the
+`deployment` folder of the repository instead (e.g., to test changes of the
+chart), download the library chart (into `charts/`, the version locked in
+`Chart.lock`), and set `trsFiler.tag` (see [Image](#image)), as the chart
+deploys the moving `dev` image otherwise:
 
 ```bash
-helm install trs-filer . -n namespace \
-    -f my-values.yaml \
-    --set host_name=trs.example.org \
-    --set mongodb.auth.existingSecret=trs-filer-mongodb-credentials
+helm dependency build deployment
+helm install trs-filer deployment -n <namespace> -f values-prod.yaml
 ```
 
-## Values
+`<namespace>` is the namespace to deploy to; `trs-filer` is the name of the
+release, which is referenced when upgrading or uninstalling. Helm prints the
+app's URL and a test request after installing (`helm get notes trs-filer -n
+<namespace>` shows them again; `helm show values` prints the defaults).
 
-The values of `values.yaml`; the sections below describe them.
+## Names and labels
 
-| Value | Default | Description |
-| --- | --- | --- |
-| `host_name` | `""` | **Required.** Host name that the app serves (the app advertises `https://<host_name>`, so serve HTTPS: see `trs_filer.ingress.https` and [Ingress and Route](#ingress-and-route)), used by the Ingress, the Route and the configuration Job. |
-| `trs_filer.config` | `{}` | **Required.** Config overlay of the app, merged after the configuration Job's; must set the identity provider (`security.auth.issuers`, `security.auth.audience`) and the admin group (see [Configuration](#configuration)). |
-| `apiServer` | `kubernetes.default.svc:443` | Address of the Kubernetes API server, which the configuration Job writes the ConfigMap to. |
-| `trs_filer.image` | `elixircloud/trs-filer:latest` | Image of the app (released charts set the release's image). |
-| `trs_filer.imagePullPolicy` | `Always` | Pull policy of the app's image (`Always`, `IfNotPresent` or `Never`), also for the configuration Job; `IfNotPresent` or `Never` for an image loaded into the nodes. |
-| `trs_filer.appName` | `trs-filer` | Name of the app's Deployment and Service; names the other resources (e.g., `mongodb-<appName>`). Don't change it for an installed release (see [Persistence](#persistence)). |
-| `trs_filer.forwardedAllowIps` | `"*"` | Addresses or networks (comma-separated, or a list) whose `X-Forwarded-*` headers the app trusts; `*` for every address (see [Forwarded headers](#forwarded-headers)). |
-| `trs_filer.resources` | 100m CPU; 256Mi memory request, 384Mi limit | CPU and memory of the app (see [Resources](#resources)). |
-| `trs_filer.podSecurityContext` | non-root, `RuntimeDefault` seccomp | Security context of the pods of the app and the configuration Job (see [Security contexts](#security-contexts)). |
-| `trs_filer.securityContext` | no privilege escalation, no capabilities, read-only root file system | Security context of their containers. |
-| `trs_filer.tmpSizeLimit` | `64Mi` | Size limit of their `emptyDir` at `/tmp`; `null` for none. |
-| `trs_filer.networkPolicy.enabled` | `false` | Create a NetworkPolicy that lets only `ingressFrom` connect to the app (see [Network policies](#network-policies)). |
-| `trs_filer.networkPolicy.ingressFrom` | `[]` | NetworkPolicy peers allowed to connect to the app; required if enabled. |
-| `trs_filer.ingress.enabled` | `true` | Create an Ingress (see [Ingress and Route](#ingress-and-route)). |
-| `trs_filer.ingress.className` | `""` | Ingress class; the cluster's default class if empty. |
-| `trs_filer.ingress.annotations` | `{}` | Annotations of the Ingress; `null` removes one of the chart's. |
-| `trs_filer.ingress.https.enabled` | `false` | Request a certificate from cert-manager and serve HTTPS. |
-| `trs_filer.ingress.https.issuer` | `letsencrypt-prod` | cert-manager ClusterIssuer for `https`. |
-| `trs_filer.route.enabled` | `true` | Create an OpenShift Route if the Ingress is disabled and the cluster serves Routes. |
-| `trs_filer.route.annotations` | `{}` | Annotations of the Route; `null` removes one. |
-| `mongodb.image` | `docker.io/library/mongo:7.0` | MongoDB image (see [MongoDB](#mongodb)). |
-| `mongodb.imagePullPolicy` | `Always` | Pull policy of the MongoDB image. |
-| `mongodb.dbName` | `""` | Name of the app's database; `trs-filer-db` if empty. |
-| `mongodb.auth.enabled` | `true` | Require credentials (see [Authentication](#authentication)). |
-| `mongodb.auth.existingSecret` | `""` | **Required** with authentication: name of the Secret with the keys `root-username`, `root-password`, `username` and `password`. |
-| `mongodb.volumeSize` | `1Gi` | Size of the PersistentVolumeClaim with the data (see [Persistence](#persistence)). |
-| `mongodb.resources` | 200m CPU; 512Mi memory | CPU and memory of MongoDB (request and limit). |
-| `mongodb.podSecurityContext` | non-root user and group 999, `fsGroup` 999 (applied on a mismatch only), `RuntimeDefault` seccomp | Security context of MongoDB's pod (see [Security contexts](#security-contexts)). |
-| `mongodb.securityContext` | no privilege escalation, no capabilities, read-only root file system | Security context of MongoDB's container. |
-| `mongodb.tmpSizeLimit` | `64Mi` | Size limit of MongoDB's `emptyDir` at `/tmp`; `null` for none. |
-| `mongodb.networkPolicy.enabled` | `true` | Create a NetworkPolicy that lets only the app connect to MongoDB (see [Network policies](#network-policies)). |
+Resource names are derived from the release name, so that several releases
+can be installed in one namespace:
 
-## Security notes
+- **App** (Deployment, Service, Ingress, HTTPRoute or Route, NetworkPolicy,
+  PodDisruptionBudget; ConfigMap `<app>-config`): `<app>` is
+  `<release>-trs-filer`, or the release name if it contains `trs-filer`
+  (e.g., `trs-filer` for the release `trs-filer`, `prod-trs-filer` for the
+  release `prod`);
+- **MongoDB** (Deployment, Service, PersistentVolumeClaim, NetworkPolicy;
+  ConfigMap `<app>-mongodb-init-script`): `<app>-mongodb`; the app connects
+  to this Service.
 
-- **Writes need an access token of an admin** of the identity provider set
-  in `trs_filer.config`; reads are public (see [Access
-  control](https://trs-filer.readthedocs.io/en/latest/access-control/)).
-  FOCA's permissions API (`/admin/access-control/`, admins only) is served
-  like the TRS API: to keep it off the internet, route only `/ga4gh/trs/v2/`
-  (e.g., with an Ingress or Route of your own).
-- **MongoDB requires credentials** by default (see
-  [Authentication](#authentication)); the app connects as a user with
-  access to its database only. Its NetworkPolicy (`mongodb.networkPolicy`,
-  see [Network policies](#network-policies)) also lets only the app's pods
-  connect to it, in clusters that enforce NetworkPolicies; otherwise, every
-  pod in the cluster reaches its Service (`mongodb-<appName>`, port 27017;
-  the chart exposes it nowhere else). With `mongodb.auth.enabled: false`,
-  every pod that reaches it can read and change the data.
-- **The configuration Job has a ServiceAccount with rights in the
-  namespace.** Its ServiceAccount (`<appName>-configurer`) is bound
-  (RoleBinding `<appName>-configurer`) to the Role `<appName>-configurer`,
-  which allows only what the Job does: read and patch the ConfigMap
-  `app-config-<appName>`, and list and delete pods, to restart the app. The
-  pod rights cover every pod in the namespace (pod names are generated, so
-  the Role can't name them), though the Job deletes only the app's pods
-  (label `app: <appName>`). It
-  runs on every install and upgrade; the chart needs permission to create
-  these resources, and the rights exist as long as the release does. If
-  reading or patching the ConfigMap or listing pods fails (e.g., the API
-  server refuses it in a copy of the chart that changes the ConfigMap's
-  name), the Job fails (exit code 7, 8 or 9 of `update-config-map.sh`);
-  a failed pod deletion doesn't fail it. This stays until the chart uses FOCA's library
-  chart ([#135](https://github.com/elixir-cloud-aai/trs-filer/issues/135)).
-- **By default, the app trusts `X-Forwarded-*` headers from every address**
-  (`trs_filer.forwardedAllowIps: "*"`), so that links in responses keep
-  `https` behind the ingress or route that terminates TLS. Every workload
-  that can reach the app's Service or pod can then set these headers, and
-  so change the URLs in responses. Narrow the value to the addresses of
-  the ingress controller or router (see [Forwarded
-  headers](#forwarded-headers)), don't expose the Service or the pod to
-  clients directly, and restrict access to them to the ingress controller
-  or router, e.g., with `trs_filer.networkPolicy` (see [Network
-  policies](#network-policies)).
+`nameOverride` replaces `trs-filer` in the names and the
+`app.kubernetes.io/name` label, `fullnameOverride` replaces `<app>`. Set them
+when installing only: changing `nameOverride` later changes the pod
+selectors of the Deployments, which can't be changed, and changing either
+renames the resources, MongoDB's claim included, so MongoDB would start on a
+new, empty claim (the old one is kept; unless the claim is
+`mongodb.persistence.existingClaim`): `helm upgrade` fails then (when Helm
+can query the cluster). Names
+are truncated to 63 characters. The examples in this document use the
+release `trs-filer`.
 
-## Security contexts
+All resources have the [standard
+labels](https://helm.sh/docs/chart_best_practices/labels/)
+(`app.kubernetes.io/name`, `instance`, `version` and `managed-by`, and
+`helm.sh/chart`); pods are selected by name, instance and
+`app.kubernetes.io/component` (`app` or `mongodb`), e.g.:
 
-All pods run as non-root users, without privilege escalation or
-capabilities, with the `RuntimeDefault` seccomp profile and a read-only root
-file system, as the Pod Security Standard "restricted" requires (e.g., for
-namespaces labelled `pod-security.kubernetes.io/enforce: restricted`):
+```bash
+kubectl get pods -n <namespace> -l app.kubernetes.io/instance=trs-filer
+```
 
-- The app and the configuration Job (`trs_filer.podSecurityContext`,
-  `trs_filer.securityContext`) run as the image's user (1000); MongoDB
-  (`mongodb.podSecurityContext`, `mongodb.securityContext`) runs as the
-  image's user `mongodb` (999), and its data volume belongs to its group
-  (`fsGroup: 999`), so that MongoDB can write to it. This needs storage
-  that applies `fsGroup` (most dynamically provisioned volumes do; e.g.,
-  `hostPath` and some CSI drivers don't): otherwise, MongoDB can't write to
-  a new volume and doesn't start. For such storage, prepare the volume's
-  ownership (user 999) yourself, or let MongoDB's entrypoint start as root
-  and switch to its user, as before (`mongodb.podSecurityContext: null`,
-  `mongodb.securityContext: null`; not allowed under "restricted").
-- Temporary files go to `emptyDir`s at `/tmp`, limited by
-  `trs_filer.tmpSizeLimit` and `mongodb.tmpSizeLimit` (the pod is evicted
-  if it exceeds the limit); MongoDB also gets one at `/data/configdb`.
-- On OpenShift (if the cluster serves `security.openshift.io/v1`), the
-  chart sets no `runAsUser`, `runAsGroup` or `fsGroup`, as OpenShift
-  assigns them from the namespace's range.
+## Exposing the app
 
-The values are maps: values files are merged into them, and `null` removes
-a key (e.g., `mongodb.podSecurityContext.runAsUser: null`).
+The chart exposes the app for `hostName` in one of three ways (see
+[Exposing the
+app](https://github.com/elixir-cloud-aai/foca/blob/chart-v0.5.0/docs/helm-chart.md#exposing-the-app)
+in the library chart's documentation for TLS, body size and rate limits,
+NetworkPolicy peers and keep-alive settings of ingress-nginx, Traefik, the
+Gateway API, OpenShift and cloud load balancers):
 
-## Network policies
-
-The chart creates NetworkPolicies, which clusters with a network plugin
-that supports them enforce (others ignore them):
-
-- **MongoDB** (`mongodb-<appName>`, `mongodb.networkPolicy.enabled`, on by
-  default): only the app's pods (label `app: <appName>`) may connect to
-  MongoDB, on port 27017. Disable it if you manage policies yourself, or
-  if other workloads (e.g., backups) must connect.
-- **The app** (`<appName>`, `trs_filer.networkPolicy.enabled`, off by
-  default): only the peers in `trs_filer.networkPolicy.ingressFrom` may
-  connect to the app, on port 8080. The peers depend on the cluster, so
-  there are no defaults, and rendering fails if the policy is enabled
-  without any (which would allow all sources). E.g., for ingress-nginx in
-  the namespace `ingress-nginx`:
+- an Ingress (`trsFiler.ingress`, enabled by default), for any ingress
+  controller; `className` sets its class, `annotations` its annotations
+  (e.g., for the ingress controller; they take precedence over those set by
+  the chart for `https`, `null` removes one), and `https.enabled` requests a
+  certificate from cert-manager (via the ClusterIssuer `https.issuer`);
+- a Gateway API HTTPRoute (`trsFiler.httpRoute`), attached to an existing
+  Gateway (`parentRefs`), optionally with a second HTTPRoute that redirects
+  HTTP to HTTPS (`httpsRedirect`); set `trsFiler.ingress.enabled: false` to
+  use it, e.g.:
 
     ```yaml
-    trs_filer:
-      networkPolicy:
+    trsFiler:
+      ingress:
+        enabled: false
+      httpRoute:
         enabled: true
-        ingressFrom:
-          - namespaceSelector:
-              matchLabels:
-                kubernetes.io/metadata.name: ingress-nginx
+        parentRefs:
+        - name: gateway
+          namespace: gateway-system
+          sectionName: https
+        httpsRedirect:
+          enabled: true
+          parentRefs:
+          - name: gateway
+            namespace: gateway-system
+            sectionName: http
     ```
 
-    On OpenShift, the router's pods are in namespaces labelled
-    `policy-group.network.openshift.io/ingress: ""`. The policy also keeps
-    other workloads from setting the forwarded headers that the app trusts
-    (see [Security notes](#security-notes)).
+- an OpenShift Route, with TLS termination at the router, which redirects
+  HTTP to HTTPS, if neither is enabled, the cluster serves Routes
+  (`route.openshift.io/v1`) and `trsFiler.route.enabled` is true (the
+  default); otherwise the app is only reachable within the cluster, and Helm
+  prints a warning after installing. On OpenShift (e.g., CSC's Rahti),
+  disable the Ingress, which is enabled by default and has no TLS unless you
+  configure it: the chart then creates the Route.
 
-The policies restrict incoming connections only. Kubernetes combines all
-NetworkPolicies that select a pod: if other policies in the namespace
-(e.g., a namespace-wide "allow" policy) select the app's or MongoDB's
-pods, the sources they allow can connect too. Check them with
-`kubectl get networkpolicy -n <namespace>`, and keep their selectors off
-these pods.
+All of them route all paths (`/`) to the app, including FOCA's permissions
+API (`/admin/access-control/`, for admins only; see [Permissions
+API](https://trs-filer.readthedocs.io/en/latest/operations/#permissions-api)).
+To keep that API off the internet, block `/admin/` in the proxy in front of
+the cluster, or disable the chart's Ingress (and, on OpenShift, its Route:
+`trsFiler.route.enabled: false`) and create one of your own that routes only
+`/ga4gh/trs/v2/` to the app's Service (port `http`).
 
-## Resources
+The app advertises `https://<hostName>` URLs (e.g., the `url` of tools), and
+clients send bearer tokens with writes, so serve the app over HTTPS only: by
+default, the Ingress has no TLS (`https.enabled: false`) and serves plain
+HTTP, so TLS must be terminated in front of the cluster (e.g., by a load
+balancer); Helm's notes after installing say so.
 
-`trs_filer.resources` sets the CPU and memory of the app: by default a
-request of 256Mi and a limit of 384Mi memory. With the image's Gunicorn
-defaults (one worker with four threads) and the default request size limit
-(1 MiB), the app uses about 115 MB at rest (worker about 90 MB, master
-about 25 MB) and peaked at about 175 MB in a test with 12 concurrent
-registrations of about 1 MB each plus downloads and listings (resident set
-sizes, which count shared pages twice); the request covers that, and the
-limit leaves room for larger responses. With the request below the limit,
-the pod has the QoS class `Burstable`; set both to the same value (e.g.,
-384Mi) for `Guaranteed`.
+The app rejects request bodies over `config.server.max_content_length`
+bytes (default: 1 MiB, see [Server](#server)) in every setup; the chart sets
+no limit at the proxy. ingress-nginx limits request bodies to 1 MiB by
+default, the app's default: if you raise the app's limit, raise that of
+ingress-nginx too (`nginx.ingress.kubernetes.io/proxy-body-size` in
+`trsFiler.ingress.annotations`). The app has no rate limits of its own, and
+the chart sets none at the proxy: for production, limit the rate of
+requests per client at the ingress controller or Gateway (see the library
+chart's documentation, linked above).
 
-Each further Gunicorn worker loads the whole app, so add about 150Mi per
-worker to the request and the limit; more threads per worker or a higher
-request size limit (`server.max_content_length`) need more. The chart has no
-value for Gunicorn's settings (`GUNICORN_CMD_ARGS`, see
-[Server](https://trs-filer.readthedocs.io/en/latest/configuration/#server))
-yet: add the variable to the app's Deployment in a copy of the chart (see
-[Configuration](#configuration)), until the chart uses FOCA's library chart
-([#135](https://github.com/elixir-cloud-aai/trs-filer/issues/135)).
-`mongodb.resources` sets those of MongoDB (by default 512Mi).
-
-## Ingress and Route
-
-The chart exposes the app for `host_name` via an Ingress
-(`trs_filer.ingress.enabled`, by default `true`) or, if it is disabled and
-the cluster serves Routes, an OpenShift Route (`trs_filer.route.enabled`, by
-default `true`; with TLS at the router). With neither, nothing exposes the
-app (NOTES.txt warns of it): expose its Service (`<appName>`, port 8080)
-yourself, e.g., with a Route or HTTPRoute of your own. The Ingress routes
-all paths (`/`) to the app and is configured with:
-
-- `className` sets the Ingress class (`spec.ingressClassName`; default: the
-  cluster's default class);
-- `annotations` sets annotations, e.g., for the ingress controller; they
-  take precedence over those that the chart sets for `https`, and `null`
-  removes one of these;
-- `https.enabled` requests a certificate from cert-manager (via the
-  ClusterIssuer `https.issuer`) and serves HTTPS with it. Without it, the
-  Ingress serves plain HTTP: terminate TLS in front of the cluster then, as
-  the app advertises `https://<host_name>` URLs (e.g., the `url` of tools).
-
-The chart sets no annotations for particular ingress controllers. Writes
-need an access token of an admin (see [Configuration](#configuration)); to
-also allow the methods that change data (`POST`, `PUT`, `DELETE`) only
-from trusted clients, use the means of your ingress controller or proxy.
-For example (an example
-only, adapt it to your setup), with ingress-nginx, which allows them only
-from the network `192.0.2.0/24`:
+Writes need an access token of an admin (see
+[Configuration](#configuration)). To also allow the methods that change
+data (`POST`, `PUT`, `DELETE`) only from trusted clients, use the means of
+your ingress controller, Gateway or proxy. For example (an example only,
+adapt it to your setup), with ingress-nginx, which allows them only from the
+network `192.0.2.0/24`:
 
 ```yaml
-trs_filer:
+trsFiler:
   ingress:
     className: nginx
     annotations:
@@ -289,183 +317,191 @@ trs_filer:
 
 `allow` checks the source address that the controller sees, which is the
 client's only if it gets through: behind a load balancer, e.g., with
-`externalTrafficPolicy: Local` or the PROXY protocol (with
-`externalTrafficPolicy: Cluster`, clients appear with the addresses of the
-nodes). If the controller trusts forwarded headers (`use-forwarded-headers`),
-limit them to your proxies (`proxy-real-ip-cidr`, by default `0.0.0.0/0`),
-or anyone can claim an allowed address in `X-Forwarded-For`. A controller
-that doesn't allow snippets ignores the annotation (or its admission webhook
-rejects the Ingress), leaving writes unrestricted at the controller: check
-with a `POST` from an untrusted address that writes are refused (`403`).
-Recent versions of ingress-nginx disable snippet annotations by default (the
-controller must allow them, `allow-snippet-annotations`, and annotations of
-their risk level, `annotations-risk-level: Critical`), as they let anyone
-who can create Ingresses change the controller's configuration; check that
-this is acceptable in your cluster. ingress-nginx is also retired (no
-releases or security fixes after March 2026): with other controllers or the
-Gateway API, use their means to restrict methods or clients, or restrict
-them at a proxy in front of the cluster.
-
-### OpenShift Route
-
-The Route (`<appName>-route`) routes all paths to the app, with TLS at the
-router, which redirects HTTP to HTTPS. `trs_filer.route.annotations` sets
-its annotations, e.g., for the router's rate limits
-(`haproxy.router.openshift.io/rate-limit-connections: "true"` with, e.g.,
-`haproxy.router.openshift.io/rate-limit-connections.rate-http: "100"`);
-quote numbers, and `null` removes an annotation. The chart sets none, so
-the Route restricts nothing by default. The OpenShift router can't
-restrict methods, only clients: to allow only trusted clients (for all
-methods, also `GET`; an example only, adapt it to your setup), e.g., from
-the network `192.0.2.0/24`:
-
-```yaml
-trs_filer:
-  ingress:
-    enabled: false
-  route:
-    annotations:
-      haproxy.router.openshift.io/ip_allowlist: 192.0.2.0/24
-```
-
-Separate several networks or addresses with spaces; OpenShift before 4.14
-uses `haproxy.router.openshift.io/ip_whitelist`. The router checks the
-source address that it sees, which is the client's only if it gets
-through a load balancer in front of it (e.g., with the PROXY protocol or
-`externalTrafficPolicy: Local`); otherwise, it is that of the load
-balancer or a node. Writes need a token anyway; to also restrict them by
-address while keeping reads public, restrict them at a proxy in front of
-the router. Check with a `POST` from an untrusted address that writes are
+`externalTrafficPolicy: Local` or the PROXY protocol. If the controller
+trusts forwarded headers (`use-forwarded-headers`), limit them to your
+proxies (`proxy-real-ip-cidr`), or anyone can claim an allowed address in
+`X-Forwarded-For`. Recent versions of ingress-nginx disable snippet
+annotations by default (the controller must allow them,
+`allow-snippet-annotations`, and annotations of their risk level,
+`annotations-risk-level: Critical`), as they let anyone who can create
+Ingresses change the controller's configuration; a controller that doesn't
+allow them ignores the annotation (or rejects the Ingress), leaving writes
+unrestricted at the controller. ingress-nginx is also retired (no releases
+or security fixes after March 2026). The OpenShift router can't restrict
+methods, only clients, for all methods (e.g.,
+`haproxy.router.openshift.io/ip_allowlist: 192.0.2.0/24` in
+`trsFiler.route.annotations`; `ip_whitelist` before OpenShift 4.14). In
+every setup, check with a `POST` from an untrusted address that writes are
 refused.
 
 ### Forwarded headers
 
-The ingress controller or router terminates TLS and forwards requests to
-the app via HTTP, with `X-Forwarded-*` headers. The app trusts these
-headers from the addresses in `trs_filer.forwardedAllowIps` (Gunicorn's
-`FORWARDED_ALLOW_IPS`), so that the links in its responses (e.g., the
-`next_page`, `last_page` and `self_link` headers of tool listings) keep
-`https`. By default (`*`), it trusts them from every address, which works
-with any ingress controller or router, but lets every workload that can
-reach the app's Service or pod set the scheme of these links (and their
-path, via Gunicorn's `SCRIPT_NAME` header). The host of the links comes from the `Host` header, which
-this value doesn't cover: every client that reaches the pod sets it.
-
-Narrow it to the addresses that the ingress controller or router connects
-from, as addresses or networks in CIDR notation (network addresses, e.g.,
-`192.0.2.0/24`, not `192.0.2.1/24`), comma-separated or as a list, e.g.,
-the nodes' subnet if the controller runs in the host network:
+The ingress controller, Gateway or router terminates TLS and forwards
+requests to the app via HTTP, with `X-Forwarded-*` headers. Gunicorn trusts
+these headers from the local host only (its default), so the links that the
+app builds from the request (the `self_link` and `next_page` headers of tool
+listings) get `http`; the `url` of tools and versions comes from `hostName`
+(see [Configuration](#configuration)) and is not affected. To keep `https`
+in these links, set the addresses that the ingress controller or router
+connects from in Gunicorn's `FORWARDED_ALLOW_IPS`, via `trsFiler.extraEnv`:
+addresses or networks in CIDR notation, comma-separated (e.g., the nodes'
+subnet if the controller runs in the host network):
 
 ```yaml
-trs_filer:
-  forwardedAllowIps:
-    - 192.0.2.0/24
+trsFiler:
+  extraEnv:
+  - name: FORWARDED_ALLOW_IPS
+    value: "192.0.2.0/24"
 ```
 
-A network trusts every address in it: the pod network of the cluster
-(e.g., `10.128.0.0/14` on OpenShift) contains every pod, so it protects
-little. Pods get new addresses when they are rescheduled, so list
-networks rather than pod addresses, and restrict who can reach the app's
-pods with NetworkPolicies. An invalid entry stops the app (Gunicorn exits
-on startup); an empty value, entries with spaces inside, or a value that
-isn't a string or a list of strings fail rendering. Check afterwards that a
-listing through the Ingress or Route still gives `https` links (e.g.,
-`curl -sI 'https://trs.example.org/ga4gh/trs/v2/tools?limit=1'` and its
-`self_link` header). With an address that doesn't match, the links get
-`http`.
+Every workload that can reach the app's pods from a trusted address can set
+these headers, and so the scheme of these links (and their path, via
+Gunicorn's `SCRIPT_NAME` header); the host of the links comes from the
+`Host` header, which every client that reaches the pod sets. So never use
+`*` (as earlier charts did by default) if clients can reach the app's pods
+directly: a network trusts every address in it, and the pod network of the
+cluster (e.g., `10.128.0.0/14` on OpenShift) contains every pod; restrict
+who can reach the app's pods with its NetworkPolicy (see [Network
+policies](#network-policies)). An invalid entry stops the app (Gunicorn
+exits on startup). Check afterwards that a listing through the Ingress or
+Route gives `https` links (e.g., `curl -sI
+'https://trs.example.org/ga4gh/trs/v2/tools?limit=1'` and its `self_link`
+header).
 
-## Configuration
+## Security context
 
-The app's config has two overlays (`FOCA_CONFIG_OVERLAY`, merged in this
-order into the base config of the image):
+All containers run as non-root users, without privilege escalation or
+capabilities, with the runtime's default seccomp profile and a read-only
+root file system, as the Pod Security Standard "restricted" requires; they
+write to `emptyDir` volumes (`/tmp`) and MongoDB to its data volume. The app
+image runs as user 1000; the MongoDB image uses user 999, which the chart
+sets (`runAsUser`, `runAsGroup`), and `fsGroup` makes its data volume
+writable (applied on a mismatch only, `fsGroupChangePolicy:
+OnRootMismatch`). This needs storage that applies `fsGroup` (most
+dynamically provisioned volumes do; e.g., `hostPath` and some CSI drivers
+don't): otherwise, MongoDB can't write to a new volume and doesn't start. No
+pod gets a service account token (`automountServiceAccountToken: false`), as
+none calls the Kubernetes API.
 
-1. The public URL (`https://<host_name>:443`) and the MongoDB host: a Job
-   (`configmap-job-<appName>-<revision>`, run on every install and upgrade)
-   renders them into the base config of the image and writes the result to
-   the ConfigMap `app-config-<appName>`, replacing it as a whole (changes to
-   the ConfigMap are lost on the next upgrade). The database is set via
-   `MONGO_DBNAME` on the app's Deployment.
-2. The value `trs_filer.config`, rendered into the ConfigMap
-   `app-config-overlay-<appName>`: everything else, e.g., the identity
-   provider, the service info, `custom.remote_files` or the experimental
-   check of GA4GH I/O Schemas, `custom.io_schema.validation` (see
-   [Configuration](https://trs-filer.readthedocs.io/en/latest/configuration/)).
-   Leave out the settings that the Job sets (`custom.service` and
-   `db.host`). The app restarts when the value changes (the pod template
-   has its checksum).
+The `/tmp` volumes are limited to 64 MiB each by `tmpSizeLimit` of
+`trsFiler` and `mongodb` (a positive Kubernetes quantity, e.g., `64Mi`, or a
+number of bytes; `null` removes the limit); the kubelet evicts pods that
+exceed it.
 
-Writes need an access token of an admin (see [Access
-control](https://trs-filer.readthedocs.io/en/latest/access-control/)), so
-`trs_filer.config` must set the identity provider and the admin group (see
-[Deployment
-configuration](https://trs-filer.readthedocs.io/en/latest/configuration/#deployment-configuration));
-rendering fails without trusted token issuers
-(`security.auth.issuers`). The chart checks only these; the app checks
-the rest on startup and refuses to start, with the reason in its log, e.g.,
-without an audience or an admin group (check with `kubectl logs` and
-`kubectl rollout status` after installs and upgrades). E.g., in your
-values file:
+On OpenShift (detected by the API `security.openshift.io/v1`), the chart
+omits `runAsUser`, `runAsGroup` and `fsGroup`, as OpenShift assigns them
+from the namespace's range. The contexts are set in the values
+(`podSecurityContext` and `securityContext` of `trsFiler` and `mongodb`);
+mappings are merged with the defaults, and `null` removes a default. Some
+clusters set their own seccomp profile and reject pods that ask for one,
+such as the chart's default (`seccompProfile: {type: RuntimeDefault}`); on
+such clusters, remove it (`trsFiler.podSecurityContext.seccompProfile: null`
+and `mongodb.podSecurityContext.seccompProfile: null`), and the pods run
+with the profile that the cluster assigns.
 
-```yaml
-trs_filer:
-  config:
-    security:
-      auth:
-        issuers: ["https://login.example.org/oidc/"]
-        audience: ["trs-portal"]
-        userinfo_claims: ["groups"]
-      access_control:
-        claim_groups: groups
-        group_mapping:
-          trs-admins: admin
-    service_info:
-      service:
-        id: org.example.trs
-        name: Example TRS
-        organization:
-          name: Example Organization
-          url: https://example.org
-        contactUrl: mailto:trs-admins@example.org
-        environment: prod
-```
+## Network policies
 
-Without `service_info`, deployments serve the **placeholder service info**
-of the base config (`id: org.example.trs-filer`, organization `Example
-Organization`), and FOCA warns of it on startup. camelCase values and FOCA's
-library chart, which replaces the Job, follow
-([#135](https://github.com/elixir-cloud-aai/trs-filer/issues/135)).
+The chart creates
+[NetworkPolicies](https://kubernetes.io/docs/concepts/services-networking/network-policies/)
+that restrict which pods may connect to its pods (ingress); connections from
+the pods, e.g., of the app to the token issuers, are not restricted. They
+only take effect if the cluster's network plugin enforces NetworkPolicies
+(e.g., Calico or Cilium). NetworkPolicies add up: a pod that several
+policies select accepts the connections that any of them allows (e.g., a
+namespace-wide "allow" policy).
 
-## Upgrades
+- **MongoDB** (`mongodb.networkPolicy.enabled`, default `true`): only the
+  app's pods of the same release may connect. Disable it if you manage
+  policies yourself, or if other workloads (e.g., backups) must connect.
+- **App** (`trsFiler.networkPolicy.enabled`, default `false`): only the
+  NetworkPolicy peers in `trsFiler.networkPolicy.ingressFrom` may connect.
+  There are none by default, as they depend on the cluster: when enabling
+  the policy, set them to the pods of the cluster's ingress controller,
+  Gateway or OpenShift router (see [NetworkPolicy
+  peers](https://github.com/elixir-cloud-aai/foca/blob/chart-v0.5.0/docs/helm-chart.md#networkpolicy-peers)
+  in the library chart's documentation), and add other clients in the
+  cluster that call the app's Service directly; otherwise, the app is
+  unreachable through the Ingress (or Route). Rendering fails if the policy
+  is enabled without peers (which would allow all sources), e.g.:
 
-If you need to change any parameter of the deployment, the procedure is similar to installing:
+    ```yaml
+    trsFiler:
+      networkPolicy:
+        enabled: true
+        ingressFrom:
+        # ingress-nginx: its pods in the namespace `ingress-nginx`
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: ingress-nginx
+    ```
 
-1. Edit `values.yaml` (or your values file) with the new configuration you want to apply. For example, if you want to change the image of trs-filer, change `trs_filer.image`.
+    The policy also keeps other workloads from setting the forwarded
+    headers that the app trusts (see [Forwarded
+    headers](#forwarded-headers)).
 
-2. Upgrade the Helm chart. Run this from the `deployment` folder, or with the
-   `.tgz` of a release instead of `.`. `helm upgrade` applies the chart's
-   defaults for values you don't pass again (`host_name` would be empty, and
-   the configuration Job fails), so pass the same values as when installing,
-   e.g., your values file (`-f my-values.yaml`) or `--set host_name=...`.
-   `--reuse-values` reuses the release's values as they are, including the
-   chart's defaults at the time, so values that a newer chart adds or
-   changes (e.g., the [Security contexts](#security-contexts) and [Network
-   policies](#network-policies)) don't take effect; pass your values file
-   instead, or use `--reset-then-reuse-values` (Helm 3.14 or later), which
-   applies the new chart's defaults with your earlier values on top.
-   Charts that enable MongoDB's authentication (`mongodb.auth`) need its
-   Secret; for releases installed without it, create the Secret and the
-   users first (see [Authentication](#authentication)):
-```
-helm upgrade trs-filer . -n namespace -f my-values.yaml
-```
-`namespace` is the name of the namespace where the cluster was installed.
-`trs-filer` is the name given when installing. In order to see the correct name, do a `helm ls -n namespace`.
+`kubectl exec` and `kubectl port-forward` don't go through the pod network
+and are not affected. The policies don't block the probes: connections from
+the pod's own node, where the kubelet runs them, are allowed.
 
-Releases installed from the chart in the repository before (from the tag
-`v0.3.0` or from `dev`) may need more steps, or the upgrade **deletes the
-database** or leaves MongoDB unable to start: see [Helm
-chart](https://trs-filer.readthedocs.io/en/latest/upgrading/#helm-chart) in
-the upgrade notes before upgrading them.
+## Server
+
+The image serves the app with Gunicorn on port 8080 (see
+[Server](https://trs-filer.readthedocs.io/en/latest/configuration/#server)).
+The chart passes the settings in `trsFiler.gunicorn` to it (via
+`GUNICORN_CMD_ARGS`); the defaults are the image's (one worker process with
+4 threads, a timeout of 30 seconds, a graceful timeout of 20 seconds, and a
+keep-alive of 100 seconds, longer than the upstream keep-alive timeout of
+common ingress controllers: 60 seconds for ingress-nginx, 90 seconds for
+Traefik). Rendering fails if `extraArgs` set `--bind`/`-b`, `--preload` or
+`--graceful-timeout`. On shutdown, the app keeps serving for
+`trsFiler.preStopSleepSeconds` (default 5) before Gunicorn stops, so that the
+ingress controller stops sending requests to the pod first.
+
+`trsFiler.extraEnv` (Kubernetes `EnvVar`s) and `trsFiler.extraEnvFrom`
+(`EnvFromSource`s) add environment variables to the app's container, e.g.,
+`FORWARDED_ALLOW_IPS` (see [Forwarded headers](#forwarded-headers)) or
+settings from a Secret of your own; rendering fails for the variables that
+the chart sets itself, and for secrets as literal values. Helm doesn't
+restart the pods when a Secret changes, unless it is listed in
+`trsFiler.rolloutOnSecrets` (which needs Helm to read the cluster, so not
+with `helm template` or Argo CD); otherwise, restart them after changing one
+(`kubectl rollout restart deploy/trs-filer -n <namespace>`).
+
+`trsFiler.resources` sets the CPU and memory of the app: by default a
+request of 256Mi and a limit of 384Mi memory. With the default Gunicorn
+settings and request size limit (1 MiB), the app uses about 115 MB at rest
+(worker about 90 MB, master about 25 MB) and peaked at about 175 MB in a
+test with 12 concurrent registrations of about 1 MB each plus downloads and
+listings (resident set sizes, which count shared pages twice); the request
+covers that, and the limit leaves room for larger responses. Each further
+Gunicorn worker loads the whole app, so add about 150Mi per worker to the
+request and the limit before raising `workers`; more threads per worker or a
+higher request size limit (`config.server.max_content_length`) need more.
+`mongodb.resources` sets those of MongoDB (by default 512Mi).
+
+## Several replicas
+
+`trsFiler.replicas` (default: 1) sets the number of the app's pods. With
+more than one, the chart renders a PodDisruptionBudget, so that voluntary
+disruptions (e.g., node drains) evict at most one pod at once; set
+`trsFiler.podDisruptionBudget.minAvailable` or `maxUnavailable` to change
+that, or `enabled: false` to render none. Tools are kept in MongoDB, so
+the pods share them. See [Several
+replicas](https://github.com/elixir-cloud-aai/foca/blob/chart-v0.5.0/docs/helm-chart.md#several-replicas)
+in FOCA's docs for the caveats. The chart has no autoscaler.
+
+## Probes
+
+- **App:** ready once it serves its Swagger UI (`/ga4gh/trs/v2/ui/`; it
+  needs neither authentication nor the database; set `trsFiler.probePath`
+  if the config disables the Swagger UI); up to 5 minutes are allowed for
+  the start. `trsFiler.startupProbe`, `trsFiler.readinessProbe` and
+  `trsFiler.livenessProbe` (Kubernetes probe specs) each replace a default
+  entirely.
+- **MongoDB:** ready once it accepts connections.
 
 ## MongoDB
 
@@ -482,12 +518,12 @@ kubectl get nodes -o custom-columns=NODE:.metadata.name,KERNEL:.status.nodeInfo.
 ```
 
 MongoDB only starts on data whose feature compatibility version (FCV) it
-supports, so check the running version and the FCV before changing the image
-of an existing database (with `mongosh`, or `mongo`, the old shell, in
+supports, so check the running version and the FCV before changing the
+image of an existing database (with `mongosh`, or `mongo`, the old shell, in
 images before 6.0):
 
 ```bash
-kubectl exec deploy/mongodb-trs-filer -n namespace -- sh -c \
+kubectl exec deploy/trs-filer-mongodb -n <namespace> -- sh -c \
   '"$(command -v mongosh || echo mongo)" --quiet \
   -u "$MONGO_INITDB_ROOT_USERNAME" -p "$MONGO_INITDB_ROOT_PASSWORD" \
   --authenticationDatabase admin \
@@ -512,107 +548,199 @@ notes.)
 
 The MongoDB Deployment uses the `Recreate` strategy, as the data volume can
 only be used by one pod: changing the image stops MongoDB, and an image that
-cannot read the data leaves it down until the image is changed back.
+can't read the data leaves it down until the image is changed back.
 
 ### Authentication
 
 MongoDB requires credentials (`mongodb.auth.enabled`, by default `true`).
-The commands below use the default names (`trs_filer.appName`
-`trs-filer`, database `trs-filer-db`, Secret
-`trs-filer-mongodb-credentials`) and the namespace `namespace`; replace
-them with yours.
 They come from an existing Secret in the release's namespace, named by
-`mongodb.auth.existingSecret`, with four keys:
+`mongodb.auth.existingSecret`, with four keys (see
+[Installation](#installation)):
 
-- `root-username` and `root-password`: MongoDB's root user (in the
-  database `admin`), for administration (e.g., the commands in
-  [Version](#version)).
-- `username` and `password`: the app user, with the role `readWrite` on
-  the app's database (`mongodb.dbName`, by default `trs-filer-db`) only, in
-  which it is created; the app connects as this user (FOCA's
-  `MONGO_USERNAME` and `MONGO_PASSWORD`).
+- `root-username` and `root-password`: MongoDB's root user (in the database
+  `admin`), for administration (e.g., the commands in [Version](#version));
+- `username` and `password`: the app user, with the role `readWrite` on the
+  app's database, `trsStore`, only, in which it is created; the app
+  connects as this user (FOCA's `MONGO_USERNAME` and `MONGO_PASSWORD`).
+  `trsStore` also holds the rules of access control.
 
-Create the Secret before installing (see [Quick start](#quick-start));
-without a Secret name, rendering the chart fails. Values without
-`mongodb.auth.enabled` (e.g., upgrades with `--reuse-values` from older
-charts) enable authentication if they name a Secret. To run MongoDB without
-authentication, set `mongodb.auth.enabled: false` explicitly. Credentials
-never appear in values files or ConfigMaps.
+Without a Secret name, rendering fails. To run MongoDB without
+authentication, set `mongodb.auth.enabled: false` explicitly; any pod that
+can reach the MongoDB Service can then read and change the data (Helm's
+notes after installing warn of it). Credentials never appear in values
+files or ConfigMaps.
 
 MongoDB creates both users when it starts with an empty volume (the root
-user by its image's entrypoint, the app user by the init script
-`create-app-user.js` of the ConfigMap `mongo-init-script-<appName>`), and
-enforces authentication on every start. Changing the Secret doesn't change
-the users: to change a password, change it in MongoDB first (e.g.,
-`db.getSiblingDB("trs-filer-db").changeUserPassword("trs-filer", "<new
+user by its image's entrypoint, the app user by the init script of the
+ConfigMap `<app>-mongodb-init-script`), and enforces authentication on every
+start. Changing the Secret doesn't change the users: to change a password,
+change it in MongoDB first (e.g.,
+`db.getSiblingDB("trsStore").changeUserPassword("trs-filer", "<new
 password>")` as the root user), then update the Secret and restart the app
-(`kubectl rollout restart deploy/trs-filer -n namespace`); its requests to
-the database fail until then. After changing the root user's password,
-also restart MongoDB (`kubectl rollout restart deploy/mongodb-trs-filer -n
-namespace`), whose environment the commands in this README use for the
-root user's credentials. Changing `mongodb.dbName` of an installed
-release needs a user in the new database too.
-
-**Existing databases without authentication** (installed by earlier
-charts, or with `mongodb.auth.enabled: false`): MongoDB enforces
-authentication as soon as the chart enables it, but creates no users on
-the existing volume, so the app can't connect. Create the users first,
-while authentication is still off:
-
-1. Create the Secret (see [Quick start](#quick-start)).
-2. Create the users in the running MongoDB, with the credentials of the
-   Secret; the commands read them from the Secret, so that they don't
-   appear in the shell's history. If the database has users already
-   (e.g., it ran with authentication before), check them instead (see
-   below) and create only missing ones, with the commands for a missing
-   app user below:
-
-    ```bash
-    kubectl get secret trs-filer-mongodb-credentials -n namespace -o json \
-      | jq -r '.data | map_values(@base64d)
-          | "db.getSiblingDB(\"admin\").createUser({user: \(."root-username" | tojson), pwd: \(."root-password" | tojson), roles: [\"root\"]});
-             db.getSiblingDB(\"trs-filer-db\").createUser({user: \(.username | tojson), pwd: \(.password | tojson), roles: [{role: \"readWrite\", db: \"trs-filer-db\"}]});"' \
-      | kubectl exec -i deploy/mongodb-trs-filer -n namespace -- mongosh --quiet
-    ```
-
-    Check that the app user exists (the list shows `trs-filer`):
-
-    ```bash
-    kubectl exec deploy/mongodb-trs-filer -n namespace -- mongosh --quiet \
-      --eval 'printjson(db.getSiblingDB("trs-filer-db").getUsers().users.map(u => u.user))'
-    ```
-
-3. Upgrade the release with `mongodb.auth.existingSecret` set (and
-   `mongodb.auth.enabled` not set to `false`).
-
-If the root user exists but the app user is missing (e.g., because the
-first start was interrupted), log in as the root user and create only the
-app user:
-
-```bash
-kubectl exec -it deploy/mongodb-trs-filer -n namespace -- sh -c 'mongosh \
-  -u "$MONGO_INITDB_ROOT_USERNAME" -p "$MONGO_INITDB_ROOT_PASSWORD" \
-  --authenticationDatabase admin'
-```
-
-```javascript
-db.getSiblingDB("trs-filer-db").createUser({user: "trs-filer", pwd: "<password>", roles: [{role: "readWrite", db: "trs-filer-db"}]})
-```
+(`kubectl rollout restart deploy/trs-filer -n <namespace>`); its requests to
+the database fail until then. After changing the root user's password, also
+restart MongoDB (`kubectl rollout restart deploy/trs-filer-mongodb -n
+<namespace>`), whose environment the commands in this README use for the
+root user's credentials. See [Deployment
+notes](https://github.com/elixir-cloud-aai/foca/blob/chart-v0.5.0/docs/helm-chart.md#deployment-notes)
+of the library chart for creating the users of an existing database.
 
 ### Persistence
 
-MongoDB keeps its data in the PersistentVolumeClaim `mongodb-<appName>` (by
-default `mongodb-trs-filer`, of `mongodb.volumeSize`). The claim is
-annotated with `helm.sh/resource-policy: keep`, so Helm keeps it, and the
-database, when the release is uninstalled; installing a release with the
-same name and `trs_filer.appName` in the same namespace uses it again (Helm
-refuses to install a release of another name over it). Delete it by hand to
-remove the data (`kubectl delete pvc mongodb-trs-filer -n namespace`; with
-the reclaim policy `Retain`, also delete its PersistentVolume and the
-storage behind it with your storage provider).
+MongoDB keeps its data in a PersistentVolumeClaim (`<app>-mongodb`;
+`mongodb.persistence`: `size`, by default `1Gi`, `accessModes`,
+`storageClass`, or an `existingClaim`). Helm keeps the claim, and with it
+the database, when the release is uninstalled
+(`mongodb.persistence.resourcePolicy: keep`); a new release of the same name
+in the same namespace uses it again. To remove the data, delete the claim
+after uninstalling the release (`kubectl delete pvc trs-filer-mongodb -n
+<namespace>`; with the reclaim policy `Retain`, also delete its
+PersistentVolume and the storage behind it with your storage provider).
+With `mongodb.persistence.enabled: false` (e.g., for tests), the data is
+lost when MongoDB's pod is replaced.
 
-The claim's name follows `trs_filer.appName`: changing it for an installed
-release starts MongoDB on a new, empty claim (the old one is kept). Don't
-change it, or move the data with `mongodump` and `mongorestore` (see [Helm
-chart](https://trs-filer.readthedocs.io/en/latest/upgrading/#helm-chart) in
-the upgrade notes).
+### External MongoDB
+
+To use a MongoDB outside the release (e.g., a managed database), set
+`mongodb.enabled: false` and its host (and port) in the config; rendering
+fails without `config.db.host`:
+
+```yaml
+mongodb:
+  enabled: false
+  auth:
+    # Secret with the keys `username` and `password` of the app user
+    existingSecret: trs-filer-mongodb-credentials
+config:
+  db:
+    host: mongodb.example.org
+    port: 27017
+```
+
+The app authenticates as the app user against its database (`trsStore`), so
+create that user there, with the `readWrite` role on `trsStore`, which
+includes the right to create the indexes that the app creates on startup;
+allow the app's pods to connect to the database. Give each release a
+database server of its own: releases that share one use the same database,
+and so serve and change each other's tools.
+
+## Upgrades
+
+Change the values file (e.g., `config` for the config, `trsFiler.tag` for
+the image of a chart from the repository) and upgrade the release, with the
+chart of a release (or `deployment`, as when installing):
+
+```bash
+helm upgrade trs-filer trs-filer-{{ chart_version }}.tgz -n <namespace> \
+    -f values-prod.yaml
+```
+
+Upgrade with the values file (`-f`), not with `--reuse-values`, which would
+keep values that the chart no longer has, and without the defaults of the
+new chart. The app's pods are replaced when the config changes. See
+[Upgrading](https://trs-filer.readthedocs.io/en/latest/upgrading/) for the
+changes of the app since the last deployed version.
+
+### From earlier charts
+
+The charts before the library chart (up to the one of 0.5.0 and those on
+`dev` before it; with a config Job that wrote the ConfigMap) used other
+values, resource names and selectors, and the database `trs-filer-db`. The
+current chart renames the resources (see [Names and
+labels](#names-and-labels); e.g., `mongodb-trs-filer` becomes
+`trs-filer-mongodb`), changes the selectors of the Deployments, which can't
+be changed in place, and uses the database `trsStore`, so **releases of
+earlier charts can't be upgraded: uninstall them and install the current
+chart, moving the data.** `helm upgrade` fails for releases with
+Deployments of an earlier chart (only when Helm can query the cluster: not
+in `helm template` or client-side dry runs).
+
+Rendering fails for the values of earlier charts, which the current chart
+would ignore:
+
+| Earlier values | Now |
+| --- | --- |
+| `host_name` | `hostName` |
+| `trs_filer` (e.g., `trs_filer.ingress`, `trs_filer.resources`) | `trsFiler`, with the same keys unless listed here |
+| `trs_filer.config` | `config` |
+| `trs_filer.image` (with the tag, e.g., `elixircloud/trs-filer:X.Y.Z`) | `trsFiler.image` and `trsFiler.tag` (or the image with the tag and an empty `trsFiler.tag`, see [Image](#image)) |
+| `trs_filer.appName` (default `trs-filer`) | `fullnameOverride` (see [Names and labels](#names-and-labels)) |
+| `trs_filer.forwardedAllowIps` (default `*`) | `FORWARDED_ALLOW_IPS` in `trsFiler.extraEnv` (see [Forwarded headers](#forwarded-headers)) |
+| `apiServer` | none: the chart has no config Job |
+| `clusterType` (chart of `v0.3.0`) | none: a Route is created on OpenShift without an Ingress or HTTPRoute (see [Exposing the app](#exposing-the-app)) |
+| `mongodb.dbName` (default `trs-filer-db`) | none: the database is `trsStore` |
+| `mongodb.volumeSize` | `mongodb.persistence.size` |
+
+To keep the tools, dump the database before uninstalling and restore it
+into the new release. The app is down from the first to the last step. The
+commands are for the release `trs-filer` and the earlier charts' default
+names (`trs-filer` and `mongodb-trs-filer`, from `trs_filer.appName`, and
+the database `trs-filer-db`, from `mongodb.dbName`); replace them if yours
+differ:
+
+1. Stop the app and wait until its pods are gone, so that the data doesn't
+   change during the dump (the earlier charts label them `app: <appName>`):
+
+    ```bash
+    kubectl scale deploy/trs-filer -n <namespace> --replicas=0
+    kubectl wait pod -l app=trs-filer -n <namespace> --for=delete --timeout=120s
+    ```
+
+2. Dump the app's database to a local file, and check that MongoDB can read
+   the dump; continue only if `Dump OK` is printed:
+
+    ```bash
+    kubectl exec deploy/mongodb-trs-filer -n <namespace> -- sh -c 'mongodump --quiet \
+      -u "$MONGO_INITDB_ROOT_USERNAME" -p "$MONGO_INITDB_ROOT_PASSWORD" \
+      --authenticationDatabase admin --db trs-filer-db --archive' \
+      > trs-filer-db.archive \
+    && kubectl exec -i deploy/mongodb-trs-filer -n <namespace> -- sh -c 'mongorestore \
+      --dryRun -u "$MONGO_INITDB_ROOT_USERNAME" \
+      -p "$MONGO_INITDB_ROOT_PASSWORD" --authenticationDatabase admin \
+      --archive' < trs-filer-db.archive \
+    && echo "Dump OK"
+    ```
+
+3. Uninstall the release (`helm uninstall trs-filer -n <namespace>`) and
+   update the values file (see the table above). The claim of the earlier
+   chart (`mongodb-trs-filer`) is kept, with the data: keep it until the new
+   release serves the tools. The Secret with MongoDB's credentials can be
+   reused (the new release creates the users in its new volume); releases
+   that ran without authentication create it first (see
+   [Installation](#installation)). Set `mongodb.image` to the version of the
+   earlier release if it differs (see [Version](#version)).
+
+4. Install the current chart (see [Installation](#installation)), stop its
+   app again and wait until its pods are gone, so that it doesn't write
+   during the restore, and wait for MongoDB:
+
+    ```bash
+    kubectl scale deploy/trs-filer -n <namespace> --replicas=0
+    kubectl wait pod -n <namespace> --for=delete --timeout=120s \
+      -l app.kubernetes.io/instance=trs-filer,app.kubernetes.io/component=app
+    kubectl rollout status deploy/trs-filer-mongodb -n <namespace>
+    ```
+
+5. Restore the dump into `trsStore`, replacing the collections that the app
+   has created, and start the app (with the number of `trsFiler.replicas`)
+   only if the restore succeeded (`Restore OK`); otherwise, the app stays
+   stopped, and the restore can be repeated (`--drop`):
+
+    ```bash
+    kubectl exec -i deploy/trs-filer-mongodb -n <namespace> -- sh -c \
+      'mongorestore --quiet --drop --archive \
+      --nsFrom "trs-filer-db.*" --nsTo "trsStore.*" \
+      -u "$MONGO_INITDB_ROOT_USERNAME" -p "$MONGO_INITDB_ROOT_PASSWORD" \
+      --authenticationDatabase admin' < trs-filer-db.archive \
+    && echo "Restore OK" \
+    && kubectl scale deploy/trs-filer -n <namespace> --replicas=1
+    ```
+
+    The dump includes the rules of access control (collection
+    `policy_rules`), which the earlier charts kept in the app's database
+    too.
+
+6. Check that the app lists the tools (e.g., `curl -s
+   'https://trs.example.org/ga4gh/trs/v2/tools?limit=1'`), then delete the
+   earlier claim (`kubectl delete pvc mongodb-trs-filer -n <namespace>`) and
+   the dump.

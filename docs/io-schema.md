@@ -157,14 +157,13 @@ on registration). Tool versions stored before the check was enabled are not
 checked, nor those registered with replicas of the app that don't check yet
 while the option is rolled out.
 
-In the Helm chart, set the option in `trs_filer.config` (see the chart's
+In the Helm chart, set the option in `config` (see the chart's
 [Configuration](deployment.md#configuration)):
 
 ```yaml
-trs_filer:
-  config:
-    custom:
-      io_schema:
-        validation: true
-        timeout: 10
+config:
+  custom:
+    io_schema:
+      validation: true
+      timeout: 10
 ```

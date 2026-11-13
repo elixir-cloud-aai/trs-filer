@@ -23,3 +23,5 @@
 .vscode/
 # Values for linting and testing (CI, `tests/test_chart.py`)
 ci/
+# Digest of the dependencies, checked in CI and on release
+charts.sha256

@@ -1,11 +1,15 @@
-"""Tests of how the Helm chart (`deployment/`) exposes the app.
+"""Tests of the Helm chart (`deployment/`), a thin chart on FOCA's library chart.
 
 They render the chart with `helm template`. Without Helm, they are skipped,
 except in CI (`CI` set), where they fail: GitHub's Ubuntu runners have Helm.
+The library chart (`foca-common`) must be downloaded first (`helm dependency
+build deployment`), or they fail.
 """
 
+import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import tarfile
@@ -16,33 +20,52 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 CHART = ROOT / "deployment"
-# Values of CI's lint, e.g., the Secret of MongoDB's credentials
+# Values of CI's lint: a host name, the Secret of MongoDB's credentials and a
+# fictitious identity provider with an admin group
 TEST_VALUES = CHART / "ci" / "test-values.yaml"
 HELM = shutil.which("helm")
-ROUTE_API = "route.openshift.io/v1"
-ALLOWLIST = "haproxy.router.openshift.io/ip_allowlist"
+RELEASE = "trs-filer"
+# Names of the app's and MongoDB's resources of the release `trs-filer`
+APP = "trs-filer"
+MONGODB = "trs-filer-mongodb"
+HOST = "trs.example.org"
+SECRET = "trs-filer-mongodb-credentials"  # noqa: S105 (a Secret's name)
+ROUTE_API = ("--api-versions", "route.openshift.io/v1")
+OPENSHIFT_API = ("--api-versions", "security.openshift.io/v1")
+NO_INGRESS = ("--set", "trsFiler.ingress.enabled=false")
+LIBRARY = "foca-common"
 
 pytestmark = pytest.mark.skipif(
     HELM is None and not os.environ.get("CI"), reason="Helm is not installed"
 )
 
+Manifest = dict[str, Any]
 
-def helm_template(chart: Path, *args: str) -> str:
-    """Render a chart with `helm template`.
+
+def helm_template(chart: Path, *args: str, release: str = RELEASE) -> str:
+    """Render a chart with `helm template`, with the values of CI's lint.
 
     Args:
         chart: Directory of the chart.
         *args: Further arguments of `helm template`, e.g., `--set`.
+        release: Name of the release.
 
     Returns:
         The rendered manifests.
+
+    Raises:
+        RuntimeError: The library chart is missing.
     """
     assert HELM is not None, "Helm is not installed"
+    if not list((chart / "charts").glob(f"{LIBRARY}-*.tgz")):
+        raise RuntimeError(
+            "The library chart is missing: run `helm dependency build deployment`"
+        )
     result = subprocess.run(  # noqa: S603 (fixed executable, no shell)
         [
             HELM,
             "template",
-            "trs-filer",
+            release,
             str(chart),
             "--namespace",
             "trs",
@@ -57,23 +80,56 @@ def helm_template(chart: Path, *args: str) -> str:
     return result.stdout
 
 
-def render(*args: str) -> list[dict[str, Any]]:
+def render(*args: str, release: str = RELEASE) -> list[Manifest]:
     """Render the chart's resources.
+
+    Args:
+        *args: Further arguments of `helm template`, e.g., `--set`.
+        release: Name of the release.
+
+    Returns:
+        The rendered resources.
+    """
+    rendered = helm_template(CHART, *args, release=release)
+    return [doc for doc in yaml.safe_load_all(rendered) if doc]
+
+
+def render_error(*args: str) -> str:
+    """Render the chart, expecting Helm to fail.
 
     Args:
         *args: Further arguments of `helm template`, e.g., `--set`.
 
     Returns:
-        The rendered resources.
+        Helm's error output.
     """
-    return [doc for doc in yaml.safe_load_all(helm_template(CHART, *args)) if doc]
+    with pytest.raises(subprocess.CalledProcessError) as error:
+        helm_template(CHART, *args)
+    stderr: str = error.value.stderr
+    return stderr
+
+
+def copy_chart(tmp_path: Path, templates: dict[str, str]) -> Path:
+    """Copy the chart, with additional templates.
+
+    Args:
+        tmp_path: Directory for the copy of the chart.
+        templates: Contents of the additional templates, by file name.
+
+    Returns:
+        The copy of the chart.
+    """
+    chart = tmp_path / "chart"
+    shutil.copytree(CHART, chart)
+    for name, template in templates.items():
+        (chart / "templates" / name).write_text(template, encoding="utf-8")
+    return chart
 
 
 def render_notes(tmp_path: Path, *args: str) -> str:
     """Render the chart's `NOTES.txt`, which `helm template` leaves out.
 
-    The chart is copied, and a template of the copy renders `NOTES.txt` into
-    a document.
+    A template of a copy of the chart renders `NOTES.txt` into a document.
 
     Args:
         tmp_path: Directory for the copy of the chart.
@@ -82,18 +138,36 @@ def render_notes(tmp_path: Path, *args: str) -> str:
     Returns:
         The rendered notes.
     """
-    chart = tmp_path / "chart"
-    shutil.copytree(CHART, chart)
-    (chart / "templates" / "NOTES.txt").rename(chart / "NOTES.raw")
-    (chart / "templates" / "notes.yaml").write_text(
-        'notes: {{ tpl (.Files.Get "NOTES.raw") . | toJson }}\n', encoding="utf-8"
+    chart = copy_chart(
+        tmp_path,
+        {"notes.yaml": 'notes: {{ tpl (.Files.Get "NOTES.raw") . | toJson }}\n'},
     )
+    (chart / "templates" / "NOTES.txt").rename(chart / "NOTES.raw")
     manifests = helm_template(chart, "--show-only", "templates/notes.yaml", *args)
     notes: str = yaml.safe_load(manifests)["notes"]
     return notes
 
 
-def of_kind(resources: list[dict[str, Any]], kind: str) -> list[dict[str, Any]]:
+def find(resources: list[Manifest], kind: str, name: str) -> Manifest:
+    """Get the resource of a kind and name.
+
+    Args:
+        resources: Rendered resources.
+        kind: Kind of the resource, e.g., `Deployment`.
+        name: Name of the resource.
+
+    Returns:
+        The resource.
+    """
+    (resource,) = [
+        resource
+        for resource in resources
+        if resource["kind"] == kind and resource["metadata"]["name"] == name
+    ]
+    return resource
+
+
+def of_kind(resources: list[Manifest], kind: str) -> list[Manifest]:
     """Select the resources of a kind.
 
     Args:
@@ -106,880 +180,591 @@ def of_kind(resources: list[dict[str, Any]], kind: str) -> list[dict[str, Any]]:
     return [resource for resource in resources if resource["kind"] == kind]
 
 
-def test_ingress_by_default() -> None:
-    """By default, the chart creates the Ingress and no Route."""
-    resources = render("--api-versions", ROUTE_API)
-    assert len(of_kind(resources, "Ingress")) == 1
-    assert of_kind(resources, "Route") == []
-
-
-def test_route_without_ingress() -> None:
-    """Without the Ingress, the chart creates the Route, without annotations."""
-    resources = render(
-        "--api-versions", ROUTE_API, "--set", "trs_filer.ingress.enabled=false"
-    )
-    assert of_kind(resources, "Ingress") == []
-    (route,) = of_kind(resources, "Route")
-    assert "annotations" not in route["metadata"]
-
-
-def test_route_needs_route_api() -> None:
-    """The chart creates no Route if the cluster serves no Routes."""
-    resources = render("--set", "trs_filer.ingress.enabled=false")
-    assert of_kind(resources, "Route") == []
-
-
-def test_route_annotations(tmp_path: Path) -> None:
-    """The Route gets `trs_filer.route.annotations`, as strings.
-
-    `null` leaves an annotation out.
+def overlay(resources: list[Manifest], name: str = APP) -> dict[str, Any]:
+    """Get the app's config overlay.
 
     Args:
-        tmp_path: Directory for the values file.
+        resources: Rendered resources.
+        name: Name of the app's resources.
+
+    Returns:
+        The overlay of the ConfigMap `<app>-config`.
     """
-    values = tmp_path / "values.yaml"
-    values.write_text(
-        yaml.safe_dump(
-            {
-                "trs_filer": {
-                    "ingress": {"enabled": False},
-                    "route": {
-                        "annotations": {
-                            ALLOWLIST: "192.0.2.0/24",
-                            "example.org/number": 100,
-                            "example.org/removed": None,
-                        }
-                    },
-                }
-            }
-        ),
-        encoding="utf-8",
-    )
-    resources = render("--api-versions", ROUTE_API, "--values", str(values))
-    (route,) = of_kind(resources, "Route")
-    assert route["metadata"]["annotations"] == {
-        ALLOWLIST: "192.0.2.0/24",
-        "example.org/number": "100",
+    config_map = find(resources, "ConfigMap", f"{name}-config")
+    config: dict[str, Any] = yaml.safe_load(config_map["data"]["overlay.yaml"])
+    return config
+
+
+def pod_spec(resources: list[Manifest], name: str = APP) -> Manifest:
+    """Get the pod spec of a Deployment.
+
+    Args:
+        resources: Rendered resources.
+        name: Name of the Deployment.
+
+    Returns:
+        Its pod spec.
+    """
+    spec: Manifest = find(resources, "Deployment", name)["spec"]["template"]["spec"]
+    return spec
+
+
+def container(resources: list[Manifest], name: str = APP) -> Manifest:
+    """Get the container of a Deployment.
+
+    Args:
+        resources: Rendered resources.
+        name: Name of the Deployment.
+
+    Returns:
+        Its only container.
+    """
+    (only,) = pod_spec(resources, name)["containers"]
+    return only
+
+
+def env(resources: list[Manifest], name: str = APP) -> dict[str, Any]:
+    """Get the environment variables of a Deployment's container.
+
+    Args:
+        resources: Rendered resources.
+        name: Name of the Deployment.
+
+    Returns:
+        The variables, by name: their values, or their `valueFrom`.
+    """
+    return {
+        var["name"]: var.get("value", var.get("valueFrom"))
+        for var in container(resources, name).get("env", [])
     }
 
 
-def test_route_disabled() -> None:
-    """With `trs_filer.route.enabled: false`, the chart creates no Route."""
-    resources = render(
-        "--api-versions",
-        ROUTE_API,
-        "--set",
-        "trs_filer.ingress.enabled=false",
-        "--set",
-        "trs_filer.route.enabled=false",
-    )
-    assert of_kind(resources, "Route") == []
-    assert of_kind(resources, "Ingress") == []
+def test_resources() -> None:
+    """The chart renders the library's resources, without the config Job.
 
-
-def test_route_without_route_values() -> None:
-    """Values without `trs_filer.route` (e.g., of older charts) keep the Route.
-
-    So do upgrades with `--reuse-values` from charts without the value.
-    `null` removes the key from the chart's defaults.
+    No Job, ServiceAccount or RBAC: Helm renders the config overlay.
     """
-    resources = render(
-        "--api-versions",
-        ROUTE_API,
-        "--set",
-        "trs_filer.ingress.enabled=false",
-        "--set",
-        "trs_filer.route=null",
+    resources = render()
+    names = {(r["kind"], r["metadata"]["name"]) for r in resources}
+    assert names == {
+        ("ConfigMap", f"{APP}-config"),
+        ("ConfigMap", f"{MONGODB}-init-script"),
+        ("Deployment", APP),
+        ("Deployment", MONGODB),
+        ("Service", APP),
+        ("Service", MONGODB),
+        ("PersistentVolumeClaim", MONGODB),
+        ("NetworkPolicy", MONGODB),
+        ("Ingress", APP),
+    }
+    for resource in resources:
+        labels = resource["metadata"]["labels"]
+        assert labels["app.kubernetes.io/instance"] == RELEASE
+        assert labels["app.kubernetes.io/name"] == "trs-filer"
+
+
+def test_names_from_release() -> None:
+    """Resource names are derived from the release name."""
+    resources = render(release="prod")
+    assert find(resources, "Deployment", "prod-trs-filer")
+    assert find(resources, "Deployment", "prod-trs-filer-mongodb")
+    config = overlay(resources, "prod-trs-filer")
+    assert config["db"]["host"] == "prod-trs-filer-mongodb"
+
+
+def test_config_overlay() -> None:
+    """The overlay has the public URL, MongoDB's host and the `config` value.
+
+    The public URL (`custom.service`) is `https://<hostName>:443`.
+    """
+    config = overlay(render())
+    assert config["custom"]["service"] == {
+        "url_prefix": "https",
+        "external_host": HOST,
+        "external_port": 443,
+    }
+    assert config["db"] == {"host": MONGODB}
+    assert config["security"]["auth"]["issuers"] == ["https://login.example.org/oidc/"]
+
+
+def test_config_overrides_generated() -> None:
+    """`config` takes precedence over the generated config, merged by key."""
+    config = overlay(
+        render(
+            "--set",
+            "config.custom.service.external_port=8443",
+            "--set",
+            "config.custom.remote_files.max_size=10",
+        )
     )
-    assert len(of_kind(resources, "Route")) == 1
+    assert config["custom"]["service"]["external_port"] == 8443
+    assert config["custom"]["service"]["external_host"] == HOST
+    assert config["custom"]["remote_files"] == {"max_size": 10}
 
 
-def test_notes_ingress(tmp_path: Path) -> None:
-    """With the Ingress, the notes give its URLs and who may write.
+def test_config_custom_null() -> None:
+    """`config.custom: null` keeps the generated public URL."""
+    config = overlay(render("--set-json", "config.custom=null"))
+    assert config["custom"]["service"]["external_host"] == HOST
+
+
+def test_deployment() -> None:
+    """The app reads the overlay, and MongoDB's app user from the Secret.
+
+    The chart sets no database (`MONGO_DBNAME`): the app uses that of its
+    base config (`trsStore`). It trusts no forwarded headers by default.
+    """
+    resources = render()
+    variables = env(resources)
+    assert variables["FOCA_CONFIG_OVERLAY"] == "/etc/trs-filer/overlay.yaml"
+    assert variables["MONGO_USERNAME"] == {
+        "secretKeyRef": {"name": SECRET, "key": "username"}
+    }
+    assert variables["MONGO_PASSWORD"] == {
+        "secretKeyRef": {"name": SECRET, "key": "password"}
+    }
+    assert variables["GUNICORN_CMD_ARGS"] == (
+        "--workers 1 --threads 4 --timeout 30 --graceful-timeout 20 --keep-alive 100"
+    )
+    for name in ("MONGO_DBNAME", "MONGO_HOST", "FORWARDED_ALLOW_IPS"):
+        assert name not in variables
+    spec = pod_spec(resources)
+    assert spec["automountServiceAccountToken"] is False
+    assert "serviceAccountName" not in spec
+
+
+def test_image() -> None:
+    """The image is tagged with `appVersion` (`dev`), unless a tag is set."""
+    app = container(render())
+    assert app["image"] == "docker.io/elixircloud/trs-filer:dev"
+    assert app["imagePullPolicy"] == "Always"
+    tagged = container(render("--set", "trsFiler.tag=1.2.3"))
+    assert tagged["image"] == "docker.io/elixircloud/trs-filer:1.2.3"
+
+
+def test_probes() -> None:
+    """The app's probes request the Swagger UI."""
+    app = container(render())
+    for probe in ("startupProbe", "readinessProbe", "livenessProbe"):
+        assert app[probe]["httpGet"] == {"path": "/ga4gh/trs/v2/ui/", "port": 8080}
+
+
+def test_gunicorn() -> None:
+    """The Gunicorn values are passed to the image."""
+    variables = env(render("--set", "trsFiler.gunicorn.workers=2"))
+    assert variables["GUNICORN_CMD_ARGS"].startswith("--workers 2 ")
+
+
+def test_extra_env() -> None:
+    """`trsFiler.extraEnv` sets further variables, e.g., `FORWARDED_ALLOW_IPS`."""
+    extra = [{"name": "FORWARDED_ALLOW_IPS", "value": "192.0.2.0/24"}]
+    variables = env(render("--set-json", f"trsFiler.extraEnv={json.dumps(extra)}"))
+    assert variables["FORWARDED_ALLOW_IPS"] == "192.0.2.0/24"
+
+
+def test_extra_env_reserved() -> None:
+    """`trsFiler.extraEnv` must not set the chart's variables."""
+    extra = [{"name": "FOCA_CONFIG_OVERLAY", "value": "/etc/other.yaml"}]
+    error = render_error("--set-json", f"trsFiler.extraEnv={json.dumps(extra)}")
+    assert "FOCA_CONFIG_OVERLAY" in error
+
+
+def test_init_script() -> None:
+    """MongoDB's init script creates the app user in the app's database."""
+    resources = render()
+    config_map = find(resources, "ConfigMap", f"{MONGODB}-init-script")
+    script = config_map["data"]["create-app-user.js"]
+    assert "getSiblingDB('trsStore')" in script
+    assert "trs-filer-db" not in script
+
+
+def test_mongodb_auth_needs_secret() -> None:
+    """Rendering fails without the Secret of MongoDB's credentials."""
+    error = render_error("--set", "mongodb.auth.existingSecret=")
+    assert "mongodb.auth.existingSecret" in error
+
+
+def test_mongodb_auth_disabled() -> None:
+    """Without authentication, the chart creates no users and passes none."""
+    resources = render(
+        "--set", "mongodb.auth.enabled=false", "--set", "mongodb.auth.existingSecret="
+    )
+    names = [r["metadata"]["name"] for r in of_kind(resources, "ConfigMap")]
+    assert names == [f"{APP}-config"]
+    assert "MONGO_USERNAME" not in env(resources)
+
+
+def test_mongodb_persistence() -> None:
+    """MongoDB's claim is kept when the release is uninstalled."""
+    claim = find(render(), "PersistentVolumeClaim", MONGODB)
+    assert claim["metadata"]["annotations"]["helm.sh/resource-policy"] == "keep"
+    assert claim["spec"]["resources"]["requests"]["storage"] == "1Gi"
+
+
+def test_mongodb_volume_size_deprecated() -> None:
+    """`mongodb.volumeSize` of the earlier charts fails with `persistence.size`."""
+    assert "volumeSize" in render_error("--set", "mongodb.volumeSize=2Gi")
+
+
+def test_security_contexts() -> None:
+    """The pods run as non-root users, with a read-only root file system."""
+    resources = render()
+    for name in (APP, MONGODB):
+        assert pod_spec(resources, name)["securityContext"]["runAsNonRoot"] is True
+        context = container(resources, name)["securityContext"]
+        assert context["readOnlyRootFilesystem"] is True
+    mongodb = pod_spec(resources, MONGODB)["securityContext"]
+    assert mongodb["runAsUser"] == 999
+    assert mongodb["fsGroupChangePolicy"] == "OnRootMismatch"
+
+
+def test_security_contexts_openshift() -> None:
+    """On OpenShift, user and group IDs are left to OpenShift."""
+    mongodb = pod_spec(render(*OPENSHIFT_API), MONGODB)["securityContext"]
+    for key in ("runAsUser", "runAsGroup", "fsGroup"):
+        assert key not in mongodb
+
+
+def test_route_without_ingress() -> None:
+    """Without the Ingress, the chart creates a Route on OpenShift."""
+    resources = render(*ROUTE_API, *NO_INGRESS)
+    assert of_kind(resources, "Ingress") == []
+    assert find(resources, "Route", APP)["spec"]["host"] == HOST
+    assert of_kind(render(*NO_INGRESS), "Route") == []
+    assert of_kind(render(*ROUTE_API), "Route") == []
+
+
+def test_http_route() -> None:
+    """With the Ingress disabled, the chart can attach an HTTPRoute."""
+    parents = [{"name": "gateway", "namespace": "gateway-system"}]
+    resources = render(
+        *NO_INGRESS,
+        "--set",
+        "trsFiler.httpRoute.enabled=true",
+        "--set-json",
+        f"trsFiler.httpRoute.parentRefs={json.dumps(parents)}",
+    )
+    assert find(resources, "HTTPRoute", APP)["spec"]["hostnames"] == [HOST]
+
+
+def test_app_network_policy() -> None:
+    """The app's NetworkPolicy admits the peers in `ingressFrom`, required."""
+    peers = [{"namespaceSelector": {"matchLabels": {"name": "ingress"}}}]
+    resources = render(
+        "--set",
+        "trsFiler.networkPolicy.enabled=true",
+        "--set-json",
+        f"trsFiler.networkPolicy.ingressFrom={json.dumps(peers)}",
+    )
+    policy = find(resources, "NetworkPolicy", APP)
+    assert policy["spec"]["ingress"][0]["from"] == peers
+    assert "ingressFrom" in render_error("--set", "trsFiler.networkPolicy.enabled=true")
+
+
+def test_replicas() -> None:
+    """Several replicas get a PodDisruptionBudget."""
+    resources = render("--set", "trsFiler.replicas=2")
+    assert find(resources, "Deployment", APP)["spec"]["replicas"] == 2
+    assert find(resources, "PodDisruptionBudget", APP)
+
+
+def test_autoscaling_rejected() -> None:
+    """The chart has no HorizontalPodAutoscaler, so the schema refuses it."""
+    assert "autoscaling" in render_error("--set", "trsFiler.autoscaling.enabled=true")
+
+
+def test_host_name_required() -> None:
+    """Rendering fails without `hostName`, which sets the public URL."""
+    assert "hostName must be set" in render_error("--set", "hostName=")
+
+
+@pytest.mark.parametrize(
+    ("args", "message"),
+    [
+        (("--set", "host_name=trs.example.org"), "host_name was renamed to hostName"),
+        (("--set", "trs_filer.appName=trs"), "trs_filer was renamed to trsFiler"),
+        (("--set", "apiServer=kubernetes.default.svc:443"), "apiServer was removed"),
+        (("--set", "clusterType=openshift"), "clusterType was removed"),
+        (("--set", "trsFiler.appName=trs"), "trsFiler.appName was removed"),
+        (("--set", "trsFiler.config.x=1"), "trsFiler.config was removed"),
+        (
+            ("--set", "trsFiler.forwardedAllowIps=*"),
+            "trsFiler.forwardedAllowIps was removed",
+        ),
+        (("--set", "mongodb.dbName=trs-filer-db"), "mongodb.dbName was removed"),
+    ],
+)
+def test_legacy_values(args: tuple[str, ...], message: str) -> None:
+    """Values of the charts before foca-common fail, instead of being ignored.
+
+    Args:
+        args: Arguments that set a legacy value.
+        message: Expected part of the error.
+    """
+    error = render_error(*args)
+    assert message in error
+    assert "From earlier charts" in error
+
+
+def test_legacy_values_before_host_name() -> None:
+    """A renamed `host_name` is reported instead of the missing `hostName`."""
+    error = render_error("--set", "hostName=", "--set", "host_name=trs.example.org")
+    assert "host_name was renamed" in error
+
+
+@pytest.mark.parametrize(
+    ("args", "message"),
+    [
+        (("--set-json", "config.security.auth.issuers=[]"), "issuers"),
+        (("--set-json", "config.security.auth.audience=null"), "audience"),
+        (("--set-json", "config.security.access_control.group_mapping={}"), "admin"),
+        (("--set", "config.security.access_control.enforce=false"), "enforce"),
+    ],
+)
+def test_access_control_required(args: tuple[str, ...], message: str) -> None:
+    """Rendering fails without what the app needs to start (as on startup).
+
+    Args:
+        args: Arguments that unset a required setting.
+        message: Expected part of the error.
+    """
+    assert message in render_error(*args)
+
+
+def test_access_control_without_admins() -> None:
+    """Without required admins, no admin group is needed."""
+    resources = render(
+        "--set-json",
+        "config.security.access_control.group_mapping={}",
+        "--set",
+        "config.security.access_control.require_admin=false",
+    )
+    assert overlay(resources)["security"]["access_control"]["require_admin"] is False
+
+
+def test_test_values_not_packaged(tmp_path: Path) -> None:
+    """The packaged chart has the library, but not the CI values and digest.
+
+    Args:
+        tmp_path: Directory for the package.
+    """
+    assert HELM is not None
+    subprocess.run(  # noqa: S603 (fixed executable, no shell)
+        [HELM, "package", str(CHART), "--destination", str(tmp_path)],
+        capture_output=True,
+        check=True,
+    )
+    (package,) = tmp_path.glob("trs-filer-*.tgz")
+    with tarfile.open(package) as archive:
+        names = archive.getnames()
+    assert "trs-filer/values.schema.json" in names
+    assert [name for name in names if name.startswith(f"trs-filer/charts/{LIBRARY}")]
+    assert not [name for name in names if "/ci/" in name]
+    assert "trs-filer/charts.sha256" not in names
+
+
+def test_library_versions() -> None:
+    """Chart, lock, digest and schema name the same library version."""
+    chart = yaml.safe_load((CHART / "Chart.yaml").read_text())
+    lock = yaml.safe_load((CHART / "Chart.lock").read_text())
+    (dependency,) = chart["dependencies"]
+    (locked,) = lock["dependencies"]
+    assert dependency["name"] == locked["name"] == LIBRARY
+    assert dependency["version"] == locked["version"]
+    version = dependency["version"]
+    digest = (CHART / "charts.sha256").read_text()
+    assert digest.rstrip().endswith(f"  charts/{LIBRARY}-{version}.tgz")
+    schema = json.loads((CHART / "values.schema.json").read_text())
+    assert f"{LIBRARY} {version} " in schema["$comment"]
+
+
+# Calls the check of upgrades with a Deployment as `lookup` returns it
+LEGACY_CHECK = """{{- include "trs-filer.failIfLegacy" (dict "root" . "resource" (dict
+  "metadata" (dict
+    "name" "NAME"
+    "annotations" (dict "meta.helm.sh/release-name" "RELEASE")
+    "labels" (dict LABELS)
+  )
+)) }}
+"""
+
+
+INSTANCE = (
+    '"app.kubernetes.io/instance" "trs-filer" "app.kubernetes.io/name" "trs-filer"'
+)
+MONGODB_LABELS = f'{INSTANCE} "app.kubernetes.io/component" "mongodb"'
+EXISTING_CLAIM = ("--set", "mongodb.persistence.existingClaim=old-claim")
+
+
+@pytest.mark.parametrize(
+    ("release", "name", "labels", "args", "error"),
+    [
+        # A Deployment of a chart before foca-common, of this release
+        ("trs-filer", APP, '"app" "trs-filer"', (), "uninstall it and install"),
+        # Ones of this chart
+        ("trs-filer", APP, INSTANCE, (), None),
+        ("trs-filer", MONGODB, MONGODB_LABELS, (), None),
+        # Another name label (a changed nameOverride), with the same names
+        (
+            "trs-filer",
+            APP,
+            '"app.kubernetes.io/instance" "trs-filer" "app.kubernetes.io/name" "filer"',
+            (),
+            "a changed nameOverride",
+        ),
+        # Its MongoDB under another name (a changed fullnameOverride)
+        ("trs-filer", "old-mongodb", MONGODB_LABELS, (), "new, empty claim"),
+        # ... which keeps its data with an existing claim, or has none
+        ("trs-filer", "old-mongodb", MONGODB_LABELS, EXISTING_CLAIM, None),
+        (
+            "trs-filer",
+            "old-mongodb",
+            MONGODB_LABELS,
+            ("--set", "mongodb.persistence.enabled=false"),
+            None,
+        ),
+        (
+            "trs-filer",
+            "old-mongodb",
+            MONGODB_LABELS,
+            ("--set", "mongodb.enabled=false", "--set", "config.db.host=db.local"),
+            None,
+        ),
+        # Ones of another release
+        ("other", APP, '"app" "trs-filer"', (), None),
+        ("other", "old-mongodb", MONGODB_LABELS, (), None),
+    ],
+)
+def test_fail_if_legacy(
+    tmp_path: Path,
+    release: str,
+    name: str,
+    labels: str,
+    args: tuple[str, ...],
+    error: str | None,
+) -> None:
+    """Upgrades fail for earlier charts' Deployments and for renames.
+
+    `lookup` finds nothing in `helm template`, so the check is called with a
+    Deployment of the release as `lookup` would return it.
+
+    Args:
+        tmp_path: Directory for the copy of the chart.
+        release: Release that the Deployment belongs to.
+        name: Name of the Deployment.
+        labels: Labels of the Deployment (template arguments of `dict`).
+        args: Further arguments of `helm template`.
+        error: Expected part of the error, or None if the check passes.
+    """
+    template = (
+        LEGACY_CHECK.replace("RELEASE", release)
+        .replace("NAME", name)
+        .replace("LABELS", labels)
+    )
+    chart = copy_chart(tmp_path, {"legacy-check.yaml": template})
+    if error:
+        with pytest.raises(subprocess.CalledProcessError) as failure:
+            helm_template(chart, *args)
+        assert error in failure.value.stderr
+    else:
+        helm_template(chart, *args)
+
+
+def test_upgrade_check_included() -> None:
+    """The check of upgrades runs on upgrades, once, in the app's ConfigMap.
+
+    `lookup` finds nothing in `helm template`, so an upgrade renders; the
+    check itself is tested by `test_fail_if_legacy`.
+    """
+    templates = {
+        path.name: path.read_text(encoding="utf-8")
+        for path in (CHART / "templates").glob("*.yaml")
+    }
+    assert [
+        name for name, text in templates.items() if "trs-filer.checkUpgrade" in text
+    ] == ["configmap.yaml"]
+    helpers = (CHART / "templates" / "_helpers.tpl").read_text(encoding="utf-8")
+    check = helpers.split('{{- define "trs-filer.checkUpgrade" -}}')[1]
+    assert check.lstrip().startswith("{{- if .Release.IsUpgrade -}}")
+    assert find(render("--is-upgrade"), "ConfigMap", f"{APP}-config")
+
+
+def test_readme_references() -> None:
+    """The chart's references to sections of its README name existing ones.
+
+    References (e.g., "see deployment/README.md, Server") may span lines of
+    comments, which are joined first.
+    """
+    readme = (CHART / "README.md").read_text(encoding="utf-8")
+    headings = re.findall(r"^#+ (.+)$", readme, re.MULTILINE)
+    prefix = "deployment/README.md, "
+    files = [
+        CHART / "values.yaml",
+        CHART / "values.schema.json",
+        *(CHART / "templates").iterdir(),
+    ]
+    sections = []
+    for path in files:
+        text = re.sub(r"\s*\n\s*#?\s*", " ", path.read_text(encoding="utf-8"))
+        for part in text.split(prefix)[1:]:
+            matches = [
+                heading
+                for heading in headings
+                if re.match(rf"{re.escape(heading)}\b", part)
+            ]
+            assert matches, f"{path.name}: {prefix}{part[:40]}"
+            sections.extend(matches)
+    assert {"Configuration", "From earlier charts", "Several replicas"} <= set(sections)
+
+
+def test_notes(tmp_path: Path) -> None:
+    """The notes show the API's URL, and that the Ingress has no TLS.
 
     Args:
         tmp_path: Directory for the copy of the chart.
     """
     notes = render_notes(tmp_path)
-    assert "writes (POST, PUT and DELETE) need an access token" in notes
-    assert "has no authentication" not in notes
-    assert "authentication is disabled" not in notes
-    assert "http://trs.example.org/ga4gh/trs/v2/" in notes
-    assert "port-forward" not in notes
+    assert f"https://{HOST}/ga4gh/trs/v2/service-info" in notes
+    assert "The Ingress has no TLS" in notes
+    assert "WARNING" not in notes
 
 
-def test_notes_auth_disabled(tmp_path: Path) -> None:
-    """With authentication disabled, the notes warn that everyone may write.
+def test_notes_warnings(tmp_path: Path) -> None:
+    """The notes warn of disabled authentication.
 
     Args:
         tmp_path: Directory for the copy of the chart.
     """
     notes = render_notes(
-        tmp_path, "--set", "trs_filer.config.api.specs.trs.disable_auth=true"
+        tmp_path,
+        "--set",
+        "config.api.specs.trs.disable_auth=true",
+        "--set",
+        "mongodb.auth.enabled=false",
     )
-    assert "WARNING: authentication is disabled" in notes
+    assert "authentication is disabled (config.api.specs.trs.disable_auth)" in notes
+    assert "MongoDB runs without authentication" in notes
 
 
 def test_notes_config_not_maps(tmp_path: Path) -> None:
-    """The notes render when levels of the `config` value are null or scalars.
+    """The notes render with sections of `config` that are null.
 
     Args:
         tmp_path: Directory for the copy of the chart.
     """
-    values = ("trs_filer.config.api=null", "trs_filer.config.api.specs.trs=x")
-    for index, value in enumerate(values):
-        notes = render_notes(tmp_path / str(index), "--set", value)
-        assert "authentication is disabled" not in notes
+    notes = render_notes(tmp_path, "--set-json", "config.api.specs=null")
+    assert "authentication is disabled" not in notes
 
 
-def test_notes_route(tmp_path: Path) -> None:
-    """With the Route, the notes give its `https` URLs.
+def test_notes_not_exposed(tmp_path: Path) -> None:
+    """Without an Ingress, HTTPRoute or Route, the notes show a port forward.
 
     Args:
-        tmp_path: Directory for the copy of the chart.
+        tmp_path: Directory for the copies of the chart.
     """
-    notes = render_notes(
-        tmp_path,
-        "--api-versions",
-        ROUTE_API,
-        "--set",
-        "trs_filer.ingress.enabled=false",
-    )
-    assert "https://trs.example.org/ga4gh/trs/v2/" in notes
+    notes = render_notes(tmp_path / "plain", *NO_INGRESS)
+    assert f"kubectl port-forward svc/{APP} 8080:8080 -n trs" in notes
+    assert "http://localhost:8080/ga4gh/trs/v2/ui/" in notes
+    notes = render_notes(tmp_path / "route", *NO_INGRESS, *ROUTE_API)
     assert "port-forward" not in notes
-
-
-def test_notes_nothing_exposed(tmp_path: Path) -> None:
-    """If nothing exposes the app, the notes say so and give no URLs.
-
-    Args:
-        tmp_path: Directory for the copy of the chart.
-    """
-    notes = render_notes(
-        tmp_path,
-        "--api-versions",
-        ROUTE_API,
-        "--set",
-        "trs_filer.ingress.enabled=false",
-        "--set",
-        "trs_filer.route.enabled=false",
-    )
-    assert "The chart exposes the app neither via an Ingress" in notes
-    assert "kubectl port-forward svc/trs-filer 8080:8080 -n trs" in notes
-    assert "trs.example.org" not in notes
-
-
-def _app_env(resources: list[dict[str, Any]]) -> dict[str, str]:
-    """Get the environment variables of the app's container.
-
-    Args:
-        resources: Rendered resources.
-
-    Returns:
-        The variables with values, by name (not those from Secrets).
-    """
-    (deployment,) = (
-        resource
-        for resource in of_kind(resources, "Deployment")
-        if resource["metadata"]["name"] == "trs-filer"
-    )
-    (container,) = deployment["spec"]["template"]["spec"]["containers"]
-    return {
-        variable["name"]: variable["value"]
-        for variable in container["env"]
-        if "value" in variable
-    }
-
-
-def test_forwarded_allow_ips_default() -> None:
-    """By default, the app trusts forwarded headers from every address.
-
-    So that links keep `https` behind any ingress controller or router.
-    """
-    assert _app_env(render())["FORWARDED_ALLOW_IPS"] == "*"
-
-
-def test_forwarded_allow_ips() -> None:
-    """`trs_filer.forwardedAllowIps` sets the addresses of trusted proxies."""
-    env = _app_env(
-        render("--set-string", "trs_filer.forwardedAllowIps=10.0.0.0/8\\,192.0.2.1")
-    )
-    assert env["FORWARDED_ALLOW_IPS"] == "10.0.0.0/8,192.0.2.1"
-
-
-def test_forwarded_allow_ips_list(tmp_path: Path) -> None:
-    """`trs_filer.forwardedAllowIps` may be a list.
-
-    Args:
-        tmp_path: Directory for the values file.
-    """
-    values = tmp_path / "values.yaml"
-    values.write_text(
-        yaml.safe_dump(
-            {"trs_filer": {"forwardedAllowIps": ["10.0.0.0/8", "192.0.2.1"]}}
-        ),
-        encoding="utf-8",
-    )
-    env = _app_env(render("--values", str(values)))
-    assert env["FORWARDED_ALLOW_IPS"] == "10.0.0.0/8,192.0.2.1"
-
-
-@pytest.mark.parametrize("value", ["", "[]", "' '", "','", "['', ' ']"])
-def test_forwarded_allow_ips_empty(tmp_path: Path, value: str) -> None:
-    """An empty `trs_filer.forwardedAllowIps` fails rendering.
-
-    Gunicorn would trust no address, so links would get `http`.
-
-    Args:
-        tmp_path: Directory for the values file.
-        value: The empty value, as YAML.
-    """
-    values = tmp_path / "values.yaml"
-    values.write_text(
-        f"trs_filer:\n  forwardedAllowIps: {value or "''"}\n", encoding="utf-8"
-    )
-    with pytest.raises(subprocess.CalledProcessError) as error:
-        render("--values", str(values))
-    assert "trs_filer.forwardedAllowIps must not be empty" in error.value.stderr
-
-
-@pytest.mark.parametrize("value", ["false", "5", "{10.0.0.0/8,5}"])
-def test_forwarded_allow_ips_type(value: str) -> None:
-    """`trs_filer.forwardedAllowIps` other than strings fails rendering.
-
-    Also lists with other members.
-
-    Args:
-        value: The value, as `--set` parses it (a boolean, a number, or a
-            list with a number).
-    """
-    with pytest.raises(subprocess.CalledProcessError) as error:
-        render("--set", f"trs_filer.forwardedAllowIps={value}")
-    assert "must be a string or a list of strings" in error.value.stderr
-
-
-@pytest.mark.parametrize("value", ["10.0.0.0 /8", "10.0.0.0/8\\,192.0.2. 1"])
-def test_forwarded_allow_ips_inner_spaces(value: str) -> None:
-    """Entries with spaces inside fail rendering, instead of being joined.
-
-    E.g., `10.0.0.0 /8` would otherwise become `10.0.0.0/8`.
-
-    Args:
-        value: The value, as `--set-string` parses it.
-    """
-    with pytest.raises(subprocess.CalledProcessError) as error:
-        render("--set-string", f"trs_filer.forwardedAllowIps={value}")
-    assert "must not contain spaces" in error.value.stderr
-
-
-def test_forwarded_allow_ips_spaces() -> None:
-    """Spaces and empty entries are dropped from `trs_filer.forwardedAllowIps`."""
-    env = _app_env(
-        render("--set-string", "trs_filer.forwardedAllowIps=10.0.0.0/8\\, \\,192.0.2.1")
-    )
-    assert env["FORWARDED_ALLOW_IPS"] == "10.0.0.0/8,192.0.2.1"
-
-
-def test_forwarded_allow_ips_without_value() -> None:
-    """Values without `trs_filer.forwardedAllowIps` keep trusting every address.
-
-    E.g., upgrades with `--reuse-values` from charts without the value;
-    `null` removes the key from the chart's defaults, as such values lack it.
-    """
-    env = _app_env(render("--set", "trs_filer.forwardedAllowIps=null"))
-    assert env["FORWARDED_ALLOW_IPS"] == "*"
-
-
-OPENSHIFT_SECURITY_API = "security.openshift.io/v1"
-RESTRICTED_CONTAINER = {
-    "allowPrivilegeEscalation": False,
-    "capabilities": {"drop": ["ALL"]},
-    "readOnlyRootFilesystem": True,
-}
-
-
-def _pod(resources: list[dict[str, Any]], kind: str, name: str) -> dict[str, Any]:
-    """Get the pod spec of a workload.
-
-    Args:
-        resources: Rendered resources.
-        kind: Kind of the workload, `Deployment` or `Job`.
-        name: Name of the workload, or its start (for the Job, which is
-            named by revision).
-
-    Returns:
-        The pod spec.
-    """
-    (workload,) = (
-        resource
-        for resource in of_kind(resources, kind)
-        if resource["metadata"]["name"].startswith(name)
-    )
-    pod: dict[str, Any] = workload["spec"]["template"]["spec"]
-    return pod
-
-
-def _tmp_volume(pod: dict[str, Any]) -> dict[str, Any]:
-    """Get the volume mounted at `/tmp` of the pod's only container.
-
-    Args:
-        pod: Pod spec.
-
-    Returns:
-        The volume.
-    """
-    (container,) = pod["containers"]
-    (mount,) = (m for m in container["volumeMounts"] if m["mountPath"] == "/tmp")  # noqa: S108 (a mount path)
-    (volume,) = (v for v in pod["volumes"] if v["name"] == mount["name"])
-    return volume
-
-
-@pytest.mark.parametrize(
-    ("kind", "name"), [("Deployment", "trs-filer"), ("Job", "configmap-job-")]
-)
-def test_app_security_context(kind: str, name: str) -> None:
-    """The app and the config Job run as non-root, without privileges.
-
-    They meet the Pod Security Standard "restricted", with a read-only root
-    file system and a writable `emptyDir` at `/tmp`; the image's user (1000)
-    is kept, so OpenShift can assign its own.
-
-    Args:
-        kind: Kind of the workload.
-        name: Name of the workload, or its start.
-    """
-    pod = _pod(render(), kind, name)
-    assert pod["securityContext"] == {
-        "runAsNonRoot": True,
-        "seccompProfile": {"type": "RuntimeDefault"},
-    }
-    (container,) = pod["containers"]
-    assert container["securityContext"] == RESTRICTED_CONTAINER
-    assert _tmp_volume(pod) == {"name": "tmp", "emptyDir": {"sizeLimit": "64Mi"}}
-
-
-def test_mongodb_security_context() -> None:
-    """MongoDB runs as its image's user `mongodb` (999), without privileges.
-
-    The data volume belongs to its group (`fsGroup`); the root file system
-    is read-only, with `emptyDir`s at `/tmp` and `/data/configdb`.
-    """
-    pod = _pod(render(), "Deployment", "mongodb-trs-filer")
-    assert pod["securityContext"] == {
-        "runAsNonRoot": True,
-        "runAsUser": 999,
-        "runAsGroup": 999,
-        "fsGroup": 999,
-        "fsGroupChangePolicy": "OnRootMismatch",
-        "seccompProfile": {"type": "RuntimeDefault"},
-    }
-    (container,) = pod["containers"]
-    assert container["securityContext"] == RESTRICTED_CONTAINER
-    assert _tmp_volume(pod) == {"name": "tmp", "emptyDir": {"sizeLimit": "64Mi"}}
-    mounts = {mount["mountPath"] for mount in container["volumeMounts"]}
-    assert "/data/configdb" in mounts
-
-
-@pytest.mark.parametrize(
-    ("kind", "name", "fs_group"),
-    [
-        ("Deployment", "trs-filer", False),
-        ("Job", "configmap-job-", False),
-        ("Deployment", "mongodb-trs-filer", True),
-    ],
-)
-def test_security_context_openshift(kind: str, name: str, fs_group: bool) -> None:
-    """On OpenShift, which assigns user and group IDs, the chart sets none.
-
-    Also not if set in the values (here: `runAsUser` of all three); the
-    other settings are kept.
-
-    Args:
-        kind: Kind of the workload.
-        name: Name of the workload, or its start.
-        fs_group: Whether the pod has MongoDB's `fsGroupChangePolicy`.
-    """
-    resources = render(
-        "--api-versions",
-        OPENSHIFT_SECURITY_API,
-        "--set",
-        "trs_filer.podSecurityContext.runAsUser=2000",
-        "--set",
-        "mongodb.podSecurityContext.runAsUser=2000",
-    )
-    pod = _pod(resources, kind, name)
-    expected: dict[str, Any] = {
-        "runAsNonRoot": True,
-        "seccompProfile": {"type": "RuntimeDefault"},
-    }
-    if fs_group:
-        expected["fsGroupChangePolicy"] = "OnRootMismatch"
-    assert pod["securityContext"] == expected
-    (container,) = pod["containers"]
-    assert container["securityContext"] == RESTRICTED_CONTAINER
-
-
-def test_security_context_values(tmp_path: Path) -> None:
-    """The security contexts and `/tmp` limits are values.
-
-    Args:
-        tmp_path: Directory for the values file.
-    """
-    values = tmp_path / "values.yaml"
-    values.write_text(
-        yaml.safe_dump(
-            {
-                "trs_filer": {
-                    "podSecurityContext": {"runAsUser": 2000},
-                    "securityContext": {"readOnlyRootFilesystem": False},
-                    "tmpSizeLimit": None,
-                },
-                "mongodb": {"podSecurityContext": None, "tmpSizeLimit": "1Gi"},
-            }
-        ),
-        encoding="utf-8",
-    )
-    resources = render("--values", str(values))
-    app = _pod(resources, "Deployment", "trs-filer")
-    # Maps are merged with the chart's defaults, `null` removes a key
-    assert app["securityContext"]["runAsUser"] == 2000
-    assert app["containers"][0]["securityContext"]["readOnlyRootFilesystem"] is False
-    assert _tmp_volume(app) == {"name": "tmp", "emptyDir": {}}
-    mongodb = _pod(resources, "Deployment", "mongodb-trs-filer")
-    assert mongodb["securityContext"] == {}
-    assert _tmp_volume(mongodb)["emptyDir"] == {"sizeLimit": "1Gi"}
-
-
-def test_security_context_without_values() -> None:
-    """Values without the new settings (e.g., of older charts) still render.
-
-    So do upgrades with `--reuse-values`; the pods then run as before, and
-    MongoDB without its NetworkPolicy. `null` removes the keys from the
-    chart's defaults.
-    """
-    resources = render(
-        "--set",
-        "trs_filer.podSecurityContext=null",
-        "--set",
-        "trs_filer.securityContext=null",
-        "--set",
-        "trs_filer.tmpSizeLimit=null",
-        "--set",
-        "trs_filer.networkPolicy=null",
-        "--set",
-        "mongodb.podSecurityContext=null",
-        "--set",
-        "mongodb.securityContext=null",
-        "--set",
-        "mongodb.tmpSizeLimit=null",
-        "--set",
-        "mongodb.networkPolicy=null",
-    )
-    for kind, name in [
-        ("Deployment", "trs-filer"),
-        ("Job", "configmap-job-"),
-        ("Deployment", "mongodb-trs-filer"),
-    ]:
-        pod = _pod(resources, kind, name)
-        assert pod["securityContext"] == {}
-        assert pod["containers"][0]["securityContext"] == {}
-        assert _tmp_volume(pod) == {"name": "tmp", "emptyDir": {}}
-    assert of_kind(resources, "NetworkPolicy") == []
-
-
-def test_mongodb_network_policy() -> None:
-    """By default, only the app's pods may connect to MongoDB."""
-    (policy,) = of_kind(render(), "NetworkPolicy")
-    assert policy["metadata"]["name"] == "mongodb-trs-filer"
-    assert policy["spec"] == {
-        "podSelector": {"matchLabels": {"app": "mongodb-trs-filer"}},
-        "policyTypes": ["Ingress"],
-        "ingress": [
-            {
-                "from": [{"podSelector": {"matchLabels": {"app": "trs-filer"}}}],
-                "ports": [{"port": 27017, "protocol": "TCP"}],
-            }
-        ],
-    }
-
-
-def test_mongodb_network_policy_disabled() -> None:
-    """`mongodb.networkPolicy.enabled: false` leaves MongoDB's policy out."""
-    resources = render("--set", "mongodb.networkPolicy.enabled=false")
-    assert of_kind(resources, "NetworkPolicy") == []
-
-
-def test_app_network_policy(tmp_path: Path) -> None:
-    """`trs_filer.networkPolicy` lets only the listed peers connect to the app.
-
-    Args:
-        tmp_path: Directory for the values file.
-    """
-    peer = {
-        "namespaceSelector": {
-            "matchLabels": {"kubernetes.io/metadata.name": "ingress-nginx"}
-        }
-    }
-    values = tmp_path / "values.yaml"
-    values.write_text(
-        yaml.safe_dump(
-            {"trs_filer": {"networkPolicy": {"enabled": True, "ingressFrom": [peer]}}}
-        ),
-        encoding="utf-8",
-    )
-    policies = {
-        policy["metadata"]["name"]: policy
-        for policy in of_kind(render("--values", str(values)), "NetworkPolicy")
-    }
-    assert sorted(policies) == ["mongodb-trs-filer", "trs-filer"]
-    assert policies["trs-filer"]["spec"] == {
-        "podSelector": {"matchLabels": {"app": "trs-filer"}},
-        "policyTypes": ["Ingress"],
-        "ingress": [{"from": [peer], "ports": [{"port": 8080, "protocol": "TCP"}]}],
-    }
-
-
-def test_app_network_policy_needs_peers() -> None:
-    """The app's policy without peers fails, as it would allow all sources."""
-    with pytest.raises(subprocess.CalledProcessError) as error:
-        render("--set", "trs_filer.networkPolicy.enabled=true")
-    assert "trs_filer.networkPolicy.ingressFrom must list" in error.value.stderr
-
-
-def test_config_job_rights() -> None:
-    """The config Job's ServiceAccount has only the rights that its script uses.
-
-    A namespaced Role allows reading and patching the app's ConfigMap, and
-    listing and deleting pods (to restart the app); no ClusterRole (e.g.,
-    `admin`) is bound.
-    """
-    resources = render()
-    (job,) = of_kind(resources, "Job")
-    account = job["spec"]["template"]["spec"]["serviceAccountName"]
-    assert account == "trs-filer-configurer"
-    (binding,) = of_kind(resources, "RoleBinding")
-    assert binding["subjects"] == [{"kind": "ServiceAccount", "name": account}]
-    assert binding["roleRef"] == {
-        "apiGroup": "rbac.authorization.k8s.io",
-        "kind": "Role",
-        "name": "trs-filer-configurer",
-    }
-    # Renamed from `admin-<appName>-configurer`: `roleRef` is immutable, so
-    # upgrades replace the binding instead of patching it
-    assert binding["metadata"]["name"] == "trs-filer-configurer"
-    (role,) = of_kind(resources, "Role")
-    assert role["metadata"]["name"] == "trs-filer-configurer"
-    assert role["rules"] == [
-        {
-            "apiGroups": [""],
-            "resources": ["configmaps"],
-            "resourceNames": ["app-config-trs-filer"],
-            "verbs": ["get", "patch"],
-        },
-        {"apiGroups": [""], "resources": ["pods"], "verbs": ["list", "delete"]},
-    ]
-    assert of_kind(resources, "ClusterRole") == []
-    assert of_kind(resources, "ClusterRoleBinding") == []
-
-
-SECRET = "trs-filer-mongodb-credentials"  # noqa: S105 (a Secret's name)
-
-
-def _env_from_secrets(container: dict[str, Any]) -> dict[str, tuple[str, str]]:
-    """Get the environment variables of a container that come from Secrets.
-
-    Args:
-        container: Container spec.
-
-    Returns:
-        The Secret's name and key of each variable, by variable name.
-    """
-    return {
-        variable["name"]: (
-            variable["valueFrom"]["secretKeyRef"]["name"],
-            variable["valueFrom"]["secretKeyRef"]["key"],
-        )
-        for variable in container.get("env", [])
-        if "secretKeyRef" in variable.get("valueFrom", {})
-    }
-
-
-def _init_scripts(resources: list[dict[str, Any]]) -> dict[str, str]:
-    """Get MongoDB's init scripts.
-
-    Args:
-        resources: Rendered resources.
-
-    Returns:
-        The scripts of the ConfigMap `mongo-init-script-<appName>`, by name.
-    """
-    (init,) = (
-        resource
-        for resource in of_kind(resources, "ConfigMap")
-        if resource["metadata"]["name"] == "mongo-init-script-trs-filer"
-    )
-    scripts: dict[str, str] = init["data"]
-    return scripts
-
-
-def test_mongodb_auth_needs_secret() -> None:
-    """By default, MongoDB requires credentials: without a Secret, rendering fails."""
-    with pytest.raises(subprocess.CalledProcessError) as error:
-        render("--set", "mongodb.auth.existingSecret=")
-    assert "mongodb.auth.existingSecret must be set" in error.value.stderr
-
-
-def test_mongodb_auth() -> None:
-    """With authentication, MongoDB and the app get their credentials.
-
-    MongoDB gets the root user's and the app user's credentials from the
-    Secret, and an init script that creates the app user in the app's
-    database; the app connects as the app user.
-    """
-    resources = render()
-    mongodb = _pod(resources, "Deployment", "mongodb-trs-filer")
-    (container,) = mongodb["containers"]
-    assert _env_from_secrets(container) == {
-        "MONGO_INITDB_ROOT_USERNAME": (SECRET, "root-username"),
-        "MONGO_INITDB_ROOT_PASSWORD": (SECRET, "root-password"),
-        "MONGO_APP_USERNAME": (SECRET, "username"),
-        "MONGO_APP_PASSWORD": (SECRET, "password"),
-    }
-    app = _pod(resources, "Deployment", "trs-filer")
-    assert _env_from_secrets(app["containers"][0]) == {
-        "MONGO_USERNAME": (SECRET, "username"),
-        "MONGO_PASSWORD": (SECRET, "password"),
-    }
-    script = _init_scripts(resources)["create-app-user.js"]
-    assert 'db.getSiblingDB("trs-filer-db").createUser(' in script
-    assert "user: process.env.MONGO_APP_USERNAME" in script
-    assert "pwd: process.env.MONGO_APP_PASSWORD" in script
-    assert "roles: [{ role: 'readWrite', db: \"trs-filer-db\" }]" in script
-    # Both scripts of the ConfigMap run on the first start
-    (mount,) = (m for m in container["volumeMounts"] if m["name"] == "init-script")
-    assert mount == {
-        "name": "init-script",
-        "mountPath": "/docker-entrypoint-initdb.d",
-        "readOnly": True,
-    }
-
-
-def test_mongodb_auth_database_name() -> None:
-    """The app user gets access to the database of `mongodb.dbName`."""
-    resources = render("--set", "mongodb.dbName=trs")
-    script = _init_scripts(resources)["create-app-user.js"]
-    assert 'db.getSiblingDB("trs").createUser(' in script
-    assert "roles: [{ role: 'readWrite', db: \"trs\" }]" in script
-
-
-def test_mongodb_database_name_quoted() -> None:
-    """The database name is a JavaScript string in the init scripts.
-
-    Quotes in `mongodb.dbName` stay inside the string.
-    """
-    scripts = _init_scripts(render("--set-string", "mongodb.dbName=a'b\"c"))
-    assert 'db.getSiblingDB("a\'b\\"c").createUser(' in scripts["create-app-user.js"]
-    assert 'db = db.getSiblingDB("a\'b\\"c");' in scripts["init-script.js"]
-
-
-@pytest.mark.parametrize("name", ["123", "true", "a'b\"c"])
-def test_mongodb_database_name_quoted_env(name: str) -> None:
-    """The database name is a string in the app's environment.
-
-    Also names that YAML reads as numbers or booleans.
-
-    Args:
-        name: Database name (`mongodb.dbName`).
-    """
-    env = _app_env(render("--set-string", f"mongodb.dbName={name}"))
-    assert env["MONGO_DBNAME"] == name
-
-
-def test_mongodb_auth_disabled() -> None:
-    """`mongodb.auth.enabled: false` runs MongoDB without credentials."""
-    resources = render("--set", "mongodb.auth.enabled=false")
-    mongodb = _pod(resources, "Deployment", "mongodb-trs-filer")
-    assert _env_from_secrets(mongodb["containers"][0]) == {}
-    app = _pod(resources, "Deployment", "trs-filer")
-    assert _env_from_secrets(app["containers"][0]) == {}
-    assert "create-app-user.js" not in _init_scripts(resources)
-
-
-def test_mongodb_auth_secret_without_enabled() -> None:
-    """A Secret's name without `mongodb.auth.enabled` enables authentication.
-
-    E.g., upgrades with `--reuse-values` from older charts and
-    `--set mongodb.auth.existingSecret=...`, whose values lack `enabled`.
-    """
-    resources = render("--set", "mongodb.auth.enabled=null")
-    mongodb = _pod(resources, "Deployment", "mongodb-trs-filer")
-    assert _env_from_secrets(mongodb["containers"][0])["MONGO_APP_USERNAME"] == (
-        SECRET,
-        "username",
-    )
-    assert "create-app-user.js" in _init_scripts(resources)
-
-
-def test_mongodb_auth_without_values() -> None:
-    """Values without `mongodb.auth` (e.g., of older charts) keep MongoDB as it was.
-
-    Simulates the values of upgrades with `--reuse-values` from older
-    charts: `null` removes the key from the chart's defaults.
-    """
-    resources = render("--set", "mongodb.auth=null")
-    mongodb = _pod(resources, "Deployment", "mongodb-trs-filer")
-    assert _env_from_secrets(mongodb["containers"][0]) == {}
-    app = _pod(resources, "Deployment", "trs-filer")
-    assert _env_from_secrets(app["containers"][0]) == {}
-
-
-def test_test_values_not_packaged(tmp_path: Path) -> None:
-    """The test values are left out of the packaged chart.
-
-    Args:
-        tmp_path: Directory for the package.
-    """
-    assert HELM
-    subprocess.run(  # noqa: S603 (fixed executable, no shell)
-        [HELM, "package", str(CHART), "--destination", str(tmp_path)],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    (package,) = tmp_path.glob("*.tgz")
-    with tarfile.open(package) as archive:
-        names = archive.getnames()
-    assert "trs-filer/values.yaml" in names
-    assert not [name for name in names if name.startswith("trs-filer/ci/")]
-
-
-def test_notes_mongodb_auth_disabled(tmp_path: Path) -> None:
-    """Without MongoDB authentication, the notes say so.
-
-    Args:
-        tmp_path: Directory for the copy of the chart.
-    """
-    default = render_notes(tmp_path / "default")
-    assert "MongoDB runs without authentication" not in default
-    notes = render_notes(tmp_path / "disabled", "--set", "mongodb.auth.enabled=false")
-    assert "MongoDB runs without authentication" in notes
-    # A Secret without `enabled` enables authentication (see `mongodbAuth`)
-    secret_only = render_notes(
-        tmp_path / "secret", "--set", "mongodb.auth.enabled=null"
-    )
-    assert "MongoDB runs without authentication" not in secret_only
-
-
-@pytest.mark.parametrize(
-    ("args", "expected"),
-    [
-        pytest.param((), "Always", id="default"),
-        pytest.param(
-            ("--set", "trs_filer.imagePullPolicy=IfNotPresent"),
-            "IfNotPresent",
-            id="set",
-        ),
-        # Values without the setting (e.g., `--reuse-values` with older ones)
-        pytest.param(
-            ("--set", "trs_filer.imagePullPolicy=null"), "Always", id="without"
-        ),
-    ],
-)
-def test_app_image_pull_policy(args: tuple[str, ...], expected: str) -> None:
-    """The app and the config Job pull the app's image as the value says.
-
-    E.g., `IfNotPresent` or `Never` for an image loaded into the cluster's
-    nodes (CI's job "Chart install" loads the image into kind).
-
-    Args:
-        args: Further arguments of `helm template`.
-        expected: The expected pull policy.
-    """
-    resources = render(*args)
-    for kind, name in [("Deployment", "trs-filer"), ("Job", "configmap-job-")]:
-        (container,) = _pod(resources, kind, name)["containers"]
-        assert container["imagePullPolicy"] == expected, kind
-
-
-def test_config_overlay() -> None:
-    """The `config` value is the app's second config overlay.
-
-    It is rendered into a ConfigMap of its own, merged after the overlay
-    that the config Job writes, and the app restarts when it changes (the
-    checksum of the ConfigMap in the pod template).
-    """
-    resources = render()
-    values = yaml.safe_load(TEST_VALUES.read_text())
-    (config_map,) = (
-        resource
-        for resource in of_kind(resources, "ConfigMap")
-        if resource["metadata"]["name"] == "app-config-overlay-trs-filer"
-    )
-    assert (
-        yaml.safe_load(config_map["data"]["config.yaml"])
-        == (values["trs_filer"]["config"])
-    )
-    (deployment,) = (
-        resource
-        for resource in of_kind(resources, "Deployment")
-        if resource["metadata"]["name"] == "trs-filer"
-    )
-    annotations = deployment["spec"]["template"]["metadata"]["annotations"]
-    assert len(annotations["checksum/config-overlay"]) == 64
-    pod = _pod(resources, "Deployment", "trs-filer")
-    (container,) = pod["containers"]
-    env = {var["name"]: var.get("value") for var in container["env"]}
-    assert env["FOCA_CONFIG_OVERLAY"] == (
-        "/etc/trs-filer/config.yaml:/etc/trs-filer/overlay.yaml"
-    )
-    (mount,) = (
-        m
-        for m in container["volumeMounts"]
-        if m["mountPath"] == "/etc/trs-filer/overlay.yaml"
-    )
-    (volume,) = (v for v in pod["volumes"] if v["name"] == mount["name"])
-    assert volume["configMap"]["name"] == "app-config-overlay-trs-filer"
-
-
-def test_config_overlay_checksum() -> None:
-    """The checksum of the overlay changes with the `config` value."""
-
-    def checksum(*args: str) -> str:
-        (deployment,) = (
-            resource
-            for resource in of_kind(render(*args), "Deployment")
-            if resource["metadata"]["name"] == "trs-filer"
-        )
-        value: str = deployment["spec"]["template"]["metadata"]["annotations"][
-            "checksum/config-overlay"
-        ]
-        return value
-
-    changed = "trs_filer.config.security.auth.audience[0]=other-client"
-    assert checksum() != checksum("--set", changed)
-
-
-@pytest.mark.parametrize(
-    "args",
-    [
-        pytest.param(("--set", "trs_filer.config=null"), id="without config"),
-        pytest.param(
-            ("--set", "trs_filer.config.security.auth.issuers=null"), id="no issuers"
-        ),
-        pytest.param(
-            ("--set", "trs_filer.config.security.auth.issuers=https://x.example.org/"),
-            id="issuers not a list",
-        ),
-    ],
-)
-def test_config_needs_issuers(args: tuple[str, ...]) -> None:
-    """Rendering fails without trusted token issuers in the `config` value.
-
-    The app would refuse to start without them.
-
-    Args:
-        args: Further arguments of `helm template`.
-    """
-    with pytest.raises(subprocess.CalledProcessError) as error:
-        render(*args)
-    assert "trs_filer.config.security.auth.issuers must be set" in error.value.stderr
+    assert f"https://{HOST}/ga4gh/trs/v2/ui/" in notes

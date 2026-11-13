@@ -15,7 +15,7 @@
 # already pushed (and scans it again if the scan failed). The tag is the
 # only source of the version: it is passed to the image build (the Docker
 # build gets no Git metadata) and set as the chart's `version` and
-# `appVersion` and as the tag of its default image. Release notes are the
+# `appVersion` (the tag of its default image). Release notes are the
 # curated `docs/releases/<version>.md` followed by GitHub's generated notes
 # if the former exists (the run fails if it contains `TODO` or is not in the
 # agreed format, see `scripts/release_notes.py`), otherwise the generated
@@ -167,11 +167,12 @@ jobs:
         with:
           version: v3.22.1
       # `version` and `appVersion` are the release version (the chart
-      # version in its SemVer form). The chart is packaged from a copy whose
-      # default image is the release image (`trs_filer.image`, which names its
-      # tag, by default `latest`), also in forks that publish to another
-      # organization (`DOCKERHUB_ORG`), and whose README links to the docs and
-      # files of the release instead of the latest docs and branch `dev` (see
+      # version in its SemVer form); `appVersion` is the default image tag.
+      # The package includes the library chart foca-common (the version
+      # locked in `Chart.lock`, checked against its digest), so that it
+      # installs without access to its repository. The chart is packaged from
+      # a copy whose README links to the docs and files of the release
+      # instead of the latest docs and branch `dev` (see
       # `scripts/chart_readme.py`; fails if any link to a version that moves
       # is left)
       - name: Package chart
@@ -180,10 +181,18 @@ jobs:
           VERSION: ${{ steps.version.outputs.version }}
           CHART_VERSION: ${{ steps.version.outputs.chart_version }}
         run: |
+          helm dependency build deployment
+          (cd deployment && sha256sum -c charts.sha256)
           chart="$(mktemp -d)/trs-filer"
           cp -R deployment "${chart}"
-          image="${IMAGE_NAME#docker.io/}:${VERSION}"
-          IMAGE="${image}" yq -i '.trs_filer.image = strenv(IMAGE)' "${chart}/values.yaml"
+          # The default image is the published one, fully qualified as in
+          # `values.yaml`, also in forks that publish to another
+          # organization (`DOCKERHUB_ORG`); `values.yaml` is rewritten (by
+          # yq) only then
+          image="${IMAGE_NAME}"
+          if [[ "$(yq .trsFiler.image "${chart}/values.yaml")" != "${image}" ]]; then
+              IMAGE="${image}" yq -i '.trsFiler.image = strenv(IMAGE)' "${chart}/values.yaml"
+          fi
           python scripts/chart_readme.py "${chart}/README.md" "v${VERSION}"
           # With the values that users must pass (e.g., the Secret of
           # MongoDB's credentials), so that the templates render as
@@ -192,11 +201,19 @@ jobs:
           helm package "${chart}" \
               --version "${CHART_VERSION}" --app-version "${VERSION}" -d dist
           package="dist/trs-filer-${CHART_VERSION}.tgz"
-          # The packaged README is the checked one, and the default image is
-          # the release image
+          # The packaged README is the checked one
           tar -xzOf "${package}" trs-filer/README.md | cmp - "${chart}/README.md"
-          [[ "$(tar -xzOf "${package}" trs-filer/values.yaml | yq .trs_filer.image)" \
+          # The library chart is packaged with it, in the locked version
+          library="$(tar -xzOf "${package}" trs-filer/charts/foca-common/Chart.yaml \
+              | yq .version)"
+          [[ "${library}" == "$(yq '.dependencies[0].version' deployment/Chart.lock)" ]]
+          # The default image is the published one, tagged by `appVersion`
+          [[ "$(tar -xzOf "${package}" trs-filer/values.yaml | yq .trsFiler.image)" \
               == "${image}" ]]
+          [[ "$(tar -xzOf "${package}" trs-filer/values.yaml | yq .trsFiler.tag)" \
+              == "" ]]
+          [[ "$(tar -xzOf "${package}" trs-filer/Chart.yaml | yq .appVersion)" \
+              == "${VERSION}" ]]
           # For `publish` to check the downloaded chart against
           echo "file=${package#dist/}" >> "${GITHUB_OUTPUT}"
           echo "sha256=$(sha256sum "${package}" | cut -d ' ' -f 1)" >> "${GITHUB_OUTPUT}"

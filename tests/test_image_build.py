@@ -1,10 +1,10 @@
 """Tests of the image build (`Dockerfile`).
 
 The image build downloads packages only with hash checks: the runtime
-dependencies, the dependency group `config-job` and the build requirements of
-the app (`build-system.requires`) are exported from the lock (`uv.lock`), with
-their hashes, and installed with uv, as the base image has no pip. Its build
-context is checked by `tests/test_dockerignore.py`.
+dependencies and the build requirements of the app (`build-system.requires`)
+are exported from the lock (`uv.lock`), with their hashes, and installed with
+uv, as the base image has no pip. Its build context is checked by
+`tests/test_dockerignore.py`.
 """
 
 import importlib.util
@@ -24,9 +24,6 @@ ROOT = Path(__file__).parents[1]
 DOCKERFILE = ROOT / "Dockerfile"
 # Dependency group that locks the build requirements of the app
 GROUP = "build-system"
-# Dependency group of `yq`, which the image installs for the Helm chart's config
-# Job (temporary, #135)
-CONFIG_JOB = "config-job"
 
 
 def _export(*args: str) -> str:
@@ -215,7 +212,7 @@ def test_locked_foca_is_base_image_foca() -> None:
     (temporary) has no locked release, and is checked by
     `scripts/image_requirements.py`.
     """
-    locked = _locked_versions(_export("--no-dev", "--group", CONFIG_JOB))
+    locked = _locked_versions(_export("--no-dev"))
     match = re.search(
         r"^FROM elixircloud/foca:(?P<version>[^-@\s]+)-py",
         DOCKERFILE.read_text(),
@@ -228,8 +225,7 @@ def test_locked_foca_is_base_image_foca() -> None:
 def test_dockerfile_exports() -> None:
     """The image build exports the runtime and the build requirements only.
 
-    The runtime requirements include the dependency group `config-job`. So
-    the other tests of the exports check what the `Dockerfile` selects (e.g.,
+    So the other tests of the exports check what the `Dockerfile` selects (e.g.,
     not `--all-groups`, which would add the build requirements).
     """
     selections = []
@@ -245,7 +241,7 @@ def test_dockerfile_exports() -> None:
             [arg for arg in options if arg not in {"--frozen", "--no-emit-project"}]
         )
     assert sorted(selections) == [
-        ["--no-dev", "--group", CONFIG_JOB],
+        ["--no-dev"],
         ["--only-group", GROUP],
     ]
 
@@ -253,13 +249,14 @@ def test_dockerfile_exports() -> None:
 def test_runtime_requirements_without_build_requirements() -> None:
     """The runtime requirements of the image leave out the build group.
 
-    They have `yq` (dependency group `config-job`), each with hashes (except
-    a temporary FOCA commit, which the image build leaves out), but no dev
-    dependencies (the `dev` extra).
+    They have hashes (except a temporary FOCA commit, which the image build
+    leaves out), but no dev dependencies (the `dev` extra) and no `yq`, which
+    the Helm chart's config Job used.
     """
-    exported = _export("--no-dev", "--group", CONFIG_JOB)
+    exported = _export("--no-dev")
     packages = _pinned(exported)
-    assert {"connexion", "foca", "gunicorn", "yq"} <= packages.keys()
+    assert {"connexion", "foca", "gunicorn"} <= packages.keys()
+    assert "yq" not in packages
     assert "setuptools" not in packages
     assert "setuptools-scm" not in packages
     assert "pytest" not in packages
@@ -267,20 +264,6 @@ def test_runtime_requirements_without_build_requirements() -> None:
     unhashed = {"foca"} if _foca_commit(exported) else set()
     for name, hashes in packages.items():
         assert hashes or name in unhashed, name
-
-
-def test_config_job_group() -> None:
-    """The `yq` of the image is in the range of the dev dependency.
-
-    So the tests of `update-config-map.sh` run the `yq` that the image has.
-    """
-    pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text())
-    (group,) = map(Requirement, pyproject["dependency-groups"][CONFIG_JOB])
-    dev = [
-        Requirement(spec)
-        for spec in pyproject["project"]["optional-dependencies"]["dev"]
-    ]
-    assert group in [requirement for requirement in dev if requirement.name == "yq"]
 
 
 def _image_requirements_module() -> Any:
@@ -304,7 +287,7 @@ def test_image_requirements_of_export() -> None:
     As the base image has the locked FOCA release (see
     `test_locked_foca_is_base_image_foca()`), nothing is left out.
     """
-    exported = _export("--no-dev", "--group", CONFIG_JOB)
+    exported = _export("--no-dev")
     if _foca_commit(exported) is not None:
         pytest.skip("FOCA is pinned to a commit (see the next test)")
     locked = _locked_versions(exported)
@@ -320,7 +303,7 @@ def test_image_requirements_of_export_foca_commit() -> None:
     TEMPORARY: runs while FOCA is pinned to a commit, which the base image
     has; remove with the pin's special cases.
     """
-    exported = _export("--no-dev", "--group", CONFIG_JOB)
+    exported = _export("--no-dev")
     commit = _foca_commit(exported)
     if commit is None:
         pytest.skip("FOCA is not pinned to a commit")

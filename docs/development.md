@@ -139,15 +139,14 @@ the `uv` entry of Dependabot) and that of the `Dockerfile` stage (`docker`
 entry).
 
 The image build, which these jobs run too, installs the locked
-runtime dependencies only (`uv export --frozen --no-dev --group config-job
+runtime dependencies only (`uv export --frozen --no-dev
 --no-emit-project`, which leaves out the extras and the group
 `build-system`, then `uv pip install --system --require-hashes
 --only-binary :all: --no-deps`, see the `Dockerfile`), so two builds of the
 same commit get the same packages, and a new release of a dependency gets
-into the image only through a reviewed change of the lock. The dependency
-group `config-job` locks the `yq` of the Helm chart's config Job
-(temporary, #135), in the range of the `dev` extra. The image build builds
-the app's wheel with the locked build requirements (group `build-system`),
+into the image only through a reviewed change of the lock. The image
+build builds the app's wheel with the locked build requirements (group
+`build-system`),
 installed with hash checks, too, and without network, so it downloads
 nothing that isn't hash-checked; it fails unless the base image has the
 locked FOCA release (`scripts/image_requirements.py`), so update the
@@ -172,44 +171,57 @@ image of the `Dockerfile` (`docker` entry).
 
 ## Helm chart
 
-The [Helm chart](deployment.md) is in `deployment/`. Check changes with
+The [Helm chart](deployment.md) is in `deployment/`, a thin chart over
+FOCA's library chart `foca-common` (see [Helm library
+chart](https://github.com/elixir-cloud-aai/foca/blob/chart-v0.5.0/docs/helm-chart.md)
+in FOCA's docs). `deployment/Chart.yaml` pins its version and
+`deployment/Chart.lock` locks it; `helm dependency build deployment`
+downloads it into `deployment/charts/` (not committed), and
+`deployment/charts.sha256` has its digest, which CI and the release
+workflow check, as OCI tags can be pushed again. Check changes with
 [Helm](https://helm.sh/docs/intro/install/), e.g.:
 
 ```bash
+helm dependency build deployment
+(cd deployment && sha256sum -c charts.sha256)
 helm lint deployment --strict -f deployment/ci/test-values.yaml
 helm template trs-filer deployment -f deployment/ci/test-values.yaml
 ```
+
+To update the library chart, change its version in `deployment/Chart.yaml`
+(and the `$comment` and the copied parts of `deployment/values.schema.json`,
+which follows the library's `app-values.schema.json`), then run `helm
+dependency update deployment` and replace the digest in
+`deployment/charts.sha256` with that of the new package (`cd deployment &&
+sha256sum charts/foca-common-<version>.tgz > charts.sha256`). The chart
+renders the library's templates with the app's settings
+(`trs-filer.settings` in `deployment/templates/_helpers.tpl`), which also
+checks for values of earlier charts (`trs-filer.checkLegacyValues`) and,
+on upgrades, for releases of earlier charts (`trs-filer.checkUpgrade`).
 
 CI's job "Chart" (`.github/workflows/ci.yml`) lints the chart as the
 release workflow does, with the values that users must pass (e.g., the
 name of MongoDB's Secret and a fictitious identity provider):
 `helm lint deployment --strict -f deployment/ci/test-values.yaml`. It
-also runs the tests that render it (`tests/test_chart.py`) and that run
-the script of its
-config Job, `update-config-map.sh`, against a stub of the Kubernetes API
-server (`tests/test_update_config_map.py`; with `jq` and the Python `yq`
-of the image, a dev dependency). They check the rights of the Job's Role,
-run the script also through the Job's command (which finds the installed
-base config), and check its exit codes, also for requests that the API
-server refuses. Locally, these tests are skipped without Helm, `jq` or
-that `yq`:
+also runs the tests that render it (`tests/test_chart.py`; skipped locally
+without Helm, failing without the library chart in `deployment/charts/`):
 
 ```bash
-pytest tests/test_chart.py tests/test_update_config_map.py
+pytest tests/test_chart.py
 ```
 
 CI's job "Chart install" installs the chart in a cluster: on
 [kind](https://kind.sigs.k8s.io/), with the image built from the commit
 (loaded into the cluster's node, so that nothing is pushed), the values of
 `deployment/ci/test-values.yaml` and a Secret with MongoDB's credentials. It
-waits for the config Job, then checks the API through a port forward: the
+waits for the rollout, then checks the API through a port forward: the
 service info, public reads, and that writes need a token (`401`, as the
 test values trust a fictitious identity provider). It then upgrades the
-release with authentication disabled (`trs_filer.config`, see [Running
-without authentication](#running-without-authentication); for this test
-only) and checks the registration and retrieval of a tool, whose URL must
-have the host name that the config Job writes to the app's config. To do the
-same locally, with Docker, kind, `kubectl` and Helm (in Bash):
+release with authentication disabled (`config.api.specs.trs.disable_auth`,
+see [Running without authentication](#running-without-authentication); for
+this test only) and checks the registration and retrieval of a tool, whose
+URL must have the host name of the values (`hostName`). To do the same
+locally, with Docker, kind, `kubectl` and Helm (in Bash):
 
 ```bash
 kind create cluster --name trs-filer
@@ -222,30 +234,23 @@ kubectl create secret generic trs-filer-mongodb-credentials -n trs-filer \
     --from-literal=root-password="$(openssl rand -hex 24)" \
     --from-literal=username=trs-filer \
     --from-literal=password="$(openssl rand -hex 24)"
+helm dependency build deployment
 helm install trs-filer deployment -n trs-filer \
     -f deployment/ci/test-values.yaml \
-    --set trs_filer.image=trs-filer:ci \
-    --set trs_filer.imagePullPolicy=Never \
-    --wait --wait-for-jobs --timeout 600s
-# Wait until the pods that the config Job deleted are gone
-until ! kubectl get pods -n trs-filer -l app=trs-filer \
-    -o jsonpath='{.items[*].metadata.deletionTimestamp}' | grep -q .; do
-  sleep 2
-done
-kubectl rollout status deployment/trs-filer -n trs-filer
+    --set trsFiler.image=trs-filer:ci \
+    --set trsFiler.imagePullPolicy=Never \
+    --wait --timeout 600s
 kubectl port-forward -n trs-filer service/trs-filer 8080:8080 &
 until curl --fail http://localhost:8080/ga4gh/trs/v2/service-info; do
-  sleep 2  # the app may still be starting
+  sleep 2  # the port forward may still be starting
 done
 kind delete cluster --name trs-filer  # tear down
 ```
 
-`trs_filer.imagePullPolicy=Never` makes the cluster use the loaded image
-(with the chart's default, `Always`, it would pull it from a registry). The
-config Job restarts the app after the install, so the recipe waits for the
-old pods to go and for the app to answer; if the port forward stops (e.g.,
-on a refused connection while the app starts), start it again. Send further requests as in the job's step "Check API"
-(`.github/workflows/ci.yml`).
+`trsFiler.imagePullPolicy=Never` makes the cluster use the loaded image
+(with the chart's default, `Always`, it would pull it from a registry); the
+image names its tag, so `trsFiler.tag` stays empty. Send further requests
+as in the job's step "Check API" (`.github/workflows/ci.yml`).
 
 ## Documentation
 
@@ -382,9 +387,10 @@ workflow](https://github.com/elixir-cloud-aai/trs-filer/blob/dev/.github/workflo
 passed for it (a run for the push of the commit to `dev`; if CI hasn't
 finished, failed or was cancelled, e.g., the image job of a commit that a
 later one superseded, re-run CI, then the release workflow). It packages
-the Helm chart with the release version as `version` and `appVersion`, and
-the release image (`elixircloud/trs-filer:X.Y.Z`) as its default image
-(`trs_filer.image`; `latest` in the repository). In the packaged README,
+the Helm chart with the release version as `version` and `appVersion`, so
+that it deploys the release image (`elixircloud/trs-filer:X.Y.Z`; the
+repository's `appVersion` is `dev`), with the library chart (checked
+against `deployment/charts.sha256`). In the packaged README,
 links to the latest docs and to files on branch `dev` point to the release
 (`/en/vX.Y.Z/`, `blob/vX.Y.Z/`); the release fails if any link to a version
 that moves is left (`scripts/chart_readme.py`). The chart in the repository
@@ -566,7 +572,7 @@ The Docker Hub organization is the repository variable `DOCKERHUB_ORG` (by
 default `elixircloud`; forks set it to the organization they publish to,
 with the Docker Hub secrets in an environment `dev-images`), so that the
 scan jobs, which have no secrets, know the image name too, and the released
-chart's default image (`trs_filer.image`) is the published one. Forks
+chart's default image (`trsFiler.image`) is the published one. Forks
 without `DOCKERHUB_ORG` publish nothing: their CI runs the same checks (the
 scan of a local build included, without the upload to code scanning) and
 passes without the secrets, and their weekly scan is skipped.
