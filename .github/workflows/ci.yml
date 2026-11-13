@@ -148,7 +148,9 @@ jobs:
   # The tests against mongomock (with coverage) and against MongoDB, the
   # database of deployments (`MONGODB_TEST_URI`, see `tests/conftest.py`), in
   # the version of `docker-compose.yaml` (MongoDB 8.0 refuses to start on some
-  # kernels, see there)
+  # kernels, see there). The tests of object storage (`tests/test_storage.py`)
+  # use an in-memory S3 (moto) with mongomock, and an S3-compatible server,
+  # SeaweedFS (Apache-2.0), with MongoDB (`S3_TEST_ENDPOINT_URL`)
   test:
     name: Test (${{ matrix.database }})
     runs-on: ubuntu-latest
@@ -160,9 +162,11 @@ jobs:
           - database: mongomock
             image: ""
             uri: ""
+            s3: ""
           - database: MongoDB 7.0
             image: mongo:7.0
             uri: mongodb://localhost:27017
+            s3: http://localhost:8333
     services:
       # Not started for an empty image (the `mongomock` entry)
       mongodb:
@@ -175,6 +179,7 @@ jobs:
           --health-retries 20
     env:
       MONGODB_TEST_URI: ${{ matrix.uri }}
+      S3_TEST_ENDPOINT_URL: ${{ matrix.s3 }}
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -220,6 +225,22 @@ jobs:
           files: ./coverage.xml
           fail_ci_if_error: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/heads/') && github.repository_owner == 'elixir-cloud-aai' }}
           verbose: true
+      # A container, as service containers can't be given a command; S3 API
+      # only, without authentication (the tests sign requests with test
+      # credentials, which it accepts). Pinned to a release by digest (bump
+      # by hand)
+      - name: Start S3-compatible server
+        if: ${{ matrix.s3 != '' }}
+        run: |
+          docker run --detach --name seaweedfs --publish 8333:8333 \
+            docker.io/chrislusf/seaweedfs:4.51@sha256:f7a49e3f3972ebed5be2ed4befa4a0c68eb7bdddba6e692d42729ceb545134b8 \
+            server -s3 -ip.bind=0.0.0.0
+          for _ in $(seq 60); do
+            curl --silent --output /dev/null "${S3_TEST_ENDPOINT_URL}" && exit 0
+            sleep 2
+          done
+          docker logs seaweedfs
+          exit 1
       # `tests/test_fixtures.py` checks that the tests use the MongoDB
       - name: Run tests against MongoDB
         if: ${{ matrix.uri != '' }}
