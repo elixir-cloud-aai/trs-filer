@@ -126,11 +126,12 @@ registering them. Files retrieved from their URLs are checked once
 retrieved; the check applies to every registration of tools and versions
 (`POST` and `PUT`).
 
-Validating against the meta-schema takes time that grows steeply with the
-nesting of schemas, as `unevaluatedProperties` is checked at every level:
-the example takes well below a second, while about a hundred inputs in ten
-groups take a few seconds. So the validation runs in a process of its own,
-which is stopped after `custom.io_schema.timeout` seconds (default: `10`,
+Validating against the meta-schema takes time that grows about linearly
+with the size of a schema, also for deeply nested ones: the example and
+about a hundred inputs in ten groups take well below a second, a thousand
+inputs about half a second, while a file at the default request size limit
+of 1 MiB can take ten seconds or more. So the validation runs in a process
+of its own, which is stopped after `custom.io_schema.timeout` seconds (default: `10`,
 including a fraction of a second to start the process and load the
 meta-schema); files not checked within it are rejected, too (`400 Bad
 Request`). Raise the limit for larger schemas, keeping in mind that
@@ -145,7 +146,7 @@ must be installed (as in the image), as the process imports it.
 The meta-schema of profile version 0.3.0 and its vocabularies are vendored
 unchanged in
 [`trs_filer/io_schema/`](https://github.com/elixir-cloud-aai/trs-filer/tree/dev/trs_filer/io_schema),
-from commit `573f65e` of the profile's `v0.3` branch (Apache License 2.0);
+from commit `d44e8d4` of the profile's `v0.3` branch (Apache License 2.0);
 nothing is fetched. To vendor another version, replace the directory (named
 after the date and commit of the source) and update `PROFILE_VERSION` and
 `META_SCHEMA_DIR` in `trs_filer/io_schema/__init__.py`, the checksums in

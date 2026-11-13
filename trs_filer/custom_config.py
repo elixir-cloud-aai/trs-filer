@@ -455,9 +455,8 @@ class IoSchemaConfig(FOCABaseConfig):
             invalid ones are rejected with `400 Bad Request`. Defaults to
             `False`.
         timeout: Time limit of checking an I/O Schema file, in seconds
-            (validation takes time that grows steeply with the nesting of
-            schemas); files not checked within it are rejected. Defaults
-            to `10`.
+            (validation takes time that grows with the size of schemas);
+            files not checked within it are rejected. Defaults to `10`.
 
     Attributes:
         validation: Whether I/O Schema files are checked on registration.
