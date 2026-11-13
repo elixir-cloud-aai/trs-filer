@@ -405,20 +405,29 @@ class AccessControlConfig(FOCABaseConfig):
             authenticated user, but tool classes of users other than admins
             are pending until an admin approves them, and so are the tools
             that have them (see `trs_filer.ga4gh.trs.tool_classes`).
+        max_unused_tool_classes: How many tool classes that no tool has a
+            user other than an admin may have added (as
+            `max_unused_service_types` of Cloud Registry): further ones are
+            refused (`409 Conflict`); unlimited if `None`, only admins add
+            tool classes if `0`. Defaults to `10`.
 
     Attributes:
         tool_classes: Who may add tool classes.
+        max_unused_tool_classes: How many unused tool classes a user other
+            than an admin may have added.
 
     Raises:
         pydantic.ValidationError: `tool_classes` is not `open`, `controlled`
-            or `moderated`.
+            or `moderated`, or `max_unused_tool_classes` is not a
+            non-negative integer or `None`.
 
     Example:
         >>> AccessControlConfig(tool_classes='moderated')
-        AccessControlConfig(tool_classes='moderated')
+        AccessControlConfig(tool_classes='moderated', max_unused_tool_classes=10)
     """
 
     tool_classes: ToolClassesMode = "open"
+    max_unused_tool_classes: Annotated[int, Field(ge=0)] | None = 10
 
 
 class IoSchemaConfig(FOCABaseConfig):

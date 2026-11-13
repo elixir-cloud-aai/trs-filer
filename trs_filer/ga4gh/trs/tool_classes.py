@@ -22,11 +22,17 @@ reads without a token have no user, so they don't list them (cf. `GET
 /approvals`, which requires login). Pending tool classes stay pending if
 the mode changes.
 
+Users other than admins may only have added a limited number of tool
+classes that no tool has (`custom.access_control.max_unused_tool_classes`;
+cf. `check_unused_tool_classes()`), in every mode, so that they can't grow
+the list of tool classes (or of pending tool classes) without bound.
+
 Without authentication (`disable_auth`), there are no users and no admins:
 anybody may add tool classes, which are never pending, and all tools are
 listed.
 """
 
+from itertools import islice
 import logging
 from typing import Any
 
@@ -36,8 +42,10 @@ from foca.security.access_control import (
     is_admin,
     resource_filter,
 )
+from foca.utils.logging import escape_log_value
 from foca.utils.urls import get_resource_path
 
+from trs_filer.errors.exceptions import UnusedToolClassesLimit
 from trs_filer.utils import get_collection, get_custom_config
 
 logger = logging.getLogger(__name__)
@@ -58,6 +66,9 @@ TOOL_CLASS_PROJECTION: dict[str, bool] = {
     CREATED_BY: False,
     PENDING: False,
 }
+# Number of tool classes per query when counting the unused tool classes of
+# a user
+UNUSED_BATCH = 100
 # Reason of `400 Bad Request` for tools of users who may not add tool classes
 # with a tool class that is not stored
 UNREGISTERED_TOOL_CLASS = (
@@ -116,6 +127,57 @@ def is_approved(id: str) -> bool:
     """
     collection = get_collection("toolclasses")
     return collection.count_documents({"id": id, **APPROVED}, limit=1) > 0
+
+
+def _count_unused(user: str, limit: int) -> int:
+    """Count the tool classes that a user added and no tool has, up to a limit.
+
+    Approved tool classes count too, as approval doesn't give them tools.
+    Takes one indexed query per `UNUSED_BATCH` tool classes of the user, up
+    to the batch with the `limit`-th unused one, as users may have added any
+    number of tool classes that tools have.
+
+    Args:
+        user: User identifier (cf. `CREATED_BY`).
+        limit: Number at which to stop counting.
+
+    Returns:
+        Number of such tool classes, at most `limit`.
+    """
+    count = 0
+    added = get_collection("toolclasses").find({CREATED_BY: user}, {"id": True})
+    tools = get_collection("tools")
+    while batch := [tool_class["id"] for tool_class in islice(added, UNUSED_BATCH)]:
+        used = set(tools.distinct("toolclass.id", {"toolclass.id": {"$in": batch}}))
+        count += sum(id not in used for id in batch)
+        if count >= limit:
+            return limit
+    return count
+
+
+def check_unused_tool_classes() -> None:
+    """Check that the current user may add another tool class that no tool has.
+
+    Must be called in a request context, before a tool class is added
+    (explicitly, or by registering a tool with a new tool class). Concurrent
+    requests of a user may exceed the limit by their number.
+
+    Raises:
+        UnusedToolClassesLimit: The user is not an admin, and has added as
+            many tool classes that no tool has as allowed
+            (`custom.access_control.max_unused_tool_classes`).
+    """
+    limit = get_custom_config().access_control.max_unused_tool_classes
+    subject = get_current_subject()
+    if limit is None or subject is None or auth_disabled() or is_admin():
+        return
+    if _count_unused(subject, limit) >= limit:
+        logger.info(
+            "Tool class not added: '%s' added %d tool classes that no tool has.",
+            escape_log_value(subject),
+            limit,
+        )
+        raise UnusedToolClassesLimit(limit)
 
 
 def visible_tool_classes() -> dict[str, Any]:

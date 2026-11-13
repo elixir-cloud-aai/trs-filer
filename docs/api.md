@@ -275,10 +275,12 @@ can register tools (`POST /tools`, and `PUT /tools/{id}` with the identifier
 of no tool) and becomes their owner, and can add tool classes (`POST
 /toolClasses`, and `PUT /toolClasses/{id}` with the identifier of no tool
 class), unless only admins may (mode `controlled`, see [Adding tool
-classes](configuration.md#adding-tool-classes)). Changing tools, their
-versions and their roles needs a role on the tool, and replacing, approving
-and deleting tool classes needs an admin; other users get `403 Forbidden`
-(see [Access control](access-control.md)).
+classes](configuration.md#adding-tool-classes)), or they have added as many
+tool classes that no tool has as allowed (`409 Conflict`, see [Unused tool
+classes per user](configuration.md#adding-tool-classes)). Changing tools,
+their versions and their roles needs a role on the tool, and replacing,
+approving and deleting tool classes needs an admin; other users get `403
+Forbidden` (see [Access control](access-control.md)).
 
 ### Approving tool classes
 

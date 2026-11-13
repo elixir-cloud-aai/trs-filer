@@ -344,9 +344,14 @@ custom:
     # `moderated`, any authenticated user, but tool classes of other users
     # than admins are pending until an admin approves them, and so are the
     # tools that have them (see "Tool classes" in `docs/configuration.md`).
-    # Only admins replace and delete tool classes
+    # Only admins replace and delete tool classes. Users other than admins
+    # may only have added `max_unused_tool_classes` tool classes that no tool
+    # has (as `max_unused_service_types` of Cloud Registry): further ones are
+    # refused (`409 Conflict`), until tools have them or admins delete them;
+    # `null` for no limit, `0` to let only admins add tool classes
     access_control:
         tool_classes: open
+        max_unused_tool_classes: 10
     # Retrieval of file content from URLs: on registration, for files with a
     # `url` but no `content`, and for zip archives of files without stored
     # content. Only `https` is allowed (add `http` if needed); hosts must

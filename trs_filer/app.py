@@ -12,7 +12,11 @@ from connexion import App
 from foca import Foca, get_config
 from foca.security.auth import require_no_service_clients
 
-from trs_filer.errors.exceptions import InvalidRequest, describe_invalid_request
+from trs_filer.errors.exceptions import (
+    InvalidRequest,
+    UnusedToolClassesLimit,
+    describe_invalid_request,
+)
 from trs_filer.ga4gh.trs.tool_classes import sync_pending_tools
 from trs_filer.utils import get_custom_config
 
@@ -71,6 +75,7 @@ def create_app() -> App:
     # Invalid requests are answered with their reason (more specific than
     # FOCA's handler of all exceptions)
     app.add_error_handler(InvalidRequest, describe_invalid_request)
+    app.add_error_handler(UnusedToolClassesLimit, describe_invalid_request)
     with app.app.app_context():
         # `null` would remove FOCA's size limit of request bodies, so that
         # bodies of any size are read

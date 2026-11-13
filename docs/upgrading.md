@@ -212,6 +212,14 @@ existing data needs no changes. Check clients and custom configs:
        serve the internal fields of the tool classes that the new one adds
        (who added them), and pending tools to everybody: stop them before
        the new version takes writes.
+- **Limit of unused tool classes per user:** users other than admins may
+  only have added 10 tool classes that no tool has
+  (`custom.access_control.max_unused_tool_classes`, by default); further
+  ones get `409 Conflict`, also when they register a tool with a new tool
+  class (see [Adding tool
+  classes](configuration.md#adding-tool-classes)). Tool classes stored
+  before count for nobody. Set `null` to keep adding tool classes without
+  limit.
 
 - **Helm chart (breaking):** the chart is a thin chart over FOCA's library
   chart `foca-common`, with camelCase values, and **releases of earlier

@@ -22,6 +22,7 @@ from trs_filer.ga4gh.trs.tool_classes import (
     PENDING,
     TOOL_CLASS_PROJECTION,
     UNREGISTERED_TOOL_CLASS,
+    check_unused_tool_classes,
     may_add_tool_classes,
     sync_pending_flags,
     tool_classes_pending,
@@ -223,6 +224,9 @@ class RegisterTool:
             InvalidRequest: Version identifiers are duplicated, the files of a
                 version are invalid, or the tool class does not exist and the
                 user may not add tool classes.
+            UnusedToolClassesLimit: The tool class does not exist, and the
+                user has added as many tool classes that no tool has as
+                allowed (cf. `check_unused_tool_classes()`).
             InternalServerError: No unique identifier could be generated, or the
                 object could not be stored.
             trs_filer.errors.exceptions.RemoteFileError: The content of a file
@@ -254,6 +258,7 @@ class RegisterTool:
             )
             raise InvalidRequest(UNREGISTERED_TOOL_CLASS)
         else:
+            check_unused_tool_classes()
             self.pending = tool_classes_pending()
 
         version_list = [

@@ -44,6 +44,7 @@ from trs_filer.ga4gh.trs.permissions import (
 from trs_filer.ga4gh.trs.tool_classes import (
     PENDING,
     TOOL_CLASS_PROJECTION,
+    check_unused_tool_classes,
     is_approved,
     may_add_tool_classes,
     own_tools,
@@ -1136,6 +1137,9 @@ def _check_add_tool_class() -> None:
     Raises:
         Forbidden: The user may not add tool classes (cf.
             `trs_filer.ga4gh.trs.tool_classes.may_add_tool_classes()`).
+        UnusedToolClassesLimit: The user has added as many tool classes that
+            no tool has as allowed (cf.
+            `trs_filer.ga4gh.trs.tool_classes.check_unused_tool_classes()`).
     """
     if not may_add_tool_classes():
         logger.info(
@@ -1143,6 +1147,7 @@ def _check_add_tool_class() -> None:
             escape_log_value(get_current_subject()),
         )
         raise Forbidden
+    check_unused_tool_classes()
 
 
 @log_traffic
