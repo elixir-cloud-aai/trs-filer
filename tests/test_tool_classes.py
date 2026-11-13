@@ -378,7 +378,7 @@ def test_open_mode_keeps_pending(
     tools = mongo_client[DB]["tools"]
     assert _doc(tools, tool_id)[PENDING] is True
     assert PENDING not in _doc(tools, other_id)
-    assert _doc(mongo_client[DB]["toolclasses"], "other")["_createdBy"] == (COLLEAGUE)
+    assert _doc(mongo_client[DB]["toolclasses"], "other")["_createdBy"] == COLLEAGUE
 
 
 def test_startup_sync(mongo_client: MongoClient[dict[str, Any]], overlay: Path) -> None:
@@ -426,6 +426,11 @@ def test_added_tool_class_syncs(
     response = client.put(f"{TOOL_CLASSES}/pending", json=NEW_CLASS, headers=user)
     assert response.status_code == 200
     assert _doc(tools, "OTHER")[PENDING] is True
+    # also if a registration adds it, in any mode
+    tools.insert_one({"id": "THIRD", "toolclass": {"id": "new"}, PENDING: True})
+    client = admin_client(_app(overlay, "open"))
+    _register(client, "new")
+    assert PENDING not in _doc(tools, "THIRD")
 
 
 def test_sync_pending_flags_changed(
@@ -442,13 +447,27 @@ def test_sync_pending_flags_changed(
     tools.insert_one({"id": "TOOL", "toolclass": {"id": "new"}})
     # the tool class is pending on the first check (the flag is set), and
     # approved on the check after the write (the flag is cleared again, and
-    # the third check confirms it)
+    # the third check confirms it); each check records the flag it sees
     states = iter([False, True, True])
-    monkeypatch.setattr(tool_classes, "is_approved", lambda id: next(states))
+    flags: list[bool] = []
+
+    def is_approved(id: str) -> bool:
+        """Record the flag of the tool, and return the next state.
+
+        Args:
+            id: Tool class identifier.
+
+        Returns:
+            Whether the tool class is approved.
+        """
+        flags.append(PENDING in _doc(tools, "TOOL"))
+        return next(states)
+
+    monkeypatch.setattr(tool_classes, "is_approved", is_approved)
     with app.app.app_context():
         sync_pending_flags("new")
+    assert flags == [False, True, False]
     assert PENDING not in _doc(tools, "TOOL")
-    assert next(states, None) is None
 
 
 def test_noauth_not_moderated(

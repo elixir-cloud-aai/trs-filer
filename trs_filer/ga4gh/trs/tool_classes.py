@@ -156,9 +156,9 @@ def visible_tools(query: dict[str, Any] | None = None) -> dict[str, Any]:
 
     Returns:
         The query if the user is an admin or authentication is disabled;
-        otherwise, the query restricted to the tools that aren't pending, and,
-        if any tool is pending (one indexed lookup), those the user has a role
-        on.
+        otherwise, always the query restricted to the tools that aren't
+        pending (also if none is), and, if any tool is pending (one indexed
+        lookup), those the user has a role on.
     """
     query = {} if query is None else query
     if auth_disabled() or is_admin():

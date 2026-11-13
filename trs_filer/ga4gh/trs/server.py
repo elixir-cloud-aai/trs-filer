@@ -1188,7 +1188,8 @@ def putToolClass(
     tool_class.register_metadata()
     if not exists:
         # tools may have the tool class already (e.g., if it was deleted
-        # while they were registered with it as pending)
+        # while they were registered with it as pending), in any mode (they
+        # stay pending if the mode changes)
         sync_pending_flags(id)
     return tool_class.data["id"]
 

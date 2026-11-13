@@ -344,9 +344,14 @@ class RegisterTool:
         # the tool class may have been approved (or deleted and added again)
         # meanwhile; a tool registered as approved can only have become
         # pending if tool classes are moderated (as pending tool classes are
-        # added only then), so other modes skip the check
+        # added only then), so other modes skip the check. A tool class that
+        # the registration added is synced for all tools that have it, in any
+        # mode, as tools may have it already (e.g., if it was deleted while
+        # they were registered with it as pending; cf. `putToolClass()`)
         mode = get_custom_config().access_control.tool_classes
-        if self.pending or mode == "moderated":
+        if stored_class is None:
+            sync_pending_flags(tool_class_id)
+        elif self.pending or mode == "moderated":
             sync_pending_flags(tool_class_id, {"id": self.data["id"]})
         logger.debug(
             "Entry in 'tools' collection: %s",
