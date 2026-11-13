@@ -8,49 +8,54 @@
       "$ref": "#/$defs/outputGlob"
     }
   },
-  "dependentSchemas": {
-    "x-ga4gh-output-glob": {
-      "$comment": "A glob finds files or directories, so it belongs on a file reference or on a list of file references (a schema whose items are one; tuples with prefixItems are not lists). It has a meaning only on the schema of a property of outputs; elsewhere, clients ignore it; this is deliberately not enforced.",
-      "required": [
-        "type"
-      ],
-      "properties": {
-        "type": {
-          "enum": [
-            "string",
-            "array"
-          ]
-        }
-      },
-      "if": {
-        "properties": {
-          "type": {
-            "const": "string"
-          }
-        }
-      },
-      "then": {
-        "required": [
-          "x-ga4gh-file"
-        ]
-      },
-      "else": {
-        "required": [
-          "items"
-        ],
-        "properties": {
-          "prefixItems": false,
-          "items": {
-            "$comment": "The file vocabulary makes a schema with x-ga4gh-file a string schema.",
-            "type": "object",
+  "allOf": [
+    {
+      "$comment": "dependentSchemas is wrapped in an allOf: Ajv drops the properties that this schema evaluates (properties) when dependentSchemas sits next to them and its keyword is absent, and would reject them as unevaluated.",
+      "dependentSchemas": {
+        "x-ga4gh-output-glob": {
+          "$comment": "A glob finds files or directories, so it belongs on a file reference or on a list of file references (a schema whose items are one; tuples with prefixItems are not lists). It has a meaning only on the schema of a property of outputs; elsewhere, clients ignore it; this is deliberately not enforced.",
+          "required": [
+            "type"
+          ],
+          "properties": {
+            "type": {
+              "enum": [
+                "string",
+                "array"
+              ]
+            }
+          },
+          "if": {
+            "properties": {
+              "type": {
+                "const": "string"
+              }
+            }
+          },
+          "then": {
             "required": [
               "x-ga4gh-file"
             ]
+          },
+          "else": {
+            "required": [
+              "items"
+            ],
+            "properties": {
+              "prefixItems": false,
+              "items": {
+                "$comment": "The file vocabulary makes a schema with x-ga4gh-file a string schema.",
+                "type": "object",
+                "required": [
+                  "x-ga4gh-file"
+                ]
+              }
+            }
           }
         }
       }
     }
-  },
+  ],
   "$defs": {
     "outputGlob": {
       "type": "string",

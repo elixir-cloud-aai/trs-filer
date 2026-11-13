@@ -1,7 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/uniqueg/ga4gh-io-schema/v0.3.0/schemas/vocabularies/file.schema.json",
-  "$dynamicAnchor": "meta",
   "title": "GA4GH IO Profile File Keywords",
   "description": "Keywords that describe file parameters: file references and the structure of tabular files.",
   "properties": {
@@ -9,36 +8,40 @@
       "$ref": "#/$defs/fileReference"
     },
     "x-ga4gh-tabular-schema": {
-      "$dynamicRef": "#meta",
-      "description": "Experimental. A nested JSON schema describing the rows of a tabular file (e.g., a sample sheet), as a hint for clients (e.g., to offer a spreadsheet editor). Not a validation rule: validation of tabular files is deferred. Checked by the same rules as every other schema of the IO schema."
+      "description": "Experimental. A nested JSON schema describing the rows of a tabular file (e.g., a sample sheet), as a hint for clients (e.g., to offer a spreadsheet editor). Not a validation rule: validation of tabular files is deferred. Checked by the same rules as every other schema of the IO schema ($defs/subschemas of the meta-schema)."
     }
   },
-  "dependentSchemas": {
-    "x-ga4gh-file": {
-      "$comment": "A file reference is a flat string schema. The profile defines its value syntax, not `format` (e.g., `uri` rejects compact DRS identifiers); `contentMediaType`, `contentEncoding` and `contentSchema` describe the string itself, not the referenced file. In-place applicators are not allowed on the annotated schema, so that it stays flat for converters and clients. This checks only the annotated schema: schemas that apply at the same location (e.g., a sibling in a parent allOf) can't be checked here; the specification forbids them to add these keywords.",
-      "required": [
-        "type"
-      ],
-      "properties": {
-        "type": {
-          "const": "string"
-        },
-        "format": false,
-        "contentMediaType": false,
-        "contentEncoding": false,
-        "contentSchema": false,
-        "allOf": false,
-        "anyOf": false,
-        "oneOf": false,
-        "not": false,
-        "if": false,
-        "then": false,
-        "else": false,
-        "$ref": false,
-        "$dynamicRef": false
+  "allOf": [
+    {
+      "$comment": "dependentSchemas is wrapped in an allOf: Ajv drops the properties that this schema evaluates (properties) when dependentSchemas sits next to them and its keyword is absent, and would reject them as unevaluated.",
+      "dependentSchemas": {
+        "x-ga4gh-file": {
+          "$comment": "A file reference is a flat string schema. The profile defines its value syntax, not `format` (e.g., `uri` rejects compact DRS identifiers); `contentMediaType`, `contentEncoding` and `contentSchema` describe the string itself, not the referenced file. In-place applicators are not allowed on the annotated schema, so that it stays flat for converters and clients. This checks only the annotated schema: schemas that apply at the same location (e.g., a sibling in a parent allOf) can't be checked here; the specification forbids them to add these keywords.",
+          "required": [
+            "type"
+          ],
+          "properties": {
+            "type": {
+              "const": "string"
+            },
+            "format": false,
+            "contentMediaType": false,
+            "contentEncoding": false,
+            "contentSchema": false,
+            "allOf": false,
+            "anyOf": false,
+            "oneOf": false,
+            "not": false,
+            "if": false,
+            "then": false,
+            "else": false,
+            "$ref": false,
+            "$dynamicRef": false
+          }
+        }
       }
     }
-  },
+  ],
   "$defs": {
     "fileReference": {
       "type": "object",
