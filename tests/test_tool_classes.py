@@ -8,6 +8,7 @@ mocked (see `tests/conftest.py`).
 from copy import deepcopy
 import os
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 from urllib.parse import quote
 
@@ -26,9 +27,10 @@ from tests.conftest import (
 )
 from tests.mock_data import BASE_PATH, MOCK_TOOL
 from trs_filer.app import create_app
-from trs_filer.ga4gh.trs import tool_classes
+from trs_filer.ga4gh.trs import server, tool_classes
 from trs_filer.ga4gh.trs.tool_classes import (
     PENDING,
+    auth_disabled,
     sync_pending_flags,
 )
 from trs_filer.utils import DB
@@ -506,3 +508,67 @@ def test_noauth_not_moderated(
     assert client.get(f"{TOOLS}/{quote(tool_id)}").status_code == 200
     response = client.get(APPROVALS)
     assert [tool["id"] for tool in response.get_json()["tools"]] == [tool_id]
+
+
+@pytest.mark.parametrize(
+    ("disabled", "expected"),
+    [([True], True), ([False], False), ([True, False], False), ([], False)],
+)
+def test_auth_disabled(
+    monkeypatch: pytest.MonkeyPatch, disabled: list[bool], expected: bool
+) -> None:
+    """Authentication counts as disabled only if no API requires it.
+
+    So that an API served without authentication next to the TRS API
+    doesn't make pending tools and tool classes public.
+
+    Args:
+        monkeypatch: Patches of the app config.
+        disabled: `disable_auth` of each API specification.
+        expected: Whether authentication counts as disabled.
+    """
+    specs = [SimpleNamespace(disable_auth=value) for value in disabled]
+    config = SimpleNamespace(api=SimpleNamespace(specs=specs))
+    monkeypatch.setattr(tool_classes, "get_config", lambda: config)
+    assert auth_disabled() is expected
+
+
+def test_approval_of_tool_class_added_meanwhile(
+    mongo_client: MongoClient[dict[str, Any]],
+    overlay: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A tool class added after an approval request found none isn't approved.
+
+    The request gets `404 Not Found`, as if it had come first.
+
+    Args:
+        mongo_client: MongoDB client.
+        overlay: Config overlay.
+        monkeypatch: Patches of the collections of the endpoint.
+    """
+    client = admin_client(_app(overlay, "moderated"))
+    toolclasses = mongo_client[DB]["toolclasses"]
+
+    class AddedMeanwhile:
+        """Collection whose tool class is added after the approval's update."""
+
+        def find_one_and_update(self, *args: Any, **kwargs: Any) -> None:
+            """Add the tool class as pending, as another request would.
+
+            Args:
+                *args: Arguments of the update (ignored).
+                **kwargs: Keyword arguments of the update (ignored).
+            """
+            toolclasses.insert_one({"id": "late", **NEW_CLASS, PENDING: True})
+
+    get_collection = server.get_collection
+    monkeypatch.setattr(
+        server,
+        "get_collection",
+        lambda name: (
+            AddedMeanwhile() if name == "toolclasses" else get_collection(name)
+        ),
+    )
+    assert client.put(f"{TOOL_CLASSES}/late/approval").status_code == 404
+    assert _doc(toolclasses, "late")[PENDING] is True

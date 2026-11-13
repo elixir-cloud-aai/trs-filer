@@ -70,11 +70,14 @@ def auth_disabled() -> bool:
     """Check whether authentication is disabled.
 
     Returns:
-        Whether an API of the app is served without authentication
+        Whether the APIs of the app are served without authentication
         (`api.specs.<name>.disable_auth`), as for local tests (see "Running
-        without authentication" in `docs/development.md`).
+        without authentication" in `docs/development.md`); not if any of
+        them requires it (e.g., the TRS API next to another one), so that
+        pending tools and tool classes stay hidden then.
     """
-    return any(spec.disable_auth for spec in get_config().api.specs)
+    specs = get_config().api.specs
+    return bool(specs) and all(spec.disable_auth for spec in specs)
 
 
 def may_add_tool_classes() -> bool:

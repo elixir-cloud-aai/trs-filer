@@ -44,6 +44,7 @@ from trs_filer.ga4gh.trs.permissions import (
 from trs_filer.ga4gh.trs.tool_classes import (
     PENDING,
     TOOL_CLASS_PROJECTION,
+    is_approved,
     may_add_tool_classes,
     own_tools,
     sync_pending_flags,
@@ -1238,12 +1239,15 @@ def putToolClassApproval(
         Identifier of the tool class, also if it was approved before.
 
     Raises:
-        NotFound: No tool class with the given identifier exists.
+        NotFound: No tool class with the given identifier exists (also if
+            a pending one was added while the request was processed).
     """
     approved = get_collection("toolclasses").find_one_and_update(
         {"id": id, PENDING: True}, {"$unset": {PENDING: ""}}
     )
-    if approved is None and not tool_class_exists(id):
+    # also if a pending tool class was added after the update found none:
+    # the admin hasn't seen it
+    if approved is None and not is_approved(id):
         raise NotFound
     # also if the tool class was approved before, to clear flags missed
     # meanwhile
