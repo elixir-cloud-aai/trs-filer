@@ -625,6 +625,45 @@ allow the app's pods to connect to the database. Give each release a
 database server of its own: releases that share one use the same database,
 and so serve and change each other's tools.
 
+## Object storage
+
+The app can store the content of files in a bucket of **S3-compatible object
+storage** instead of MongoDB (see [File
+storage](https://trs-filer.readthedocs.io/en/latest/configuration/#file-storage)).
+The chart doesn't deploy an object store: set the connection to an existing
+one in `config`, and pass the credentials as environment variables from a
+Secret (`trsFiler.extraEnvFrom`), never in `config`, which is stored in a
+ConfigMap:
+
+```yaml
+config:
+  custom:
+    storage:
+      backend: s3
+      s3:
+        endpoint_url: https://s3.example.org
+        bucket: trs-filer
+        region: us-east-1
+        prefix: trs-filer/
+trsFiler:
+  # Secret with the keys `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`
+  extraEnvFrom:
+    - secretRef:
+        name: trs-filer-s3-credentials
+  # Restart the app's pods when the credentials change (not with
+  # `helm template` or Argo CD)
+  rolloutOnSecrets: [trs-filer-s3-credentials]
+```
+
+For example, create the Secret with
+`kubectl create secret generic trs-filer-s3-credentials --from-literal=AWS_ACCESS_KEY_ID=<key> --from-literal=AWS_SECRET_ACCESS_KEY=<secret>`.
+Instead of keys, the app can use any credentials of boto3's default
+credential chain, e.g., a web identity token of the pod's service account.
+Allow the app's pods to connect to the S3 API; with presigned URLs
+(`custom.storage.s3.presigned_urls`), clients connect to it directly, too.
+Back up the bucket together with the database (see
+[Backups](https://trs-filer.readthedocs.io/en/latest/operations/#backups)).
+
 ## Upgrades
 
 Change the values file (e.g., `config` for the config, `trsFiler.tag` for

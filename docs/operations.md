@@ -11,9 +11,12 @@ A deployment of TRS-Filer consists of:
   `toolclasses`, and `policy_rules` with the rules of access control; see
   [Database](configuration.md#database));
 - an OpenID Connect provider of the deployment, whose access tokens
-  TRS-Filer validates for writes (see [Access control](access-control.md)).
+  TRS-Filer validates for writes (see [Access control](access-control.md));
+- optionally, a bucket of S3-compatible object storage, which then stores
+  the content of files (see [File storage](configuration.md#file-storage)).
 
-The Docker Compose setup and the [Helm chart](deployment.md) run both.
+The Docker Compose setup and the [Helm chart](deployment.md) run the app
+and MongoDB; neither bundles an object store.
 
 ## Logs
 
@@ -50,7 +53,8 @@ if this fails, Gunicorn exits.
 
 ## Backups
 
-All state is in MongoDB: back up the database (`trsStore`, or the one set in
+All state is in MongoDB, except the content of files in object storage (see
+below): back up the database (`trsStore`, or the one set in
 `MONGO_DBNAME`; `trsStore` with the Helm chart) with
 [`mongodump`](https://www.mongodb.com/docs/database-tools/mongodump/), e.g.,
 in the Docker Compose setup:
@@ -67,7 +71,25 @@ archive inconsistent: stop writes (e.g., stop the app with
 MongoDB that takes consistent snapshots.
 
 The base config creates unique indexes on the identifiers (`id`) of tools
-and tool classes on startup.
+and tool classes on startup, and a sparse index on the keys of the objects
+of files in object storage (`versions.files._storage.key` of `tools`, see
+[File storage](configuration.md#file-storage)), which the check of released
+objects on every write uses.
+
+With object storage (`custom.storage.backend: s3`, see [File
+storage](configuration.md#file-storage)), back up the bucket (the objects
+with the prefix of `custom.storage.s3.prefix`) together with the database,
+with the tools of the object storage (e.g., versioning or replication of
+the bucket, or `aws s3 sync`). Objects are written once and never changed,
+so back up the database first, then the bucket: objects of files
+registered meanwhile are then in the bucket's backup, too. Objects of
+versions replaced or deleted meanwhile are deleted, though, so enable
+versioning (or object retention) of the bucket, to restore the objects
+that the database's backup refers to. Restored files
+whose object is missing fail with `500 Internal Server Error`. Objects that
+no file refers to (e.g., left by a crash during a registration) can be
+found by comparing the keys in the bucket with those in the database
+(`versions.files._storage.key` of collection `tools`), and deleted.
 
 ## Permissions API
 

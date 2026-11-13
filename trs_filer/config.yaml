@@ -154,6 +154,13 @@ db:
                               id: 1
                           options:
                             'unique': True
+                        # Keys of the objects of files in object storage
+                        # (`custom.storage`), for the check which objects are
+                        # still referred to
+                        - keys:
+                              versions.files._storage.key: 1
+                          options:
+                            'sparse': True
                 toolclasses:
                     indexes:
                         - keys:
@@ -347,3 +354,20 @@ custom:
     io_schema:
         validation: False
         timeout: 10
+    # Storage of the content of files: `mongodb` (default), with the other
+    # data of tools, or `s3`, in a bucket of S3-compatible object storage
+    # (S3 API only, e.g., SeaweedFS, Ceph RGW or cloud services), which
+    # `s3` sets (`bucket`, which must exist, and, e.g., `endpoint_url`,
+    # `region`, `prefix`; see "File storage" in `docs/configuration.md`).
+    # Files stay where they were stored; files in object storage are served
+    # as long as `s3` is set. Credentials are never set here: boto3 takes
+    # them from the environment (e.g., `AWS_ACCESS_KEY_ID` and
+    # `AWS_SECRET_ACCESS_KEY`). E.g.:
+    # storage:
+    #     backend: s3
+    #     s3:
+    #         endpoint_url: https://s3.example.org
+    #         bucket: trs-filer
+    #         region: us-east-1
+    storage:
+        backend: mongodb
