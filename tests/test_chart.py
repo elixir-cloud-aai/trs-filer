@@ -589,29 +589,61 @@ LEGACY_CHECK = """{{- include "trs-filer.failIfLegacy" (dict "root" . "resource"
 """
 
 
-INSTANCE = '"app.kubernetes.io/instance" "trs-filer"'
+INSTANCE = (
+    '"app.kubernetes.io/instance" "trs-filer" "app.kubernetes.io/name" "trs-filer"'
+)
 MONGODB_LABELS = f'{INSTANCE} "app.kubernetes.io/component" "mongodb"'
+EXISTING_CLAIM = ("--set", "mongodb.persistence.existingClaim=old-claim")
 
 
 @pytest.mark.parametrize(
-    ("release", "name", "labels", "error"),
+    ("release", "name", "labels", "args", "error"),
     [
         # A Deployment of a chart before foca-common, of this release
-        ("trs-filer", APP, '"app" "trs-filer"', "uninstall it and install"),
+        ("trs-filer", APP, '"app" "trs-filer"', (), "uninstall it and install"),
         # Ones of this chart
-        ("trs-filer", APP, INSTANCE, None),
-        ("trs-filer", MONGODB, MONGODB_LABELS, None),
+        ("trs-filer", APP, INSTANCE, (), None),
+        ("trs-filer", MONGODB, MONGODB_LABELS, (), None),
+        # Another name label (a changed nameOverride), with the same names
+        (
+            "trs-filer",
+            APP,
+            '"app.kubernetes.io/instance" "trs-filer" "app.kubernetes.io/name" "filer"',
+            (),
+            "a changed nameOverride",
+        ),
         # Its MongoDB under another name (a changed fullnameOverride)
-        ("trs-filer", "old-mongodb", MONGODB_LABELS, "new, empty claim"),
+        ("trs-filer", "old-mongodb", MONGODB_LABELS, (), "new, empty claim"),
+        # ... which keeps its data with an existing claim, or has none
+        ("trs-filer", "old-mongodb", MONGODB_LABELS, EXISTING_CLAIM, None),
+        (
+            "trs-filer",
+            "old-mongodb",
+            MONGODB_LABELS,
+            ("--set", "mongodb.persistence.enabled=false"),
+            None,
+        ),
+        (
+            "trs-filer",
+            "old-mongodb",
+            MONGODB_LABELS,
+            ("--set", "mongodb.enabled=false", "--set", "config.db.host=db.local"),
+            None,
+        ),
         # Ones of another release
-        ("other", APP, '"app" "trs-filer"', None),
-        ("other", "old-mongodb", MONGODB_LABELS, None),
+        ("other", APP, '"app" "trs-filer"', (), None),
+        ("other", "old-mongodb", MONGODB_LABELS, (), None),
     ],
 )
 def test_fail_if_legacy(
-    tmp_path: Path, release: str, name: str, labels: str, error: str | None
+    tmp_path: Path,
+    release: str,
+    name: str,
+    labels: str,
+    args: tuple[str, ...],
+    error: str | None,
 ) -> None:
-    """Upgrades fail for earlier charts' Deployments and for renamed MongoDBs.
+    """Upgrades fail for earlier charts' Deployments and for renames.
 
     `lookup` finds nothing in `helm template`, so the check is called with a
     Deployment of the release as `lookup` would return it.
@@ -621,6 +653,7 @@ def test_fail_if_legacy(
         release: Release that the Deployment belongs to.
         name: Name of the Deployment.
         labels: Labels of the Deployment (template arguments of `dict`).
+        args: Further arguments of `helm template`.
         error: Expected part of the error, or None if the check passes.
     """
     template = (
@@ -631,10 +664,10 @@ def test_fail_if_legacy(
     chart = copy_chart(tmp_path, {"legacy-check.yaml": template})
     if error:
         with pytest.raises(subprocess.CalledProcessError) as failure:
-            helm_template(chart)
+            helm_template(chart, *args)
         assert error in failure.value.stderr
     else:
-        helm_template(chart)
+        helm_template(chart, *args)
 
 
 def test_upgrade_check_included() -> None:

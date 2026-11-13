@@ -205,9 +205,12 @@ can be installed in one namespace:
 
 `nameOverride` replaces `trs-filer` in the names and the
 `app.kubernetes.io/name` label, `fullnameOverride` replaces `<app>`. Set them
-when installing only: changing them later renames all resources, MongoDB's
-claim included, so MongoDB would start on a new, empty claim (the old one is
-kept), and `helm upgrade` fails (when Helm can query the cluster). Names
+when installing only: changing `nameOverride` later changes the pod
+selectors of the Deployments, which can't be changed, and changing either
+renames the resources, MongoDB's claim included, so MongoDB would start on a
+new, empty claim (the old one is kept; unless the claim is
+`mongodb.persistence.existingClaim`): `helm upgrade` fails then (when Helm
+can query the cluster). Names
 are truncated to 63 characters. The examples in this document use the
 release `trs-filer`.
 

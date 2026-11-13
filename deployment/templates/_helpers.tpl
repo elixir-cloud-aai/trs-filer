@@ -112,9 +112,12 @@ and client-side dry runs.
 {{/*
 Fails if a Deployment (looked up in the cluster) belongs to this release, but
 was created by a chart before foca-common (without the label
-`app.kubernetes.io/instance`), or is the release's MongoDB under another name
+`app.kubernetes.io/instance`), has another `app.kubernetes.io/name` label (a
+changed `nameOverride`: the selectors of Deployments can't be changed, while
+those of Services would be), or is the release's MongoDB under another name
 (a changed `fullnameOverride` or `nameOverride`), which would start MongoDB
-on a new, empty claim. Call with a dict of the root context (`root`) and the
+on a new, empty claim (unless the claim is `mongodb.persistence.existingClaim`
+or there is none). Call with a dict of the root context (`root`) and the
 Deployment (`resource`).
 */}}
 {{- define "trs-filer.failIfLegacy" -}}
@@ -125,8 +128,14 @@ Deployment (`resource`).
 {{- if not (hasKey $labels "app.kubernetes.io/instance") -}}
 {{- fail (printf "release %s was installed with a chart before foca-common (with the config Job), and upgrading it would start the app on a new, empty database (Deployment %s): uninstall it and install the current chart instead, moving the data as described in deployment/README.md (From earlier charts)" .root.Release.Name $name) -}}
 {{- end -}}
+{{- $appName := include "foca-common.name" .root -}}
+{{- if ne (get $labels "app.kubernetes.io/name") $appName -}}
+{{- fail (printf "release %s was installed with the name label %s, and upgrading it with %s (a changed nameOverride) would change the selectors of its Services, but not those of its Deployments: keep nameOverride of the installation (see deployment/README.md, Names and labels)" .root.Release.Name (get $labels "app.kubernetes.io/name") $appName) -}}
+{{- end -}}
 {{- $mongodb := include "foca-common.mongodbFullname" .root -}}
-{{- if and .root.Values.mongodb.enabled (eq (get $labels "app.kubernetes.io/component") "mongodb") (ne $name $mongodb) -}}
+{{- $persistence := .root.Values.mongodb.persistence | default dict -}}
+{{- $generatedClaim := and $persistence.enabled (not $persistence.existingClaim) -}}
+{{- if and .root.Values.mongodb.enabled $generatedClaim (eq (get $labels "app.kubernetes.io/component") "mongodb") (ne $name $mongodb) -}}
 {{- fail (printf "release %s runs MongoDB as %s, and upgrading it with the name %s (a changed fullnameOverride or nameOverride) would start MongoDB on a new, empty claim: keep the names of the installation (see deployment/README.md, Names and labels)" .root.Release.Name $name $mongodb) -}}
 {{- end -}}
 {{- end -}}
