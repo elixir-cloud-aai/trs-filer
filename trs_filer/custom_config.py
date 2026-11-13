@@ -6,7 +6,7 @@ from typing import Annotated, Literal
 
 from foca.models.config import FOCABaseConfig
 from foca.utils.misc import generate_id
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 
 
 class ServiceConfig(FOCABaseConfig):
@@ -476,6 +476,128 @@ class IoSchemaConfig(FOCABaseConfig):
     timeout: float = Field(default=10.0, gt=0, allow_inf_nan=False)
 
 
+class S3StorageConfig(FOCABaseConfig):
+    """Model for the connection to S3-compatible object storage.
+
+    Only the S3 API is used, so any S3-compatible server or service works.
+    Credentials are never part of the config: they are taken from the
+    environment by boto3's default credential chain (e.g., the variables
+    `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`, from a Secret).
+
+    Args:
+        bucket: Name of the bucket, which must exist.
+        endpoint_url: URL of the S3 API (e.g., `https://s3.example.org`);
+            if not set, boto3's default (AWS, or the environment variable
+            `AWS_ENDPOINT_URL_S3` or `AWS_ENDPOINT_URL`).
+        region: Region of the bucket; if not set, boto3's default (e.g., the
+            environment variable `AWS_REGION`).
+        prefix: Prefix of the keys of the objects (e.g., `trs-filer/`), so
+            that a bucket can be shared.
+        addressing_style: Addressing of the bucket: `path`
+            (`<endpoint>/<bucket>/<key>`, which most self-hosted servers
+            need), `virtual` (`<bucket>.<endpoint>/<key>`) or `auto`
+            (boto3's choice).
+        presigned_urls: Whether files are served via presigned URLs of the
+            objects instead of through the app (see `docs/configuration.md`).
+        presigned_url_expiry: Validity of presigned URLs, in seconds (at
+            most 7 days, the limit of the S3 API).
+        connect_timeout: Timeout for connecting to the S3 API, in seconds.
+        read_timeout: Timeout for each read from a connection, in seconds.
+
+    Attributes:
+        bucket: Name of the bucket.
+        endpoint_url: URL of the S3 API.
+        region: Region of the bucket.
+        prefix: Prefix of the keys of the objects.
+        addressing_style: Addressing of the bucket.
+        presigned_urls: Whether files are served via presigned URLs.
+        presigned_url_expiry: Validity of presigned URLs, in seconds.
+        connect_timeout: Timeout for connecting to the S3 API, in seconds.
+        read_timeout: Timeout for each read from a connection, in seconds.
+
+    Raises:
+        pydantic.ValidationError: The bucket is empty, the endpoint URL is
+            not an HTTP(S) URL, the validity of presigned URLs is out of
+            range, or a timeout is not positive or not finite.
+
+    Example:
+        >>> S3StorageConfig(bucket='trs-files', endpoint_url='https://s3.example.org')
+        S3StorageConfig(bucket='trs-files', endpoint_url='https://s3.example.org',
+         region=None, prefix='', addressing_style='path', presigned_urls=False,
+         presigned_url_expiry=300, connect_timeout=5.0, read_timeout=10.0)
+    """
+
+    bucket: str = Field(min_length=1)
+    endpoint_url: str | None = None
+    region: str | None = None
+    prefix: str = ""
+    addressing_style: Literal["auto", "path", "virtual"] = "path"
+    presigned_urls: bool = False
+    presigned_url_expiry: Annotated[int, Field(strict=True, ge=1, le=604800)] = 300
+    connect_timeout: float = Field(default=5.0, gt=0, allow_inf_nan=False)
+    read_timeout: float = Field(default=10.0, gt=0, allow_inf_nan=False)
+
+    @field_validator("endpoint_url")
+    @classmethod
+    def check_endpoint_url(cls, value: str | None) -> str | None:
+        """Check that the endpoint URL is an HTTP(S) URL.
+
+        Args:
+            value: Endpoint URL, or `None` for boto3's default.
+
+        Returns:
+            The endpoint URL.
+
+        Raises:
+            ValueError: The endpoint URL is not an HTTP(S) URL.
+        """
+        if value is not None and not value.startswith(("http://", "https://")):
+            raise ValueError("The endpoint URL must start with http:// or https://")
+        return value
+
+
+class StorageConfig(FOCABaseConfig):
+    """Model for the storage of the content of files.
+
+    Args:
+        backend: Where the content of files registered from now on is stored:
+            `mongodb` (the default), with the other data of tools, or `s3`,
+            in S3-compatible object storage (`s3`). Files stay where they
+            were stored; files in object storage can be read as long as `s3`
+            is set, also with backend `mongodb`.
+        s3: Connection to S3-compatible object storage; required for backend
+            `s3`.
+
+    Attributes:
+        backend: Where the content of new files is stored.
+        s3: Connection to S3-compatible object storage.
+
+    Raises:
+        pydantic.ValidationError: The backend is `s3`, but `s3` is not set.
+
+    Example:
+        >>> StorageConfig(backend='s3', s3=S3StorageConfig(bucket='trs-files'))
+        StorageConfig(backend='s3', s3=S3StorageConfig(bucket='trs-files', ...))
+    """
+
+    backend: Literal["mongodb", "s3"] = "mongodb"
+    s3: S3StorageConfig | None = None
+
+    @model_validator(mode="after")
+    def check_s3(self) -> "StorageConfig":
+        """Check that object storage is configured for backend `s3`.
+
+        Returns:
+            The storage config.
+
+        Raises:
+            ValueError: The backend is `s3`, but `s3` is not set.
+        """
+        if self.backend == "s3" and self.s3 is None:
+            raise ValueError("custom.storage.s3 must be set for backend 's3'")
+        return self
+
+
 class CustomConfig(FOCABaseConfig):
     """Model for custom configuration parameters.
 
@@ -490,6 +612,7 @@ class CustomConfig(FOCABaseConfig):
         remote_files: Parameters for retrieving files from their URLs.
         access_control: Access control settings of the app.
         io_schema: Checks of GA4GH I/O Schema files (experimental).
+        storage: Storage of the content of files.
 
     Attributes:
         service: Service config parameters.
@@ -499,6 +622,7 @@ class CustomConfig(FOCABaseConfig):
         remote_files: Parameters for retrieving files from their URLs.
         access_control: Access control settings of the app.
         io_schema: Checks of GA4GH I/O Schema files (experimental).
+        storage: Storage of the content of files.
     """
 
     service: ServiceConfig
@@ -508,3 +632,4 @@ class CustomConfig(FOCABaseConfig):
     remote_files: RemoteFilesConfig = Field(default_factory=RemoteFilesConfig)
     access_control: AccessControlConfig = Field(default_factory=AccessControlConfig)
     io_schema: IoSchemaConfig = Field(default_factory=IoSchemaConfig)
+    storage: StorageConfig = Field(default_factory=StorageConfig)
