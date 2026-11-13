@@ -232,6 +232,44 @@ def test_release_chart_checked() -> None:
     assert 'gh release upload "${TAG}" dist/*' in steps["Create release"]["run"]
 
 
+def test_release_chart_packaged() -> None:
+    """The release packages the chart with the library and the published image.
+
+    The package has the release version as `version` and `appVersion` (the
+    default tag of the image), the library chart in the version of
+    `Chart.lock`, and the published image (`IMAGE_NAME`, also in forks with
+    another `DOCKERHUB_ORG`) without a tag of its own; the packaged files are
+    checked, not only the copy that is packaged.
+    """
+    steps = _load(WORKFLOWS / "release.yml")["jobs"]["prepare"]["steps"]
+    step = {step["name"]: step for step in steps}["Package chart"]
+    assert step["env"] == {
+        "VERSION": "${{ steps.version.outputs.version }}",
+        "CHART_VERSION": "${{ steps.version.outputs.chart_version }}",
+    }
+    commands = _commands(step)
+    package = next(c for c in commands if c.startswith("helm package"))
+    assert '--version "${CHART_VERSION}"' in package
+    assert '--app-version "${VERSION}"' in package
+    assert 'image="${IMAGE_NAME}"' in commands
+    rewrite = next(c for c in commands if "yq -i" in c)
+    assert rewrite == (
+        "IMAGE=\"${image}\" yq -i '.trsFiler.image = strenv(IMAGE)'"
+        ' "${chart}/values.yaml"'
+    )
+    script = " ".join(step["run"].replace("\\\n", " ").split())
+    packaged = 'tar -xzOf "${package}" trs-filer/'
+    assert (
+        f'{packaged}charts/foca-common/Chart.yaml | yq .version)"' in script
+        and "\"$(yq '.dependencies[0].version' deployment/Chart.lock)\"" in script
+    )
+    assert f'{packaged}values.yaml | yq .trsFiler.image)" == "${{image}}" ]]' in script
+    assert f'{packaged}values.yaml | yq .trsFiler.tag)" == "" ]]' in script
+    assert f'{packaged}Chart.yaml | yq .appVersion)" == "${{VERSION}}" ]]' in script
+    # No legacy value is set
+    assert "trs_filer" not in step["run"]
+
+
 def test_release_tag_checked_first() -> None:
     """The release tag is checked before any script of the tagged commit runs.
 

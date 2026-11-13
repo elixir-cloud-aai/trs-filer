@@ -205,10 +205,11 @@ can be installed in one namespace:
 
 `nameOverride` replaces `trs-filer` in the names and the
 `app.kubernetes.io/name` label, `fullnameOverride` replaces `<app>`. Set them
-when installing only: changing them later changes the pod selectors of the
-Deployments, which can't be changed, so the upgrade fails, and MongoDB's
-claim. Names are truncated to 63 characters. The examples in this document
-use the release `trs-filer`.
+when installing only: changing them later renames all resources, MongoDB's
+claim included, so MongoDB would start on a new, empty claim (the old one is
+kept), and `helm upgrade` fails (when Helm can query the cluster). Names
+are truncated to 63 characters. The examples in this document use the
+release `trs-filer`.
 
 All resources have the [standard
 labels](https://helm.sh/docs/chart_best_practices/labels/)
@@ -658,6 +659,7 @@ would ignore:
 | `trs_filer.appName` (default `trs-filer`) | `fullnameOverride` (see [Names and labels](#names-and-labels)) |
 | `trs_filer.forwardedAllowIps` (default `*`) | `FORWARDED_ALLOW_IPS` in `trsFiler.extraEnv` (see [Forwarded headers](#forwarded-headers)) |
 | `apiServer` | none: the chart has no config Job |
+| `clusterType` (chart of `v0.3.0`) | none: a Route is created on OpenShift without an Ingress or HTTPRoute (see [Exposing the app](#exposing-the-app)) |
 | `mongodb.dbName` (default `trs-filer-db`) | none: the database is `trsStore` |
 | `mongodb.volumeSize` | `mongodb.persistence.size` |
 

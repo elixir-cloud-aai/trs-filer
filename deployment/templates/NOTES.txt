@@ -39,7 +39,7 @@ deployment/README.md, Authentication).
 
 NOTE: The Ingress has no TLS (trsFiler.ingress.https.enabled is false), so
 TLS must be terminated in front of the cluster for the URLs below (see
-deployment/README.md, TLS).
+deployment/README.md, Exposing the app).
 {{- end }}
 {{- if $httpRoute }}
 

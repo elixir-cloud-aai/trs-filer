@@ -9,6 +9,7 @@ build deployment`), or they fail.
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import tarfile
@@ -483,6 +484,7 @@ def test_host_name_required() -> None:
         (("--set", "host_name=trs.example.org"), "host_name was renamed to hostName"),
         (("--set", "trs_filer.appName=trs"), "trs_filer was renamed to trsFiler"),
         (("--set", "apiServer=kubernetes.default.svc:443"), "apiServer was removed"),
+        (("--set", "clusterType=openshift"), "clusterType was removed"),
         (("--set", "trsFiler.appName=trs"), "trsFiler.appName was removed"),
         (("--set", "trsFiler.config.x=1"), "trsFiler.config was removed"),
         (
@@ -579,7 +581,7 @@ def test_library_versions() -> None:
 # Calls the check of upgrades with a Deployment as `lookup` returns it
 LEGACY_CHECK = """{{- include "trs-filer.failIfLegacy" (dict "root" . "resource" (dict
   "metadata" (dict
-    "name" "trs-filer"
+    "name" "NAME"
     "annotations" (dict "meta.helm.sh/release-name" "RELEASE")
     "labels" (dict LABELS)
   )
@@ -587,19 +589,29 @@ LEGACY_CHECK = """{{- include "trs-filer.failIfLegacy" (dict "root" . "resource"
 """
 
 
+INSTANCE = '"app.kubernetes.io/instance" "trs-filer"'
+MONGODB_LABELS = f'{INSTANCE} "app.kubernetes.io/component" "mongodb"'
+
+
 @pytest.mark.parametrize(
-    ("release", "labels", "fails"),
+    ("release", "name", "labels", "error"),
     [
         # A Deployment of a chart before foca-common, of this release
-        ("trs-filer", '"app" "trs-filer"', True),
-        # One of this chart
-        ("trs-filer", '"app.kubernetes.io/instance" "trs-filer"', False),
-        # One of another release
-        ("other", '"app" "trs-filer"', False),
+        ("trs-filer", APP, '"app" "trs-filer"', "uninstall it and install"),
+        # Ones of this chart
+        ("trs-filer", APP, INSTANCE, None),
+        ("trs-filer", MONGODB, MONGODB_LABELS, None),
+        # Its MongoDB under another name (a changed fullnameOverride)
+        ("trs-filer", "old-mongodb", MONGODB_LABELS, "new, empty claim"),
+        # Ones of another release
+        ("other", APP, '"app" "trs-filer"', None),
+        ("other", "old-mongodb", MONGODB_LABELS, None),
     ],
 )
-def test_fail_if_legacy(tmp_path: Path, release: str, labels: str, fails: bool) -> None:
-    """Upgrades fail for Deployments of the charts before foca-common.
+def test_fail_if_legacy(
+    tmp_path: Path, release: str, name: str, labels: str, error: str | None
+) -> None:
+    """Upgrades fail for earlier charts' Deployments and for renamed MongoDBs.
 
     `lookup` finds nothing in `helm template`, so the check is called with a
     Deployment of the release as `lookup` would return it.
@@ -607,17 +619,69 @@ def test_fail_if_legacy(tmp_path: Path, release: str, labels: str, fails: bool) 
     Args:
         tmp_path: Directory for the copy of the chart.
         release: Release that the Deployment belongs to.
+        name: Name of the Deployment.
         labels: Labels of the Deployment (template arguments of `dict`).
-        fails: Whether the check fails.
+        error: Expected part of the error, or None if the check passes.
     """
-    template = LEGACY_CHECK.replace("RELEASE", release).replace("LABELS", labels)
+    template = (
+        LEGACY_CHECK.replace("RELEASE", release)
+        .replace("NAME", name)
+        .replace("LABELS", labels)
+    )
     chart = copy_chart(tmp_path, {"legacy-check.yaml": template})
-    if fails:
-        with pytest.raises(subprocess.CalledProcessError) as error:
+    if error:
+        with pytest.raises(subprocess.CalledProcessError) as failure:
             helm_template(chart)
-        assert "uninstall it and install the current chart" in error.value.stderr
+        assert error in failure.value.stderr
     else:
         helm_template(chart)
+
+
+def test_upgrade_check_included() -> None:
+    """The check of upgrades runs on upgrades, once, in the app's ConfigMap.
+
+    `lookup` finds nothing in `helm template`, so an upgrade renders; the
+    check itself is tested by `test_fail_if_legacy`.
+    """
+    templates = {
+        path.name: path.read_text(encoding="utf-8")
+        for path in (CHART / "templates").glob("*.yaml")
+    }
+    assert [
+        name for name, text in templates.items() if "trs-filer.checkUpgrade" in text
+    ] == ["configmap.yaml"]
+    helpers = (CHART / "templates" / "_helpers.tpl").read_text(encoding="utf-8")
+    check = helpers.split('{{- define "trs-filer.checkUpgrade" -}}')[1]
+    assert check.lstrip().startswith("{{- if .Release.IsUpgrade -}}")
+    assert find(render("--is-upgrade"), "ConfigMap", f"{APP}-config")
+
+
+def test_readme_references() -> None:
+    """The chart's references to sections of its README name existing ones.
+
+    References (e.g., "see deployment/README.md, Server") may span lines of
+    comments, which are joined first.
+    """
+    readme = (CHART / "README.md").read_text(encoding="utf-8")
+    headings = re.findall(r"^#+ (.+)$", readme, re.MULTILINE)
+    prefix = "deployment/README.md, "
+    files = [
+        CHART / "values.yaml",
+        CHART / "values.schema.json",
+        *(CHART / "templates").iterdir(),
+    ]
+    sections = []
+    for path in files:
+        text = re.sub(r"\s*\n\s*#?\s*", " ", path.read_text(encoding="utf-8"))
+        for part in text.split(prefix)[1:]:
+            matches = [
+                heading
+                for heading in headings
+                if re.match(rf"{re.escape(heading)}\b", part)
+            ]
+            assert matches, f"{path.name}: {prefix}{part[:40]}"
+            sections.extend(matches)
+    assert {"Configuration", "From earlier charts", "Several replicas"} <= set(sections)
 
 
 def test_notes(tmp_path: Path) -> None:

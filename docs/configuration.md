@@ -332,9 +332,10 @@ Override settings with the environment variable `GUNICORN_CMD_ARGS` (e.g.,
 the Helm chart expect port 8080. Behind a reverse proxy, set its addresses
 in `FORWARDED_ALLOW_IPS`, so that Gunicorn trusts its `X-Forwarded-*`
 headers (with the Helm chart, in `trsFiler.extraEnv`, see [Forwarded
-headers](deployment.md#forwarded-headers)). `server.host` and `server.port` of the config only apply to Flask's
-development server (`python -m trs_filer.app`). `server.debug` must stay off
-outside local development: Flask's debugger allows executing arbitrary code.
+headers](deployment.md#forwarded-headers)). `server.host` and
+`server.port` of the config only apply to Flask's development server
+(`python -m trs_filer.app`). `server.debug` must stay off outside local
+development: Flask's debugger allows executing arbitrary code.
 
 ## Database
 

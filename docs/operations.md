@@ -7,8 +7,9 @@ A deployment of TRS-Filer consists of:
 - the app (the TRS API), served by Gunicorn (see
   [Server](configuration.md#server));
 - MongoDB, which stores the tools, with their versions and files, and the
-  tool classes (database `trsStore`, collections `tools` and `toolclasses`, and `policy_rules` with the
-  rules of access control; see [Database](configuration.md#database));
+  tool classes (database `trsStore`, collections `tools` and
+  `toolclasses`, and `policy_rules` with the rules of access control; see
+  [Database](configuration.md#database));
 - an OpenID Connect provider of the deployment, whose access tokens
   TRS-Filer validates for writes (see [Access control](access-control.md)).
 

@@ -64,6 +64,9 @@ otherwise be ignored
 {{- fail (printf "%s (camelCase, following Helm conventions): rename it in the values file %s" (get $renamed $old) $hint) -}}
 {{- end -}}
 {{- end -}}
+{{- if hasKey .Values "clusterType" -}}
+{{- fail (printf "clusterType was removed: the chart creates an Ingress, an HTTPRoute (trsFiler.httpRoute) or, with trsFiler.ingress.enabled false, an OpenShift Route; remove it from the values file (see deployment/README.md, Exposing the app) %s" $hint) -}}
+{{- end -}}
 {{- if hasKey .Values "apiServer" -}}
 {{- fail (printf "apiServer was removed with the config Job: the chart renders the config overlay itself; remove it from the values file %s" $hint) -}}
 {{- end -}}
@@ -90,7 +93,8 @@ Fails on upgrades of releases of the charts before foca-common (with the
 config Job), whose resources have other names and selectors: the
 upgrade would start the app on a new, empty database (the old claim is kept,
 `helm.sh/resource-policy: keep`), or fail on the immutable selector of the
-app's Deployment; renders nothing. Releases are recognized by their
+app's Deployment, and on upgrades that rename MongoDB, which would start it
+on a new, empty claim; renders nothing. Releases are recognized by their
 Deployments (`trs-filer.failIfLegacy`; not by claims, which uninstalling
 such a release keeps). Included once (in the app's ConfigMap template), as it
 looks up resources in the cluster. `lookup` finds nothing in `helm template`
@@ -107,14 +111,23 @@ and client-side dry runs.
 
 {{/*
 Fails if a Deployment (looked up in the cluster) belongs to this release, but
-was created by a chart before foca-common: without the label
-`app.kubernetes.io/instance`. Call with a dict of the root context (`root`)
-and the Deployment (`resource`).
+was created by a chart before foca-common (without the label
+`app.kubernetes.io/instance`), or is the release's MongoDB under another name
+(a changed `fullnameOverride` or `nameOverride`), which would start MongoDB
+on a new, empty claim. Call with a dict of the root context (`root`) and the
+Deployment (`resource`).
 */}}
 {{- define "trs-filer.failIfLegacy" -}}
 {{- $owner := dig "metadata" "annotations" "meta.helm.sh/release-name" "" .resource -}}
 {{- $labels := dig "metadata" "labels" dict .resource -}}
-{{- if and (eq $owner .root.Release.Name) (not (hasKey $labels "app.kubernetes.io/instance")) -}}
-{{- fail (printf "release %s was installed with a chart before foca-common (with the config Job), and upgrading it would start the app on a new, empty database (Deployment %s): uninstall it and install the current chart instead, moving the data as described in deployment/README.md (From earlier charts)" .root.Release.Name (dig "metadata" "name" "" .resource)) -}}
+{{- $name := dig "metadata" "name" "" .resource -}}
+{{- if eq $owner .root.Release.Name -}}
+{{- if not (hasKey $labels "app.kubernetes.io/instance") -}}
+{{- fail (printf "release %s was installed with a chart before foca-common (with the config Job), and upgrading it would start the app on a new, empty database (Deployment %s): uninstall it and install the current chart instead, moving the data as described in deployment/README.md (From earlier charts)" .root.Release.Name $name) -}}
+{{- end -}}
+{{- $mongodb := include "foca-common.mongodbFullname" .root -}}
+{{- if and .root.Values.mongodb.enabled (eq (get $labels "app.kubernetes.io/component") "mongodb") (ne $name $mongodb) -}}
+{{- fail (printf "release %s runs MongoDB as %s, and upgrading it with the name %s (a changed fullnameOverride or nameOverride) would start MongoDB on a new, empty claim: keep the names of the installation (see deployment/README.md, Names and labels)" .root.Release.Name $name $mongodb) -}}
+{{- end -}}
 {{- end -}}
 {{- end -}}

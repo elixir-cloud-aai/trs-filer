@@ -74,8 +74,9 @@ LABEL org.opencontainers.image.vendor="ELIXIR On-Cloud"
 ## with all their own dependencies, at the exact versions of `uv.lock`,
 ## checked against its hashes, as wheels only, and without resolving
 ## anything else (`--no-deps`), and compiled, as the root file system of
-## deployments may be read-only; as root (back to user 1000 below). `--frozen` takes the lock as is, unchecked against
-## `pyproject.toml` (CI's `uv lock --check` checks it). A direct reference to
+## deployments may be read-only; as root (back to user 1000 below).
+## `--frozen` takes the lock as is, unchecked against `pyproject.toml` (CI's
+## `uv lock --check` checks it). A direct reference to
 ## a FOCA commit (temporary) has no hash and is left out, as the image has no
 ## Git: the build fails unless the base image has FOCA of that commit. It also
 ## fails unless the base image has the locked FOCA release, if one is locked

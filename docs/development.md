@@ -144,8 +144,9 @@ runtime dependencies only (`uv export --frozen --no-dev
 `build-system`, then `uv pip install --system --require-hashes
 --only-binary :all: --no-deps`, see the `Dockerfile`), so two builds of the
 same commit get the same packages, and a new release of a dependency gets
-into the image only through a reviewed change of the lock. The image build builds
-the app's wheel with the locked build requirements (group `build-system`),
+into the image only through a reviewed change of the lock. The image
+build builds the app's wheel with the locked build requirements (group
+`build-system`),
 installed with hash checks, too, and without network, so it downloads
 nothing that isn't hash-checked; it fails unless the base image has the
 locked FOCA release (`scripts/image_requirements.py`), so update the

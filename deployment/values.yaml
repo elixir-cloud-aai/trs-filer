@@ -84,7 +84,7 @@ trsFiler:
   livenessProbe: {}
   # Number of the app's pods; with more than one, the app stays available
   # while a pod is restarted or evicted (e.g., on node drains, crashes and
-  # upgrades; see deployment/README.md, Replicas)
+  # upgrades; see deployment/README.md, Several replicas)
   replicas: 1
   # PodDisruptionBudget of the app's pods, so that voluntary disruptions
   # (e.g., node drains) evict at most `maxUnavailable` pods at once (1 if
@@ -112,7 +112,7 @@ trsFiler:
   # The app is exposed for `hostName` via one of: an Ingress (`ingress`), a
   # Gateway API HTTPRoute (`httpRoute`; disable the Ingress to enable it) or,
   # if neither is enabled and the cluster serves Routes, an OpenShift Route
-  # (`route`); see deployment/README.md, Ingress
+  # (`route`); see deployment/README.md, Exposing the app
   ingress:
     enabled: true
     # Ingress class (`spec.ingressClassName`); the cluster's default class if
@@ -120,7 +120,7 @@ trsFiler:
     className: ""
     # Annotations of the Ingress, e.g., for the ingress controller's size
     # limit of request bodies, TLS redirect or rate limits; the chart sets
-    # none for particular controllers (see deployment/README.md, Ingress).
+    # none for particular controllers (see deployment/README.md, Exposing the app).
     # They take precedence over those set by the chart for `https`; `null`
     # removes one of these. Quote numbers (e.g., `"100"`), as large ones would
     # be written in exponent form
@@ -132,7 +132,7 @@ trsFiler:
       issuer: letsencrypt-prod
   # Gateway API HTTPRoute (`gateway.networking.k8s.io/v1`) for `hostName`,
   # attached to an existing Gateway, whose listener terminates TLS; requires
-  # `ingress.enabled: false` (see deployment/README.md, Gateway API)
+  # `ingress.enabled: false` (see deployment/README.md, Exposing the app)
   httpRoute:
     enabled: false
     # Annotations of the HTTPRoute
