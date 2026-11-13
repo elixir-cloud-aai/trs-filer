@@ -5,24 +5,50 @@ Cf. `custom.io_schema` and `docs/io-schema.md`.
 
 import json
 import logging
+import math
 import subprocess
 import sys
+import threading
+import time
 
 from trs_filer.errors.exceptions import InternalServerError, InvalidRequest
 from trs_filer.io_schema import META_SCHEMA_ID, PREFIX
 
 logger = logging.getLogger(__name__)
 
+# One validation process per app process at a time, so that concurrent
+# registrations don't add up the memory and CPU of their validations
+_SLOTS = threading.BoundedSemaphore(1)
 
-def _validate(content: str, timeout: float) -> str | None:
+
+def _too_slow(timeout: float) -> InvalidRequest:
+    """Get the exception for I/O Schemas not checked within the time limit.
+
+    Args:
+        timeout: Time limit, in seconds.
+
+    Returns:
+        The exception.
+    """
+    logger.error("I/O Schema file not checked within %s s.", timeout)
+    return InvalidRequest(
+        f"{PREFIX} could not be checked within the time limit of "
+        f"{timeout:g} s; simplify it (e.g., nest its schemas less deeply)."
+    )
+
+
+def _validate(content: bytes, timeout: float) -> str | None:
     """Validate an I/O Schema in a process of its own, with a time limit.
 
     The process runs `python -I -m trs_filer.io_schema` with the Python of
-    the app; it is killed when the time limit is reached, so that slow
-    validations don't hold up the app.
+    the app, so the app must be installed (as in the image), not run from a
+    source checkout. It is killed when the time limit is reached, and limits
+    its own CPU time to it, so that slow validations don't hold up the app,
+    also if the app is stopped. One validation runs at a time; waiting for
+    another one counts against the time limit.
 
     Args:
-        content: The I/O Schema, a JSON object.
+        content: The I/O Schema, a JSON object, encoded in UTF-8.
         timeout: Time limit, in seconds, including the start of the process.
 
     Returns:
@@ -33,26 +59,38 @@ def _validate(content: str, timeout: float) -> str | None:
         InvalidRequest: The time limit was reached.
         InternalServerError: The validation failed.
     """
+    deadline = time.monotonic() + timeout
+    if not _SLOTS.acquire(timeout=timeout):
+        raise _too_slow(timeout)
     try:
-        result = subprocess.run(
-            [sys.executable, "-I", "-m", "trs_filer.io_schema"],
+        remaining = max(deadline - time.monotonic(), 0.001)
+        result = subprocess.run(  # noqa: S603 (fixed arguments, no shell)
+            [
+                sys.executable,
+                "-I",
+                "-m",
+                "trs_filer.io_schema",
+                str(math.ceil(remaining)),
+            ],
             input=content,
             capture_output=True,
-            text=True,
-            encoding="utf-8",
-            timeout=timeout,
+            timeout=remaining,
             check=True,
         )
         problem = json.loads(result.stdout)["problem"]
     except subprocess.TimeoutExpired as exc:
-        logger.error("I/O Schema file not checked within %s s.", timeout)
-        raise InvalidRequest(
-            f"{PREFIX} could not be checked within the time limit of "
-            f"{timeout:g} s; simplify it (e.g., nest its schemas less deeply)."
-        ) from exc
-    except (subprocess.CalledProcessError, ValueError, KeyError, TypeError) as exc:
+        raise _too_slow(timeout) from exc
+    except subprocess.CalledProcessError as exc:
+        # killed by a signal, e.g., at the limit of its CPU time (`SIGXCPU`)
+        if exc.returncode < 0:
+            raise _too_slow(timeout) from exc
         logger.error("Validation of I/O Schema file failed: %s", type(exc).__name__)
         raise InternalServerError from exc
+    except (ValueError, KeyError, TypeError) as exc:
+        logger.error("Validation of I/O Schema file failed: %s", type(exc).__name__)
+        raise InternalServerError from exc
+    finally:
+        _SLOTS.release()
     if problem is not None and not isinstance(problem, str):
         logger.error("Validation of I/O Schema file returned no reason.")
         raise InternalServerError
@@ -74,14 +112,16 @@ def check_io_schema(content: str, descriptor_type: str, timeout: float) -> None:
             seconds.
 
     Raises:
-        InvalidRequest: The file is not JSON, not a JSON object, doesn't name
-            the meta-schema of the supported version of the profile in
-            `$schema`, doesn't validate against it (also if it is nested too
-            deeply, or can't be validated within the time limit), or names
-            another descriptor type in `x-ga4gh-workflow.descriptor_type`.
+        InvalidRequest: The file is not JSON (or not UTF-8), not a JSON
+            object, doesn't name the meta-schema of the supported version of
+            the profile in `$schema`, doesn't validate against it (also if it
+            is nested too deeply, or can't be validated within the time
+            limit), or names another descriptor type in
+            `x-ga4gh-workflow.descriptor_type`.
         InternalServerError: The validation failed.
     """
     try:
+        encoded = content.encode("utf-8")
         schema = json.loads(content)
     except (ValueError, RecursionError) as exc:
         logger.error("I/O Schema file is not valid JSON.")
@@ -95,7 +135,7 @@ def check_io_schema(content: str, descriptor_type: str, timeout: float) -> None:
             f"{PREFIX} must name the meta-schema of the GA4GH I/O Profile that "
             f"TRS-Filer supports in '$schema': '{META_SCHEMA_ID}'."
         )
-    problem = _validate(content, timeout)
+    problem = _validate(encoded, timeout)
     if problem is not None:
         logger.error("I/O Schema file is invalid: %s", problem)
         raise InvalidRequest(problem)

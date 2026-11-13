@@ -474,25 +474,7 @@ class IoSchemaConfig(FOCABaseConfig):
     """
 
     validation: bool = False
-    timeout: float = Field(default=10.0, gt=0)
-
-    @field_validator("timeout")
-    @classmethod
-    def check_timeout(cls, value: float) -> float:
-        """Check that the time limit is finite.
-
-        Args:
-            value: Time limit, in seconds.
-
-        Returns:
-            Time limit, in seconds.
-
-        Raises:
-            ValueError: The time limit is not finite.
-        """
-        if not math.isfinite(value):
-            raise ValueError("Timeouts must be finite")
-        return value
+    timeout: float = Field(default=10.0, gt=0, allow_inf_nan=False)
 
 
 class CustomConfig(FOCABaseConfig):

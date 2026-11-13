@@ -21,15 +21,15 @@ level), so it runs in a process of its own, with a time limit
 the validator's packages, so that the process starts quickly.
 """
 
-import copy
 from functools import cache
 import json
 from pathlib import Path, PurePosixPath
 import re
+import resource
 import sys
 from typing import Any
 
-from jsonschema import Draft202012Validator
+from jsonschema import Draft202012Validator, FormatChecker
 from jsonschema.exceptions import ValidationError, relevance
 from referencing import Registry, Resource
 from referencing.jsonschema import DRAFT202012
@@ -47,6 +47,8 @@ META_SCHEMA_ID = (
     "https://raw.githubusercontent.com/uniqueg/ga4gh-io-schema/"
     f"v{PROFILE_VERSION}/schemas/ga4gh-io-profile.schema.json"
 )
+#: Formats that the meta-schema uses (`format`), which are asserted.
+META_SCHEMA_FORMATS = ["uri"]
 #: Beginning of the reasons for rejecting an I/O Schema file.
 PREFIX = f"The I/O Schema file ({IO_SCHEMA_FILE_NAME})"
 # Names of properties that reasons may contain: short, without characters of
@@ -78,9 +80,9 @@ def _validator() -> Draft202012Validator:
 
     Created once; validators are not changed by validation. References
     between the vendored files are resolved by their `$id`s; others (e.g.,
-    remote ones) are not resolvable. `format` keywords are asserted (with
-    the checks of `jsonschema[format-nongpl]`, as by the validator of the
-    profile), except `regex`, as Python can't parse all ECMA-262 patterns.
+    remote ones) are not resolvable. The formats of the meta-schema
+    (`META_SCHEMA_FORMATS`) are asserted, as by the validator of the profile
+    (`uri` with `rfc3986-validator`).
 
     Returns:
         The validator.
@@ -98,16 +100,10 @@ def _validator() -> Draft202012Validator:
         if contents["$id"] == META_SCHEMA_ID:
             profile = contents
     Draft202012Validator.check_schema(profile)
-    # A copy of the draft's own checker, without `regex`; its `checkers`
-    # (format name to check) is the documented way to restrict it
-    format_checker = copy.copy(Draft202012Validator.FORMAT_CHECKER)
-    format_checker.checkers = {
-        name: check
-        for name, check in format_checker.checkers.items()
-        if name != "regex"
-    }
     return Draft202012Validator(
-        profile, registry=registry, format_checker=format_checker
+        profile,
+        registry=registry,
+        format_checker=FormatChecker(formats=META_SCHEMA_FORMATS),
     )
 
 
@@ -219,13 +215,24 @@ def find_problem(schema: dict[str, Any]) -> str | None:
     )
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
     """Validate an I/O Schema from standard input.
 
-    Writes the result to standard output, as a JSON object with the reason
-    why the schema is invalid (`problem`, cf. `find_problem()`), or `null`
-    if it is valid. Run with `python -m trs_filer.io_schema` by
+    Reads the schema as UTF-8 from standard input and writes the result to
+    standard output, as a JSON object with the reason why the schema is
+    invalid (`problem`, cf. `find_problem()`), or `null` if it is valid. Run
+    with `python -m trs_filer.io_schema <seconds>` by
     `trs_filer.io_schema.check.check_io_schema()`.
+
+    Args:
+        argv: Arguments: the limit of the CPU time of the process, in whole
+            seconds (`RLIMIT_CPU`; the process is killed when it is reached);
+            `sys.argv[1:]` if not given.
     """
-    schema = json.loads(sys.stdin.read())
-    json.dump({"problem": find_problem(schema)}, sys.stdout)
+    (seconds,) = sys.argv[1:] if argv is None else argv
+    limit = int(seconds)
+    resource.setrlimit(resource.RLIMIT_CPU, (limit, limit))
+    schema = json.load(sys.stdin.buffer)
+    sys.stdout.buffer.write(
+        json.dumps({"problem": find_problem(schema)}).encode("utf-8")
+    )

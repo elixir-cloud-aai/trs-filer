@@ -2,10 +2,14 @@
 
 from copy import deepcopy
 import hashlib
+import io
 import json
 from pathlib import Path
+import re
+import resource
 import subprocess
 import sys
+import threading
 from typing import Any, NoReturn
 
 import pytest
@@ -15,12 +19,14 @@ from trs_filer.errors.exceptions import InternalServerError, InvalidRequest
 from trs_filer.io_schema import (
     IO_SCHEMA_FILE_NAME,
     META_SCHEMA_DIR,
+    META_SCHEMA_FORMATS,
     META_SCHEMA_ID,
     find_problem,
     is_io_schema_file,
     main,
 )
 from trs_filer.io_schema import check as check_module
+import trs_filer.io_schema.__main__  # noqa: F401 (covered by imports)
 from trs_filer.io_schema.check import check_io_schema
 
 # Time limit of the checks of the tests, in seconds
@@ -382,35 +388,115 @@ def test_find_problem_nested_too_deeply(monkeypatch: pytest.MonkeyPatch) -> None
     )
 
 
-def test_main(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
+def test_main(monkeypatch: pytest.MonkeyPatch) -> None:
     """The validator reads a schema from standard input and writes the result.
 
+    It limits its CPU time first.
+
     Args:
-        monkeypatch: Patches of standard input.
-        capsys: Captured standard output.
+        monkeypatch: Patches of standard input and output, and of the limits
+            of the process.
     """
+    limits: list[tuple[int, tuple[int, int]]] = []
+    monkeypatch.setattr(
+        io_schema.resource,
+        "setrlimit",
+        lambda which, limit: limits.append((which, limit)),
+    )
     invalid = _schema()
     invalid["properties"].pop("inputs")
     for schema, problem in ((_schema(), None), (invalid, find_problem(invalid))):
-        monkeypatch.setattr(sys, "stdin", __import__("io").StringIO(json.dumps(schema)))
-        main()
-        assert json.loads(capsys.readouterr().out) == {"problem": problem}
+        stdin = io.TextIOWrapper(io.BytesIO(json.dumps(schema).encode("utf-8")))
+        stdout = io.TextIOWrapper(io.BytesIO())
+        monkeypatch.setattr(sys, "stdin", stdin)
+        monkeypatch.setattr(sys, "stdout", stdout)
+        main(["7"])
+        assert json.loads(stdout.buffer.getvalue()) == {"problem": problem}
+    assert limits == [(resource.RLIMIT_CPU, (7, 7))] * 2
 
 
 def test_main_module() -> None:
     """The validator runs as a module (`python -m trs_filer.io_schema`)."""
-    import trs_filer.io_schema.__main__  # noqa: F401, PLC0415
-
     result = subprocess.run(
-        [sys.executable, "-I", "-m", "trs_filer.io_schema"],
-        input=json.dumps(_schema()),
+        [sys.executable, "-I", "-m", "trs_filer.io_schema", "60"],
+        input=json.dumps(_schema()).encode("utf-8"),
         capture_output=True,
-        text=True,
         check=True,
     )
     assert json.loads(result.stdout) == {"problem": None}
+
+
+def test_check_io_schema_not_utf8() -> None:
+    """Contents that can't be encoded in UTF-8 (lone surrogates) are rejected."""
+    schema = _schema()
+    schema["title"] = "\ud800"
+    content = json.dumps(schema, ensure_ascii=False)
+    assert json.loads(content)["title"] == "\ud800"
+    assert _detail(content) == (
+        "The I/O Schema file (ga4gh-io.schema.json) is not valid JSON."
+    )
+
+
+def test_check_io_schema_waits(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Checks wait for each other, which counts against the time limit.
+
+    Args:
+        monkeypatch: Patches of the slot of the validation.
+    """
+    slots = threading.BoundedSemaphore(1)
+    monkeypatch.setattr(check_module, "_SLOTS", slots)
+    slots.acquire()
+    try:
+        with pytest.raises(InvalidRequest) as exc_info:
+            check_io_schema(json.dumps(_schema()), "WDL", timeout=0.01)
+    finally:
+        slots.release()
+    assert exc_info.value.description is not None
+    assert "could not be checked within the time limit" in (exc_info.value.description)
+    # the slot is free again after checks
+    check_io_schema(json.dumps(_schema()), "WDL", timeout=TIMEOUT)
+    assert slots.acquire(blocking=False)
+    slots.release()
+
+
+def test_check_io_schema_killed(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Validations killed by a signal (e.g., at their CPU limit) are too slow.
+
+    Args:
+        monkeypatch: Patches of the process of the validation.
+    """
+
+    def run(*args: Any, **kwargs: Any) -> NoReturn:
+        """Fail like a process killed by `SIGXCPU`.
+
+        Args:
+            args: Positional arguments of `subprocess.run()`.
+            kwargs: Keyword arguments of `subprocess.run()`.
+
+        Raises:
+            subprocess.CalledProcessError: Always.
+        """
+        raise subprocess.CalledProcessError(-24, "python")
+
+    monkeypatch.setattr(check_module.subprocess, "run", run)
+    with pytest.raises(InvalidRequest) as exc_info:
+        check_io_schema(json.dumps(_schema()), "WDL", timeout=TIMEOUT)
+    assert exc_info.value.description is not None
+    assert "could not be checked within the time limit" in (exc_info.value.description)
+
+
+def test_validator_formats() -> None:
+    """The formats of the meta-schema are asserted, and only these."""
+    paths = META_SCHEMA_DIR.rglob("*.json")
+    formats = {
+        match
+        for path in paths
+        for match in re.findall(r'"format": "([^"]+)"', path.read_text())
+    }
+    assert formats == set(META_SCHEMA_FORMATS)
+    checker = io_schema._validator().format_checker
+    assert checker is not None
+    assert sorted(checker.checkers) == sorted(META_SCHEMA_FORMATS)
 
 
 def test_check_io_schema_timeout() -> None:
@@ -429,10 +515,10 @@ def test_check_io_schema_timeout() -> None:
     "result",
     [
         subprocess.CalledProcessError(1, "python"),
-        subprocess.CompletedProcess("python", 0, stdout="not JSON"),
-        subprocess.CompletedProcess("python", 0, stdout="{}"),
-        subprocess.CompletedProcess("python", 0, stdout="[]"),
-        subprocess.CompletedProcess("python", 0, stdout='{"problem": 1}'),
+        subprocess.CompletedProcess("python", 0, stdout=b"not JSON"),
+        subprocess.CompletedProcess("python", 0, stdout=b"{}"),
+        subprocess.CompletedProcess("python", 0, stdout=b"[]"),
+        subprocess.CompletedProcess("python", 0, stdout=b'{"problem": 1}'),
     ],
 )
 def test_check_io_schema_validation_fails(

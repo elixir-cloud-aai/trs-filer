@@ -131,10 +131,16 @@ nesting of schemas, as `unevaluatedProperties` is checked at every level:
 the example takes well below a second, while about a hundred inputs in ten
 groups take a few seconds. So the validation runs in a process of its own,
 which is stopped after `custom.io_schema.timeout` seconds (default: `10`,
-including up to about a second to start the process and load the
+including a fraction of a second to start the process and load the
 meta-schema); files not checked within it are rejected, too (`400 Bad
 Request`). Raise the limit for larger schemas, keeping in mind that
-registrations take as long.
+registrations take as long. The limit applies to each file; the app checks
+one file at a time (per Gunicorn worker), and waiting for another check
+counts against the limit. The process takes about 50 to 100 MB of memory
+and about 0.2 s of CPU time to start, so give the app enough of
+both when enabling the check (e.g., `resources` of the Helm chart, whose
+default CPU limit of `100m` makes that about two seconds). The app
+must be installed (as in the image), as the process imports it.
 
 The meta-schema of profile version 0.3.0 and its vocabularies are vendored
 unchanged in
@@ -159,4 +165,5 @@ trs_filer:
     custom:
       io_schema:
         validation: true
+        timeout: 10
 ```

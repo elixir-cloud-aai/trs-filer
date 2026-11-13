@@ -32,6 +32,8 @@ trs_filer:
   #   custom:
   #     io_schema:
   #       validation: true
+  #       # Time limit of checking a file, in seconds
+  #       timeout: 10
   config: {}
   ingress:
     enabled: true
