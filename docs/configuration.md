@@ -395,7 +395,9 @@ How files are stored:
   content; the reference is never served.
 - When files are served, their content is read from the object and checked
   against the checksum and size; changed or missing objects fail the
-  request with `500 Internal Server Error`, and the app logs the key.
+  request with `500 Internal Server Error`, and the app logs the key. A
+  missing object is first read again from the stored files once, as the
+  version may have been replaced or deleted meanwhile.
 - Objects that no stored file refers to any more are deleted at the end of
   the request that released them: those of replaced and deleted versions
   and tools, and those of registrations that failed. If deleting an object
@@ -413,8 +415,16 @@ presigned URL of the object as `url`, instead of the `content` and of the
 URL given on registration, and the SHA-256 checksum of the content
 (`sha-256`, unless given on registration); plain responses (`PLAIN_`
 types) redirect to the presigned URL (`302 Found`). Presigned URLs expire
-after `s3.presigned_url_expiry` seconds. ZIP archives are still built by
-the app.
+after `s3.presigned_url_expiry` seconds, or earlier, when the version is
+replaced or deleted (its objects are deleted). ZIP archives are still built
+by the app.
+
+A presigned URL lets anybody who has it read the file until it expires,
+without a token, also if the deployment requires login for reads (see
+[Requiring login for reads](access-control.md#requiring-login-for-reads)):
+keep the expiry short there, and keep the URLs out of logs. Serve the S3
+API on another host than TRS-Filer, so that clients don't send their
+access tokens along with the redirect.
 
 **Docker Compose** doesn't bundle an object store. To try object storage
 locally, add SeaweedFS (here with the S3 API without authentication, for
@@ -488,9 +498,9 @@ development: Flask's debugger allows executing arbitrary code.
 
 TRS-Filer stores tools (with their versions and files; the content of files
 optionally in object storage, see [File storage](#file-storage)) and tool
-classes in the collections `tools` and `toolclasses` of the MongoDB database `trsStore`
-at `db.host` and `db.port` (in the base config: `mongodb:27017`, the service
-of Docker Compose). FOCA reads the environment variables `MONGO_HOST`,
+classes in the collections `tools` and `toolclasses` of the MongoDB
+database `trsStore` at `db.host` and `db.port` (in the base config:
+`mongodb:27017`, the service of Docker Compose). FOCA reads the environment variables `MONGO_HOST`,
 `MONGO_PORT`, `MONGO_DBNAME`, `MONGO_USERNAME` and `MONGO_PASSWORD`, or a
 complete connection string in `MONGO_URI`, which take precedence over the
 config (see the [FOCA documentation](https://foca.readthedocs.io/en/latest/));

@@ -46,6 +46,23 @@ MONGODB_TEST_URI=mongodb://localhost:27017 pytest
 docker stop mongodb-test
 ```
 
+The tests of object storage (`tests/test_storage.py`) use an in-memory S3
+([moto](https://github.com/getmoto/moto)). CI also runs them against
+SeaweedFS (with MongoDB, step "Start S3-compatible server" of
+`.github/workflows/ci.yml`, whose image is the version of the Docker Compose
+example in [File storage](configuration.md#file-storage); bump both by
+hand); to do so locally, set `S3_TEST_ENDPOINT_URL` to an S3-compatible
+server without other data (the tests create and delete the bucket
+`trs-filer-test`), and, if it checks credentials, `S3_TEST_ACCESS_KEY_ID`
+and `S3_TEST_SECRET_ACCESS_KEY` (`test` by default), e.g.:
+
+```bash
+docker run -d --rm --name s3-test -p 127.0.0.1:8333:8333 chrislusf/seaweedfs:4.51 server -s3 -ip.bind=0.0.0.0
+until curl -s -o /dev/null http://127.0.0.1:8333; do sleep 1; done
+S3_TEST_ENDPOINT_URL=http://127.0.0.1:8333 pytest tests/test_storage.py
+docker stop s3-test
+```
+
 Coverage is measured for `trs_filer`, `scripts` and the docs hooks
 (`docs/hooks.py`), and must stay at 100%: `coverage report` and
 `coverage xml` fail below it (`fail_under` in `pyproject.toml`), and so do

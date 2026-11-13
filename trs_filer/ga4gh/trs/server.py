@@ -43,9 +43,11 @@ from trs_filer.ga4gh.trs.permissions import (
 )
 from trs_filer.remote_files import fetch_remote_file
 from trs_filer.storage import (
+    ObjectMissing,
     file_content,
     plain_redirect,
     releases_objects,
+    retries_missing_objects,
     served_wrapper,
 )
 from trs_filer.utils import get_collection, get_custom_config
@@ -319,6 +321,7 @@ def toolsGet(
 
 
 @log_traffic
+@retries_missing_objects
 def toolsIdVersionsVersionIdTypeDescriptorGet(
     type: str,
     id: str,
@@ -361,6 +364,7 @@ def toolsIdVersionsVersionIdTypeDescriptorGet(
 
 
 @log_traffic
+@retries_missing_objects
 def toolsIdVersionsVersionIdTypeDescriptorRelativePathGet(
     type: str,
     id: str,
@@ -601,6 +605,7 @@ def _text_response(body: bytes | str) -> Response:
 
 
 @log_traffic
+@retries_missing_objects
 def toolsIdVersionsVersionIdTypeTestsGet(
     type: str,
     id: str,
@@ -642,6 +647,7 @@ def toolsIdVersionsVersionIdTypeTestsGet(
 
 
 @log_traffic
+@retries_missing_objects
 def toolsIdVersionsVersionIdTypeFilesGet(
     type: str,
     id: str,
@@ -714,7 +720,8 @@ def toolsIdVersionsVersionIdTypeFilesGet(
                 as_attachment=True,
                 download_name=download_name,
             )
-        except NotFound:
+        # missing objects are retried (`retries_missing_objects()`)
+        except (NotFound, ObjectMissing):
             raise
         except Exception as exc:
             raise InternalServerError from exc
@@ -723,6 +730,7 @@ def toolsIdVersionsVersionIdTypeFilesGet(
 
 
 @log_traffic
+@retries_missing_objects
 def toolsIdVersionsVersionIdContainerfileGet(
     id: str,
     version_id: str,

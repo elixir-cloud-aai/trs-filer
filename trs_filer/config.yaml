@@ -154,6 +154,13 @@ db:
                               id: 1
                           options:
                             'unique': True
+                        # Keys of the objects of files in object storage
+                        # (`custom.storage`), for the check which objects are
+                        # still referred to
+                        - keys:
+                              versions.files._storage.key: 1
+                          options:
+                            'sparse': True
                 toolclasses:
                     indexes:
                         - keys:

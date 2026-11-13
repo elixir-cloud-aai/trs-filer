@@ -29,9 +29,9 @@ from botocore.exceptions import ClientError
 from connexion import App
 from flask.testing import FlaskClient
 from moto import mock_aws
+import pydantic
 from pymongo import MongoClient
 from pymongo.collection import Collection
-import pydantic
 import pytest
 from werkzeug.test import TestResponse
 import yaml
@@ -44,7 +44,7 @@ from trs_filer.app import create_app
 from trs_filer.custom_config import CustomConfig, S3StorageConfig, StorageConfig
 from trs_filer.errors.exceptions import InternalServerError
 from trs_filer.ga4gh.trs import server
-from trs_filer.storage import STORAGE_FIELD, FileStore
+from trs_filer.storage import STORAGE_FIELD, FileStore, ObjectMissing
 from trs_filer.utils import get_collection
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -441,7 +441,9 @@ def test_files_served_from_objects(s3_client: FlaskClient) -> None:
 
     response = s3_client.get(f"{VERSION_PATH}/containerfile")
     assert response.status_code == 200
-    assert [w["content"] for w in _json(response)] == [_content("path_container_docker")]
+    assert [w["content"] for w in _json(response)] == [
+        _content("path_container_docker")
+    ]
 
     response = s3_client.get(f"{VERSION_PATH}/CWL/files?format=zip")
     assert response.status_code == 200
@@ -557,6 +559,69 @@ def test_changed_object_rejected(
     assert s3_client.get(f"{VERSION_PATH}/PLAIN_CWL/descriptor").status_code == 500
     response = s3_client.get(f"{VERSION_PATH}/CWL/files?format=zip")
     assert response.status_code == 500
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "CWL/descriptor",
+        "PLAIN_CWL/descriptor",
+        "CWL/descriptor/path_sec_desc_cwl",
+        "CWL/tests",
+        "containerfile",
+        "CWL/files?format=zip",
+    ],
+)
+def test_missing_object_retried(
+    s3_client: FlaskClient, monkeypatch: pytest.MonkeyPatch, path: str
+) -> None:
+    """Files whose object is missing once (e.g., replaced meanwhile) are read again.
+
+    Args:
+        s3_client: Test client.
+        monkeypatch: Patch of `FileStore.get()`.
+        path: Path of the endpoint, relative to the version.
+    """
+    _register(s3_client)
+    get = FileStore.get
+    calls: list[str] = []
+
+    def missing_once(self: FileStore, ref: dict[str, Any]) -> bytes:
+        """Raise `ObjectMissing` on the first call only.
+
+        Args:
+            self: Store.
+            ref: Reference to the object.
+
+        Returns:
+            Content of the object.
+
+        Raises:
+            ObjectMissing: On the first call.
+        """
+        calls.append(ref["key"])
+        if len(calls) == 1:
+            raise ObjectMissing
+        return get(self, ref)
+
+    monkeypatch.setattr(FileStore, "get", missing_once)
+    response = s3_client.get(f"{VERSION_PATH}/{path}")
+    assert response.status_code == 200
+    assert len(calls) >= 2
+
+
+def test_storage_key_index(s3_tools: Collection[dict[str, Any]]) -> None:
+    """The keys of objects are indexed, for the check of released objects.
+
+    Args:
+        s3_tools: Collection of tools.
+    """
+    indexes = s3_tools.index_information().values()
+    assert any(
+        index["key"] == [(f"versions.files.{STORAGE_FIELD}.key", 1)]
+        and index.get("sparse")
+        for index in indexes
+    )
 
 
 def test_larger_object_rejected(

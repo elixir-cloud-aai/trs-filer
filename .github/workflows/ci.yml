@@ -228,7 +228,8 @@ jobs:
       # A container, as service containers can't be given a command; S3 API
       # only, without authentication (the tests sign requests with test
       # credentials, which it accepts). Pinned to a release by digest (bump
-      # by hand)
+      # by hand, together with the examples in `docs/configuration.md` and
+      # `docs/development.md`)
       - name: Start S3-compatible server
         if: ${{ matrix.s3 != '' }}
         run: |

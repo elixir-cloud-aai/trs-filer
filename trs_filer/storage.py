@@ -24,13 +24,15 @@ import functools
 import hashlib
 import logging
 import threading
-from typing import TYPE_CHECKING, Any, ParamSpec, TypeVar
+from typing import TYPE_CHECKING, Any
 import uuid
 
 import boto3
 from botocore.config import Config as BotoConfig
 from botocore.exceptions import BotoCoreError, ClientError
 from flask import Response, current_app, g
+from pymongo import ReadPreference
+from pymongo.collection import Collection
 
 from trs_filer.custom_config import S3StorageConfig
 from trs_filer.errors.exceptions import InternalServerError
@@ -54,10 +56,12 @@ NEW_KEYS = "trs_filer_new_object_keys"
 # Media type of objects (file contents are text)
 CONTENT_TYPE = "text/plain; charset=utf-8"
 
-P = ParamSpec("P")
-R = TypeVar("R")
 
 _lock = threading.Lock()
+
+
+class ObjectMissing(InternalServerError):
+    """The object of a file doesn't exist (e.g., deleted meanwhile)."""
 
 
 class FileStore:
@@ -142,6 +146,7 @@ class FileStore:
             Content of the object.
 
         Raises:
+            ObjectMissing: The object doesn't exist.
             InternalServerError: The object could not be read, or its content
                 doesn't match the size or checksum of the reference.
         """
@@ -150,8 +155,14 @@ class FileStore:
             response = self.client.get_object(Bucket=self.config.bucket, Key=key)
             # At most one byte more than expected, to detect larger objects
             # without reading them
-            content = response["Body"].read(int(ref["size"]) + 1)
-        except (BotoCoreError, ClientError) as exc:
+            content = response["Body"].read(ref["size"] + 1)
+        except ClientError as exc:
+            if exc.response.get("Error", {}).get("Code") in ("NoSuchKey", "404"):
+                logger.warning("Object '%s' doesn't exist.", key)
+                raise ObjectMissing from exc
+            logger.error("Object '%s' could not be read: %s", key, exc)
+            raise InternalServerError from exc
+        except BotoCoreError as exc:
             logger.error("Object '%s' could not be read: %s", key, exc)
             raise InternalServerError from exc
         if (
@@ -243,13 +254,17 @@ def store_file(entry: dict[str, Any]) -> None:
     Args:
         entry: File of a version (`tool_file`, `file_wrapper`, `type`), with
             its content.
+
+    Raises:
+        InternalServerError: The content could not be stored.
     """
     # never a reference given by the client
     entry.pop(STORAGE_FIELD, None)
     if get_custom_config().storage.backend != "s3":
         return
     store = get_file_store()
-    assert store is not None  # backend `s3` requires `s3` (`StorageConfig`)
+    if store is None:  # pragma: no cover (`StorageConfig` requires `s3`)
+        raise InternalServerError
     wrapper = entry["file_wrapper"]
     ref = store.put(str(wrapper["content"]).encode("utf-8"))
     new_keys: list[str] = g.setdefault(NEW_KEYS, [])
@@ -359,6 +374,19 @@ def plain_redirect(entry: dict[str, Any]) -> Response | None:
     )
 
 
+def _tools() -> Collection[dict[str, Any]]:
+    """Get the collection of tools, read from the primary.
+
+    Which objects are released is decided on the primary, so that writes of
+    the same request are seen (also with a `readPreference` of secondaries
+    in `MONGO_URI`).
+
+    Returns:
+        Collection of tools.
+    """
+    return get_collection("tools").with_options(read_preference=ReadPreference.PRIMARY)
+
+
 def tool_object_keys(tool_id: str) -> set[str]:
     """Get the keys of the objects that the files of a stored tool refer to.
 
@@ -368,9 +396,7 @@ def tool_object_keys(tool_id: str) -> set[str]:
     Returns:
         Keys of the objects.
     """
-    tool = get_collection("tools").find_one(
-        {"id": tool_id}, {"_id": False, "versions.files": True}
-    )
+    tool = _tools().find_one({"id": tool_id}, {"_id": False, KEY_PATH: True})
     if tool is None:
         return set()
     return {
@@ -392,11 +418,52 @@ def referenced_keys(keys: set[str]) -> set[str]:
     """
     if not keys:
         return set()
-    found = get_collection("tools").distinct(KEY_PATH, {KEY_PATH: {"$in": list(keys)}})
+    # indexed (`config.yaml`)
+    found = _tools().distinct(KEY_PATH, {KEY_PATH: {"$in": list(keys)}})
     return keys & set(found)
 
 
-def releases_objects(controller: Callable[P, R]) -> Callable[P, R]:
+def retries_missing_objects[**P, R](controller: Callable[P, R]) -> Callable[P, R]:
+    """Call a read controller again if an object of a file was missing.
+
+    A version may be replaced or deleted (and the objects of its files
+    deleted) between reading its files and reading their objects; the
+    controller is then called once more, and finds the new files, or none.
+
+    Args:
+        controller: Controller that serves files.
+
+    Returns:
+        Controller that retries once.
+    """
+
+    @functools.wraps(controller)
+    def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
+        """Call the controller, and again if an object was missing.
+
+        Args:
+            *args: Positional arguments of the controller.
+            **kwargs: Keyword arguments of the controller.
+
+        Returns:
+            Return value of the controller.
+
+        Raises:
+            InternalServerError: An object was missing again.
+        """
+        try:
+            return controller(*args, **kwargs)
+        except ObjectMissing:
+            pass
+        try:
+            return controller(*args, **kwargs)
+        except ObjectMissing as exc:
+            raise InternalServerError from exc
+
+    return wrapper
+
+
+def releases_objects[**P, R](controller: Callable[P, R]) -> Callable[P, R]:
     """Delete the objects that a write request released.
 
     For the controllers that write tools and versions (`id`: the tool's
@@ -428,6 +495,8 @@ def releases_objects(controller: Callable[P, R]) -> Callable[P, R]:
         if store is None:
             return controller(*args, **kwargs)
         tool_id = kwargs.get("id")
+        # not guarded: if the database fails here, the request fails before
+        # anything is written
         before = tool_object_keys(tool_id) if isinstance(tool_id, str) else set()
         g.pop(NEW_KEYS, None)
         try:

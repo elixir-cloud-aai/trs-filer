@@ -40,7 +40,9 @@ YAML, which serves the [GA4GH Tool Registry Service
 OpenAPI specification. It stores tools, their versions and files, and tool
 classes in a [MongoDB](https://www.mongodb.com/) database; file contents are
 either stored with the files or retrieved from their URLs (see [Remote
-files](configuration.md#remote-files)). A [Helm](https://helm.sh/) chart and
+files](configuration.md#remote-files)), and optionally kept in S3-compatible
+object storage instead of MongoDB (see [File
+storage](configuration.md#file-storage)). A [Helm](https://helm.sh/) chart and
 a [Docker Compose](https://docs.docker.com/compose/) setup are provided for
 deployments on Kubernetes and for development, respectively.
 

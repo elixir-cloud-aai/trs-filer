@@ -79,7 +79,10 @@ with the prefix of `custom.storage.s3.prefix`) together with the database,
 with the tools of the object storage (e.g., versioning or replication of
 the bucket, or `aws s3 sync`). Objects are written once and never changed,
 so back up the database first, then the bucket: objects of files
-registered meanwhile are then in the bucket's backup, too. Restored files
+registered meanwhile are then in the bucket's backup, too. Objects of
+versions replaced or deleted meanwhile are deleted, though, so enable
+versioning (or object retention) of the bucket, to restore the objects
+that the database's backup refers to. Restored files
 whose object is missing fail with `500 Internal Server Error`. Objects that
 no file refers to (e.g., left by a crash during a registration) can be
 found by comparing the keys in the bucket with those in the database
