@@ -1,61 +1,72 @@
-{{- /* HTTPS at the Ingress with `https.enabled`, or at the OpenShift Route
-(edge TLS), which the chart creates without the Ingress if `route.enabled`
-and the cluster serves Routes */}}
-{{- $route := include "trs-filer.route" . }}
-{{- $scheme := "http" }}
-{{- if or $route (and .Values.trs_filer.ingress.enabled .Values.trs_filer.ingress.https.enabled) }}
-{{- $scheme = "https" }}
+{{- $context := dict "root" . "settings" (include "trs-filer.settings" . | fromYaml) -}}
+{{- $fullname := include "foca-common.fullname" . -}}
+{{- $httpRoute := dig "httpRoute" "enabled" false .Values.trsFiler -}}
+{{- $exposed := or .Values.trsFiler.ingress.enabled $httpRoute (include "foca-common.routeEnabled" $context) -}}
+{{- /*
+HTTPS, as advertised by the app (see `trs-filer.settings`): TLS is
+terminated by the ingress, the Gateway, the route or a proxy in front of
+the cluster.
+*/ -}}
+{{- $url := "http://localhost:8080" -}}
+{{- if $exposed -}}
+{{- $url = printf "https://%s" .Values.hostName -}}
 {{- end -}}
-TRS-Filer is being deployed!
+TRS-Filer is being deployed as release {{ .Release.Name }}
+in namespace {{ .Release.Namespace }}!
 
 Reads are public; writes (POST, PUT and DELETE) need an access token of an
-admin of the identity provider in `trs_filer.config` (see "Configuration"
-in the chart's README).
-{{- /* `trs_filer.config.api.specs.trs.disable_auth`, level by level, as
-levels may be null or not maps */}}
-{{- $noAuth := .Values.trs_filer.config | default dict }}
+admin of the identity provider in `config` (see deployment/README.md,
+Configuration).
+{{- /* `config.api.specs.trs.disable_auth`, level by level, as levels may be
+null or not maps */}}
+{{- $noAuth := .Values.config | default dict }}
 {{- range list "api" "specs" "trs" }}
 {{- $noAuth = kindIs "map" $noAuth | ternary (get (kindIs "map" $noAuth | ternary $noAuth dict) .) dict }}
 {{- end }}
 {{- if and (kindIs "map" $noAuth) (get $noAuth "disable_auth") }}
 
-WARNING: authentication is disabled
-(`trs_filer.config.api.specs.trs.disable_auth`): everyone who can reach
-the app can register, change and delete tools. Use this for local tests
-only.
+WARNING: authentication is disabled (config.api.specs.trs.disable_auth):
+everyone who can reach the app can register, change and delete tools. Use
+this for local tests only.
 {{- end }}
-{{- if not (include "trs-filer.mongodbAuth" .) }}
+{{- if not .Values.mongodb.auth.enabled }}
 
-WARNING: MongoDB runs without authentication (`mongodb.auth.enabled`):
-every pod that can reach it can read and change the data. See
-"Authentication" in the chart's README.
+WARNING: MongoDB runs without authentication (mongodb.auth.enabled is
+false): every pod that can reach it can read and change the data (see
+deployment/README.md, Authentication).
 {{- end }}
-{{- if not (or .Values.trs_filer.ingress.enabled $route) }}
+{{- if and .Values.trsFiler.ingress.enabled (not .Values.trsFiler.ingress.https.enabled) }}
 
-The chart exposes the app neither via an Ingress
-(`trs_filer.ingress.enabled`) nor via an OpenShift Route
-(`trs_filer.route.enabled`, on clusters that serve Routes). If no resource
-of your own (e.g., a Route or HTTPRoute) exposes the app's Service
-(`{{ .Values.trs_filer.appName }}`, port 8080), nothing does. To try the
-API from your machine:
-
-  kubectl port-forward svc/{{ .Values.trs_filer.appName }} 8080:8080 -n {{ .Release.Namespace }}
-
-and open http://localhost:8080/ga4gh/trs/v2/ui
-{{- else }}
-
-Once deployed:
-
-  1. Access the API via {{ $scheme }}://{{ .Values.host_name }}/ga4gh/trs/v2/
-
-     To test the connection, you can run:
-
-       curl -X GET "{{ $scheme }}://{{ .Values.host_name }}/ga4gh/trs/v2/service-info" -H "Accept: application/json"
-
-  2. Access the Swagger UI via {{ $scheme }}://{{ .Values.host_name }}/ga4gh/trs/v2/ui
-{{- if eq $scheme "http" }}
-
-  The URLs use http, as the chart serves no TLS; if a proxy in front of the
-  cluster terminates TLS, use https instead.
+NOTE: The Ingress has no TLS (trsFiler.ingress.https.enabled is false), so
+TLS must be terminated in front of the cluster for the URLs below (see
+deployment/README.md, TLS).
 {{- end }}
+{{- if $httpRoute }}
+
+The HTTPRoute serves the app via the Gateway in trsFiler.httpRoute.parentRefs:
+make sure that its listener terminates TLS for {{ .Values.hostName }}, and
+check that the route is accepted with
+`kubectl get httproute {{ $fullname }} -n {{ .Release.Namespace }} -o yaml`.
 {{- end }}
+{{- if not $exposed }}
+
+WARNING: Neither an Ingress (trsFiler.ingress.enabled is false), an
+HTTPRoute (trsFiler.httpRoute.enabled is false) nor an OpenShift Route
+(trsFiler.route.enabled is false, or the cluster does not serve
+route.openshift.io/v1) was created, so the app is only reachable within the
+cluster, unless resources outside the release expose it. To access it from
+this machine, run:
+
+  kubectl port-forward svc/{{ $fullname }} 8080:8080 -n {{ .Release.Namespace }}
+{{- end }}
+
+Once deployed (check with
+`kubectl rollout status deploy/{{ $fullname }} -n {{ .Release.Namespace }}`):
+
+  1. Access the API via {{ $url }}/ga4gh/trs/v2/
+
+     To test the connection (no token needed), you can run:
+
+       curl -X GET "{{ $url }}/ga4gh/trs/v2/service-info" -H "Accept: application/json"
+
+  2. Access the Swagger UI via {{ $url }}/ga4gh/trs/v2/ui/

@@ -1,90 +1,191 @@
 # Default values for trs-filer.
 # This is a YAML-formatted file.
 # Declare variables to be passed into your templates.
+# The chart's templates are those of FOCA's library chart foca-common (see
+# `Chart.yaml`), which reads these values (see deployment/README.md).
 
-host_name: ""
+# Resource names are derived from the release name: `<release>-trs-filer` (or
+# `<release>` if it contains `trs-filer`) for the app and `<that name>-mongodb`
+# for MongoDB; `nameOverride` replaces the chart name, `fullnameOverride` the
+# derived app name (camelCase, as in other Helm charts). Set them at
+# installation only: changing them later changes the pod selectors, which
+# cannot be upgraded
+nameOverride: ""
+fullnameOverride: ""
 
-trs_filer:
-  # Config overlay of the app (FOCA), merged after the one that the config
-  # Job writes (public URL and MongoDB host; don't set these here). Reads
-  # are public; writes need an access token of an admin, so each deployment
-  # sets its identity provider and admin group: rendering fails without
-  # trusted token issuers (see deployment/README.md, Configuration). E.g.:
-  #   security:
-  #     auth:
-  #       # Trusted token issuers (`iss` claim)
-  #       issuers: ["https://login.example.org/oidc/"]
-  #       # Client IDs of the apps calling TRS-Filer (`aud` claim)
-  #       audience: ["trs-portal"]
-  #       # Claims released via user info only, not in access tokens
-  #       userinfo_claims: ["groups"]
-  #     access_control:
-  #       # Claim with the groups of users
-  #       claim_groups: groups
-  #       # Members of this group may write
-  #       group_mapping:
-  #         trs-admins: admin
-  #   service_info:
-  #     service:
-  #       id: org.example.trs
-  config: {}
+# Public host name of the app (of the Ingress, HTTPRoute or Route); required.
+# Also sets the public URL of the app, for the `url` of tools and versions
+# (`custom.service` in the app config: `https://<hostName>:443/ga4gh/trs/v2/`)
+hostName: ""
+
+# App config overriding the base config in the image (`trs_filer/config.yaml`
+# of the image's version); mappings are merged recursively, other values
+# (including lists) are replaced. Stored in a ConfigMap, so must not contain
+# secrets. Reads are public; writes need an access token of an admin, so
+# deployments must set the trusted token issuers (`security.auth.issuers`) and
+# `security.auth.audience` (unless each issuer has an `audience` of its own,
+# or `security.auth.verify_audience` is false), and map an admin group to the
+# role `admin` (unless `security.access_control.require_admin` is false), with
+# the claim with the groups of users (`security.access_control.claim_groups`);
+# rendering fails without them (see deployment/README.md, Configuration).
+# Examples:
+config: {}
+#   security:
+#     auth:
+#       # Trusted token issuers (`iss` claim)
+#       issuers: ["https://login.example.org/oidc/"]
+#       # Client IDs of the apps calling TRS-Filer (`aud` claim)
+#       audience: ["trs-portal"]
+#       # Claims released via user info only, not in access tokens
+#       userinfo_claims: ["groups"]
+#     access_control:
+#       # Claim with the groups of users
+#       claim_groups: groups
+#       # Members of this group may write
+#       group_mapping:
+#         trs-admins: admin
+#   # Service info (GA4GH `Service` schema, checked on startup); the version
+#   # defaults to the app version. Mappings are merged with the defaults,
+#   # which describe the app (FOCA warns of their placeholders), so set all
+#   # fields of the deployment
+#   service_info:
+#     service:
+#       id: "org.example.trs"
+#       name: "My TRS"
+#       description: "Tools of my organization"
+#       organization:
+#         name: "My organization"
+#         url: "https://organization.example.org"
+#       contactUrl: "mailto:trs@example.org"
+#       environment: "prod"
+
+trsFiler:
+  # Image repository; may include a tag or digest instead of setting `tag`
+  # (e.g., `docker.io/elixircloud/trs-filer:1.2.3`); fully qualified, as some
+  # runtimes (e.g., CRI-O, Podman) refuse short names
+  image: docker.io/elixircloud/trs-filer
+  # Image tag; defaults to the chart's `appVersion`, i.e., the release
+  # version for released charts and `dev` for the chart in the repository.
+  # Images of commits on `dev` are tagged `sha-<commit>` (see
+  # deployment/README.md, Image)
+  tag: ""
+  # Pull policy of the image (`Always`, `IfNotPresent` or `Never`);
+  # `IfNotPresent` or `Never` for an image loaded into the nodes (e.g., with
+  # `kind load docker-image`)
+  imagePullPolicy: Always
+  # Path of the app's startup, readiness and liveness probes (the Swagger UI,
+  # which needs neither authentication nor the database); change it if the
+  # config disables the Swagger UI
+  probePath: /ga4gh/trs/v2/ui/
+  # Probes of the app's container (Kubernetes probe specs); if set, one
+  # replaces the default on `probePath` entirely
+  startupProbe: {}
+  readinessProbe: {}
+  livenessProbe: {}
+  # Number of the app's pods; with more than one, the app stays available
+  # while a pod is restarted or evicted (e.g., on node drains, crashes and
+  # upgrades; see deployment/README.md, Replicas)
+  replicas: 1
+  # PodDisruptionBudget of the app's pods, so that voluntary disruptions
+  # (e.g., node drains) evict at most `maxUnavailable` pods at once (1 if
+  # neither it nor `minAvailable` is set), or keep at least `minAvailable`
+  # (a number or a percentage, e.g., `50%`; set at most one of them). Only
+  # rendered with more than one replica, as no budget keeps a single pod
+  # available during node drains
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: null
+    maxUnavailable: null
+  # Further environment variables of the app (EnvVar), e.g.,
+  # `FORWARDED_ALLOW_IPS` with the addresses of the ingress controller (see
+  # deployment/README.md, Forwarded headers); rendering fails if one sets a
+  # variable that the chart sets
+  extraEnv: []
+  # Secrets and ConfigMaps whose keys become environment variables of the app
+  # (EnvFromSource); variables that the chart sets win
+  extraEnvFrom: []
+  # Secrets whose changes roll the app's pods: names of Secrets, whose data
+  # checksum becomes an annotation (e.g., that of `mongodb.auth.existingSecret`).
+  # Needs Helm to read them from the cluster, so it does nothing with
+  # `helm template` and Argo CD
+  rolloutOnSecrets: []
+  # The app is exposed for `hostName` via one of: an Ingress (`ingress`), a
+  # Gateway API HTTPRoute (`httpRoute`; disable the Ingress to enable it) or,
+  # if neither is enabled and the cluster serves Routes, an OpenShift Route
+  # (`route`); see deployment/README.md, Ingress
   ingress:
     enabled: true
-    # Ingress class (`spec.ingressClassName`); the cluster default class if
+    # Ingress class (`spec.ingressClassName`); the cluster's default class if
     # empty
     className: ""
-    # Annotations of the Ingress, e.g., for the ingress controller (to
-    # restrict methods or clients); they take precedence over those that the
-    # chart sets for `https`, and `null` removes one of these. Quote numbers
-    # (e.g., `"1000000"`), as large ones would be written in exponent form
+    # Annotations of the Ingress, e.g., for the ingress controller's size
+    # limit of request bodies, TLS redirect or rate limits; the chart sets
+    # none for particular controllers (see deployment/README.md, Ingress).
+    # They take precedence over those set by the chart for `https`; `null`
+    # removes one of these. Quote numbers (e.g., `"100"`), as large ones would
+    # be written in exponent form
     annotations: {}
     https:
+      # Request a certificate from cert-manager (via `issuer`, a
+      # ClusterIssuer) and serve HTTPS
       enabled: false
       issuer: letsencrypt-prod
+  # Gateway API HTTPRoute (`gateway.networking.k8s.io/v1`) for `hostName`,
+  # attached to an existing Gateway, whose listener terminates TLS; requires
+  # `ingress.enabled: false` (see deployment/README.md, Gateway API)
+  httpRoute:
+    enabled: false
+    # Annotations of the HTTPRoute
+    annotations: {}
+    # Gateways (or listeners, via `sectionName` or `port`) to attach to;
+    # required if enabled, e.g., the HTTPS listener of a shared Gateway:
+    # `[{name: gateway, namespace: gateway-system, sectionName: https}]`.
+    # The Gateway's listener must allow routes from the release's namespace
+    parentRefs: []
+    # Filters of the route's rule (`HTTPRouteFilter`s), e.g., an
+    # `ExtensionRef` to a resource of the Gateway implementation that limits
+    # body sizes or rates; the Gateway API has no standard for these, so the
+    # app's `config.server.max_content_length` stays the enforcing limit
+    filters: []
+    # A second HTTPRoute (`<app>-https-redirect`) that redirects HTTP to
+    # HTTPS (`301`), attached to the Gateway's HTTP listener(s) in
+    # `parentRefs` (required if enabled), e.g.,
+    # `[{name: gateway, namespace: gateway-system, sectionName: http}]`; they
+    # must not attach to the listeners of `httpRoute.parentRefs` (set
+    # `sectionName` in both, or `port` in both). It has no annotations
+    httpsRedirect:
+      enabled: false
+      parentRefs: []
   # OpenShift Route for all paths (TLS at the router, which redirects HTTP
   # to HTTPS)
   route:
-    # Create the Route if the Ingress is not enabled and the cluster serves
-    # Routes; false, e.g., for a Route or HTTPRoute of your own
+    # Create the Route if neither the Ingress nor the HTTPRoute is enabled
+    # and the cluster serves Routes; false, e.g., for a Route or HTTPRoute
+    # of your own
     enabled: true
     # Annotations of the Route, e.g., for rate limits of the router
-    # (`haproxy.router.openshift.io/rate-limit-connections: "true"` with
-    # `haproxy.router.openshift.io/rate-limit-connections.rate-http`) or to
-    # allow only trusted clients (`haproxy.router.openshift.io/ip_allowlist`);
-    # `null` removes one. Quote numbers (e.g., `"100"`), as large ones would
-    # be written in exponent form
+    # (`haproxy.router.openshift.io/rate-limit-connections`) or to allow only
+    # trusted clients (`haproxy.router.openshift.io/ip_allowlist`); `null`
+    # removes one. Quote numbers (e.g., `"100"`)
     annotations: {}
-  image: elixircloud/trs-filer:latest
-  # Pull policy of the image (`Always`, `IfNotPresent` or `Never`), for the
-  # app and the config Job; `Always`, so that restarts get the image that
-  # the tag points to (e.g., `latest`). `IfNotPresent` or `Never` for an
-  # image loaded into the nodes (e.g., with `kind load docker-image`)
-  imagePullPolicy: Always
-  appName: trs-filer
-  # Addresses (or networks in CIDR notation), comma-separated or as a list,
-  # whose `X-Forwarded-*` headers the app trusts (Gunicorn's
-  # `FORWARDED_ALLOW_IPS`), so that its links keep `https` behind the
-  # ingress controller or router that terminates TLS; `*` trusts every
-  # address. Narrow it to those of the ingress controller or router (see
-  # deployment/README.md, Forwarded headers); an invalid entry stops the app
-  forwardedAllowIps: "*"
-  # The image's Gunicorn defaults (one worker with four threads) peak at
-  # about 175 MB (worker and master) under concurrent registrations; raise
-  # the memory with more workers or threads, or a higher request size limit
-  # (see deployment/README.md, Resources)
-  resources:
-    limits:
-      cpu: 100m
-      memory: 384Mi
-    requests:
-      cpu: 100m
-      memory: 256Mi
-  # Security contexts of the pods and containers of the app and the config
-  # Job (same image), as for the Pod Security Standard "restricted": the
-  # image runs as user 1000, and with a read-only root file system,
-  # temporary files go to an `emptyDir` at `/tmp`. On OpenShift,
-  # `runAsUser`, `runAsGroup` and `fsGroup` are omitted, as OpenShift
-  # assigns them
+  # NetworkPolicy allowing connections to the app only from `ingressFrom`
+  # (and the kubelet's probes; see deployment/README.md, Network policies);
+  # clusters without NetworkPolicy support ignore it. Disabled by default: to
+  # enable it, set `ingressFrom` to the pods of the cluster's ingress
+  # controller or Gateway
+  networkPolicy:
+    enabled: false
+    # NetworkPolicy peers (`spec.ingress[].from`) allowed to connect to the
+    # app, e.g., the namespace of the ingress controller or the Gateway's
+    # proxies (see deployment/README.md, Network policies, for examples).
+    # None by default, as they depend on the cluster; rendering fails if the
+    # policy is enabled without any (which would allow all sources)
+    ingressFrom: []
+  # Security contexts of the pod and the container, as for the Pod Security
+  # Standard "restricted"; the image runs as user 1000, and with a read-only
+  # root file system, temporary files go to an `emptyDir` at `/tmp`. On
+  # OpenShift, `runAsUser`, `runAsGroup` and `fsGroup` are omitted, as
+  # OpenShift assigns them
   podSecurityContext:
     runAsNonRoot: true
     seccompProfile:
@@ -94,23 +195,60 @@ trs_filer:
     capabilities:
       drop: ["ALL"]
     readOnlyRootFilesystem: true
+  # With the Gunicorn defaults below (one worker with four threads), the app
+  # peaks at about 175 MB (worker and master) under concurrent registrations;
+  # raise the memory with more workers or threads, or a higher request size
+  # limit (see deployment/README.md, Server)
+  resources:
+    limits:
+      cpu: 100m
+      memory: 384Mi
+    requests:
+      cpu: 100m
+      memory: 256Mi
   # Size limit of the `emptyDir` at `/tmp` (the pod is evicted if it is
   # exceeded): a quantity (e.g., `64Mi`) or a number of bytes; `null` for none
   tmpSizeLimit: 64Mi
-  # NetworkPolicy of the app: only the peers in `ingressFrom` may connect to
-  # it, e.g., the ingress controller or router
-  networkPolicy:
-    enabled: false
-    # NetworkPolicy peers (`spec.ingress[].from`) allowed to connect to the
-    # app, e.g., the namespace of the ingress controller (see
-    # deployment/README.md, Network policies, for examples). None by
-    # default, as they depend on the cluster; rendering fails if the policy
-    # is enabled without any (which would allow all sources)
-    ingressFrom: []
-
-apiServer: kubernetes.default.svc:443 # address of k8s API server
+  # Seconds that the app keeps serving after its pod is deleted, before it
+  # shuts down (`preStop` hook), so that the ingress controller and Service
+  # stop sending requests to it first; 0: no delay (no hook)
+  preStopSleepSeconds: 5
+  # Gunicorn, the image's WSGI server (passed via `GUNICORN_CMD_ARGS`; see
+  # deployment/README.md, Server); the defaults are those of the image
+  # (`trs_filer/gunicorn_config.py`). Each worker loads the whole app, so
+  # raise the memory in `resources` before raising `workers`
+  gunicorn:
+    # Worker processes, and threads per worker (requests served at once)
+    workers: 1
+    threads: 4
+    # Seconds after which workers whose main loop does not respond are
+    # restarted (requests run in threads, so slow requests don't count)
+    timeout: 30
+    # Seconds that workers get to finish requests on shutdown (after
+    # `preStopSleepSeconds`); the pod's termination grace period is both
+    # plus 10 seconds
+    gracefulTimeout: 20
+    # Seconds after which idle keep-alive connections are closed (0: no
+    # keep-alive); keep it longer than the upstream keep-alive timeout of the
+    # ingress controller (e.g., 60 seconds for ingress-nginx, 90 seconds for
+    # Traefik; see deployment/README.md, Server), which would otherwise
+    # reuse connections as they are closed (failing requests with `502`)
+    keepalive: 100
+    # Further Gunicorn options, e.g., `["--access-logfile", "-"]` for an
+    # access log (the app logs each request already); rendering fails for
+    # `--bind`/`-b` (the chart's ports are 8080), `--preload` (MongoDB clients
+    # must be created after forking) and `--graceful-timeout` (set
+    # `gracefulTimeout`)
+    extraArgs: []
 
 mongodb:
+  # Deploy MongoDB with the app; if false, set the host (and port) of an
+  # external MongoDB in `config.db`, and its app user's credentials via
+  # `auth.existingSecret` (see deployment/README.md, External MongoDB).
+  # Setting it to false for an installed release deletes the bundled
+  # MongoDB, but keeps its claim with the data (`persistence.resourcePolicy`):
+  # dump the data first
+  enabled: true
   # The version that CI tests; MongoDB 8.0 refuses to start on Linux kernels
   # 6.19 to 7.0.13 (https://jira.mongodb.org/browse/SERVER-121912). See
   # deployment/README.md (MongoDB) before changing the version of an existing
@@ -120,36 +258,49 @@ mongodb:
   # Pull policy of the image (`Always`, `IfNotPresent` or `Never`); `Always`,
   # so that restarts get the latest patch version
   imagePullPolicy: Always
-  # The app's database (`MONGO_DBNAME` of the app); `trs-filer-db` if empty
-  dbName: ""
   auth:
     # Require credentials (set `existingSecret`); enforced on every start,
-    # but users are only created when MongoDB starts with an empty volume,
-    # so create them first for existing databases (see deployment/README.md,
-    # Authentication). Without authentication, any pod that can reach
-    # MongoDB's Service can read and change the data (see `networkPolicy`),
-    # so disable it explicitly only if that is acceptable
+    # but users are only created when MongoDB starts with an empty data
+    # directory, so create them first for existing databases (see
+    # deployment/README.md, Authentication). Without authentication, any pod
+    # that can reach the MongoDB service can read and modify the data, so
+    # disable it explicitly only if that is acceptable
     enabled: true
-    # Name of an existing Secret with the keys `root-username` and
-    # `root-password` (MongoDB's root user) and `username` and `password`
-    # (the app user, created with access to the app's database)
+    # Name of an existing Secret with keys `root-username` and
+    # `root-password` (MongoDB root user; not needed for an external MongoDB)
+    # and `username` and `password` (app user, created with access to the
+    # app's database, `trsStore`)
     existingSecret: ""
-  # Size of the PersistentVolumeClaim `mongodb-<appName>` with the data;
-  # Helm keeps the claim (`helm.sh/resource-policy: keep`) when the release
-  # is uninstalled (see deployment/README.md, MongoDB)
-  volumeSize: 1Gi
-  resources:
-    limits:
-      cpu: 200m
-      memory: 512Mi
-    requests:
-      cpu: 200m
-      memory: 512Mi
-  # Security contexts of MongoDB's pod and container: the image's user
-  # `mongodb` (999), which owns the data volume via `fsGroup`, and a
-  # read-only root file system with `emptyDir`s at `/tmp` and
-  # `/data/configdb`. On OpenShift, `runAsUser`, `runAsGroup` and `fsGroup`
-  # are omitted, as OpenShift assigns them
+  # NetworkPolicy allowing connections to MongoDB only from the app's pods of
+  # this release (and the kubelet's probes; see deployment/README.md, Network
+  # policies); clusters without NetworkPolicy support ignore it
+  networkPolicy:
+    enabled: true
+  # Volume with MongoDB's data: a PersistentVolumeClaim (`<app>-mongodb`) of
+  # `size`, with `accessModes` and `storageClass` (the cluster's default
+  # class if empty, `-` for no dynamic provisioning), or the existing claim
+  # `existingClaim`. If disabled, the data is kept in an `emptyDir` (limited
+  # to `size`) and lost when MongoDB's pod is replaced, e.g., for tests.
+  # With `resourcePolicy: keep`, Helm keeps the claim (and the database) when
+  # the release is uninstalled, or when the claim is removed from it (by
+  # disabling persistence or switching to an existing claim); reinstalling
+  # the release with the same name and namespace uses it again. Delete the
+  # claim by hand to remove the data. Empty: Helm deletes the claim (see
+  # deployment/README.md, Persistence). Replaces `volumeSize` of the earlier
+  # charts (deprecated; rendering fails while it is set, as `size` is set
+  # here)
+  persistence:
+    enabled: true
+    size: 1Gi
+    accessModes: ["ReadWriteOnce"]
+    storageClass: ""
+    existingClaim: ""
+    resourcePolicy: keep
+  # Security contexts of the pod and the container; the image starts as root
+  # and switches to user `mongodb` (999), so the user is set here, and
+  # `fsGroup` makes the data volume writable for it. On OpenShift,
+  # `runAsUser`, `runAsGroup` and `fsGroup` are omitted, as OpenShift assigns
+  # them
   podSecurityContext:
     runAsNonRoot: true
     runAsUser: 999
@@ -165,11 +316,13 @@ mongodb:
     capabilities:
       drop: ["ALL"]
     readOnlyRootFilesystem: true
+  resources:
+    limits:
+      cpu: 200m
+      memory: 512Mi
+    requests:
+      cpu: 200m
+      memory: 512Mi
   # Size limit of the `emptyDir` at `/tmp` (the pod is evicted if it is
   # exceeded): a quantity (e.g., `64Mi`) or a number of bytes; `null` for none
   tmpSizeLimit: 64Mi
-  # NetworkPolicy of MongoDB: only the app's pods may connect to it (other
-  # pods of the namespace, and of other namespaces, may not, unless other
-  # policies allow it); clusters without NetworkPolicy support ignore it
-  networkPolicy:
-    enabled: true
