@@ -620,7 +620,9 @@ config:
 The app authenticates as the app user against its database (`trsStore`), so
 create that user there, with the `readWrite` role on `trsStore`, which
 includes the right to create the indexes that the app creates on startup;
-allow the app's pods to connect to the database.
+allow the app's pods to connect to the database. Give each release a
+database server of its own: releases that share one use the same database,
+and so serve and change each other's tools.
 
 ## Upgrades
 
@@ -676,10 +678,12 @@ names (`trs-filer` and `mongodb-trs-filer`, from `trs_filer.appName`, and
 the database `trs-filer-db`, from `mongodb.dbName`); replace them if yours
 differ:
 
-1. Stop the app, so that the data doesn't change during the dump:
+1. Stop the app and wait until its pods are gone, so that the data doesn't
+   change during the dump (the earlier charts label them `app: <appName>`):
 
     ```bash
     kubectl scale deploy/trs-filer -n <namespace> --replicas=0
+    kubectl wait pod -l app=trs-filer -n <namespace> --for=delete --timeout=120s
     ```
 
 2. Dump the app's database to a local file, and check that MongoDB can read
@@ -707,25 +711,34 @@ differ:
    earlier release if it differs (see [Version](#version)).
 
 4. Install the current chart (see [Installation](#installation)), stop its
-   app again, so that it doesn't write during the restore, and wait for
-   MongoDB:
+   app again and wait until its pods are gone, so that it doesn't write
+   during the restore, and wait for MongoDB:
 
     ```bash
     kubectl scale deploy/trs-filer -n <namespace> --replicas=0
+    kubectl wait pod -n <namespace> --for=delete --timeout=120s \
+      -l app.kubernetes.io/instance=trs-filer,app.kubernetes.io/component=app
     kubectl rollout status deploy/trs-filer-mongodb -n <namespace>
     ```
 
 5. Restore the dump into `trsStore`, replacing the collections that the app
-   has created, then start the app (with the number of `trsFiler.replicas`):
+   has created, and start the app (with the number of `trsFiler.replicas`)
+   only if the restore succeeded (`Restore OK`); otherwise, the app stays
+   stopped, and the restore can be repeated (`--drop`):
 
     ```bash
     kubectl exec -i deploy/trs-filer-mongodb -n <namespace> -- sh -c \
       'mongorestore --quiet --drop --archive \
       --nsFrom "trs-filer-db.*" --nsTo "trsStore.*" \
       -u "$MONGO_INITDB_ROOT_USERNAME" -p "$MONGO_INITDB_ROOT_PASSWORD" \
-      --authenticationDatabase admin' < trs-filer-db.archive
-    kubectl scale deploy/trs-filer -n <namespace> --replicas=1
+      --authenticationDatabase admin' < trs-filer-db.archive \
+    && echo "Restore OK" \
+    && kubectl scale deploy/trs-filer -n <namespace> --replicas=1
     ```
+
+    The dump includes the rules of access control (collection
+    `policy_rules`), which the earlier charts kept in the app's database
+    too.
 
 6. Check that the app lists the tools (e.g., `curl -s
    'https://trs.example.org/ga4gh/trs/v2/tools?limit=1'`), then delete the

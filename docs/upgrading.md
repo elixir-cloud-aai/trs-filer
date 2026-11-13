@@ -444,8 +444,11 @@ there:
     --previous`): set an image that can open the data (e.g., `kubectl set
     image deploy/OLD OLD=docker.io/library/mongo:8.3 -n <namespace>`; the
     container is named after the Deployment), wait until it runs, then
-    dump. If the restore into 7.0 fails on the options of an index, restore
-    with `--noIndexRestore`: the app creates its indexes on startup; or set
+    dump. If the `mongorestore` of an old image refuses `--dryRun`, leave
+    out the check of the dump, and compare the counts below after the
+    restore instead. If the restore into 7.0 fails on the options of an
+    index, restore with `--noIndexRestore`: the app creates its indexes on
+    startup; or set
     `mongodb.image` to the dumped major and minor version (mind the kernel
     requirements of 8.x, see [Version](deployment.md#version)).
 
