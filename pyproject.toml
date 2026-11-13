@@ -136,10 +136,6 @@ dev = [
     # Locks the dependencies (`uv lock`, checked in CI); also the version of
     # uv that CI installs (`astral-sh/setup-uv`)
     "uv>=0.13",
-    # The `yq` of the image (the dependency group `config-job`, same range),
-    # which `update-config-map.sh` uses; its tests run it
-    # (`tests/test_update_config_map.py`)
-    "yq>=3.4.3,<5",
 ]
 # Documentation (`mkdocs.yml`), built by Read the Docs (`.readthedocs.yaml`)
 # and in CI. The packages that add warnings, which fail the strict build, are
@@ -162,11 +158,6 @@ docs = [
 # `push` job, which holds the Docker Hub credentials, installs them
 # hash-checked; Dependabot updates them with the other locked packages
 build-system = ["setuptools>=77", "setuptools-scm>=8"]
-# TEMPORARY: `yq` for the Helm chart's config Job, which runs
-# `update-config-map.sh` in the image; no dependency of the app, but locked
-# with its hashes and installed in the image with the runtime dependencies
-# (`Dockerfile`). Removed with the config Job (#135)
-config-job = ["yq>=3.4.3,<5"]
 
 [project.readme]
 file = "README.md"

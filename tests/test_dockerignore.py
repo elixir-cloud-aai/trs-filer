@@ -81,6 +81,9 @@ def test_secret_files_are_excluded(path: str) -> None:
         ".git/config",
         "docs/index.md",
         "tests/test_dockerignore.py",
+        # The script of the Helm chart's former config Job
+        "update-config-map.sh",
+        "deployment/values.yaml",
     ],
 )
 def test_other_files_are_excluded(path: str) -> None:
@@ -99,7 +102,6 @@ def test_other_files_are_excluded(path: str) -> None:
         "README.md",
         "LICENSE",
         "scripts/image_requirements.py",
-        "update-config-map.sh",
     ],
 )
 def test_files_of_the_build_are_included(path: str) -> None:

@@ -67,26 +67,14 @@ LABEL org.opencontainers.image.licenses="Apache-2.0"
 LABEL org.opencontainers.image.authors="ELIXIR On-Cloud <cloud-service@elixir-europe.org>"
 LABEL org.opencontainers.image.vendor="ELIXIR On-Cloud"
 
-## TEMPORARY: the Helm chart's config Job runs `update-config-map.sh` in this
-## image, which needs `curl`, `jq` and `yq`; FOCA's images ship none of them,
-## and `yq` is no dependency of the app. `yq` is locked as the dependency
-## group `config-job` and installed with the runtime dependencies below.
-## Removed with the config Job (#135)
-USER root
-RUN apt-get update \
-  && apt-get install -y --no-install-recommends curl jq \
-  && rm -rf /var/lib/apt/lists/*
-COPY update-config-map.sh /app/update-config-map.sh
-
 ## Install dependencies first, so that code changes do not reinstall them;
 ## the FOCA image runs as non-root user. Only the locked ones are installed:
 ## the runtime dependencies (`project.dependencies` of `pyproject.toml`; the
-## export leaves out the extras and the dependency group `build-system`) and
-## the dependency group `config-job` (see above), with all their own
-## dependencies, at the exact versions of `uv.lock`, checked against its
-## hashes, as wheels only, and without resolving anything else
-## (`--no-deps`), and compiled, as the root file system of deployments may be
-## read-only. `--frozen` takes the lock as is, unchecked against
+## export leaves out the extras and the dependency group `build-system`),
+## with all their own dependencies, at the exact versions of `uv.lock`,
+## checked against its hashes, as wheels only, and without resolving
+## anything else (`--no-deps`), and compiled, as the root file system of
+## deployments may be read-only; as root (back to user 1000 below). `--frozen` takes the lock as is, unchecked against
 ## `pyproject.toml` (CI's `uv lock --check` checks it). A direct reference to
 ## a FOCA commit (temporary) has no hash and is left out, as the image has no
 ## Git: the build fails unless the base image has FOCA of that commit. It also
@@ -95,10 +83,11 @@ COPY update-config-map.sh /app/update-config-map.sh
 ## base image (`--system`), and its lock file in `/tmp` is removed. Packages
 ## that the base image already has at the locked version are kept as they
 ## are (trusted through its digest), not checked against the hashes again
+USER root
 COPY pyproject.toml uv.lock scripts/image_requirements.py /tmp/src/
 RUN --mount=from=uv,source=/uv,target=/usr/local/bin/uv \
   export UV_NO_CACHE=1 UV_PYTHON_DOWNLOADS=never \
-  && uv export --frozen --no-dev --group config-job --no-emit-project \
+  && uv export --frozen --no-dev --no-emit-project \
     --project /tmp/src --output-file /tmp/src/locked.txt \
   && python /tmp/src/image_requirements.py /tmp/src/locked.txt > /tmp/src/requirements.txt \
   && uv pip install --system --require-hashes --only-binary :all: --no-deps \
