@@ -9,16 +9,17 @@ meta-schema of the profile (`trs_filer.io_schema.check`, see
 `docs/io-schema.md`).
 
 The meta-schema and its vocabularies are vendored unchanged from
-`schemas/` of uniqueg/ga4gh-io-schema at commit 573f65e (2026-11-12, branch
+`schemas/` of uniqueg/ga4gh-io-schema at commit d44e8d4 (2026-11-13, branch
 `v0.3`, profile version 0.3.0), licensed under the Apache License 2.0, in
 the directory named after the date and commit (`META_SCHEMA_DIR`). Their
 references are resolved from these copies; nothing is fetched.
 
-Validating against the meta-schema takes time that grows steeply with the
-nesting of a schema (its `unevaluatedProperties` are checked at every
-level), so it runs in a process of its own, with a time limit
-(`python -m trs_filer.io_schema`, see `main()`). This module imports only
-the validator's packages, so that the process starts quickly.
+Validating against the meta-schema takes time that grows about linearly
+with the size of a schema, also for deeply nested ones, but a schema that
+fits in a request can still take many seconds. So it runs in a process of
+its own, with a time limit (`python -m trs_filer.io_schema`, see
+`main()`). This module imports only the validator's packages, so that the
+process starts quickly.
 """
 
 from functools import cache
@@ -42,7 +43,7 @@ IO_SCHEMA_FILE_TYPE = "OTHER"
 #: Version of the GA4GH I/O Profile that I/O Schemas are checked against.
 PROFILE_VERSION = "0.3.0"
 #: Directory of the vendored meta-schema and its vocabularies.
-META_SCHEMA_DIR = Path(__file__).resolve().parent / "20261112.573f65e"
+META_SCHEMA_DIR = Path(__file__).resolve().parent / "20261113.d44e8d4"
 #: Identifier of the meta-schema, which I/O Schemas name in `$schema`.
 META_SCHEMA_ID = (
     "https://raw.githubusercontent.com/uniqueg/ga4gh-io-schema/"

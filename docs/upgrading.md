@@ -16,6 +16,17 @@ The API implements TRS 2.0.2, and TRS-Filer runs on FOCA 0.23 (see FOCA's
 guide](https://github.com/elixir-cloud-aai/foca/blob/dev/docs/migration-0.23.md));
 existing data needs no changes. Check clients and custom configs:
 
+- **Optional object storage:** file contents can be stored in
+  S3-compatible object storage (`custom.storage.backend: s3`, see [File
+  storage](configuration.md#file-storage)). Nothing changes by default
+  (`mongodb`); existing files stay in MongoDB, as there is no migration of
+  stored files. With object storage, back up the bucket with the database
+  (see [Backups](operations.md#backups)). The app creates a new index on
+  `tools` on startup (see [Backups](operations.md#backups)), as for the
+  other indexes. With several replicas, enable `backend: s3` only once all
+  of them run this version: earlier versions don't read files in object
+  storage.
+
 - `GET /tools` filters by `tags` (comma-separated; tools must have all of
   them) instead of refusing the filter with `400 Bad Request`. Tools get
   their tags on registration (`tags` of `ToolRegister`, strings without

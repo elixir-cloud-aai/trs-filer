@@ -31,6 +31,7 @@ from trs_filer.ga4gh.trs.tool_classes import (
 from trs_filer.io_schema import is_io_schema_file
 from trs_filer.io_schema.check import check_io_schema
 from trs_filer.remote_files import fetch_remote_file
+from trs_filer.storage import store_file
 from trs_filer.utils import get_collection, get_custom_config
 
 logger = logging.getLogger(__name__)
@@ -581,6 +582,9 @@ class RegisterToolVersion:
         `trs_filer.io_schema.check.check_io_schema()`).
 
         Raises:
+            InternalServerError: The content of a file could not be stored in
+                object storage (with `custom.storage.backend: s3`, see
+                `trs_filer.storage`).
             InvalidRequest: The files of the version are invalid, or, with
                 `custom.io_schema.validation`, one of its I/O Schema files.
             trs_filer.errors.exceptions.RemoteFileError: The content of a file
@@ -707,6 +711,11 @@ class RegisterToolVersion:
                     descriptor_type=_file["type"],
                     timeout=io_schema_conf.timeout,
                 )
+
+        # store the contents (in object storage, with `custom.storage.backend:
+        # s3`), once all files are valid
+        for _file in self.data.get("files", []):
+            store_file(_file)
 
     def register_metadata(self) -> None:
         """Register version with tool.

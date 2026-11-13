@@ -365,6 +365,141 @@ custom:
         timeout: 10
 ```
 
+## File storage
+
+By default, TRS-Filer stores the content of files in MongoDB, with the
+other data of tools. Optionally, it stores the content of files in
+**S3-compatible object storage** instead, and keeps only their metadata in
+MongoDB (`custom.storage`):
+
+| Option | Default | Description |
+| --- | --- | --- |
+| `backend` | `mongodb` | Where the content of files registered from now on is stored: `mongodb` or `s3`. |
+| `s3.bucket` | | Name of the bucket, which must exist; required if `s3` is set. |
+| `s3.endpoint_url` | | URL of the S3 API, e.g., `https://s3.example.org`; boto3's default if not set (AWS, or the environment variable `AWS_ENDPOINT_URL_S3` or `AWS_ENDPOINT_URL`). |
+| `s3.region` | | Region of the bucket; boto3's default if not set (e.g., the environment variable `AWS_REGION`). |
+| `s3.prefix` | `""` | Prefix of the keys of the objects (e.g., `trs-filer/`), so that a bucket can be shared. |
+| `s3.addressing_style` | `path` | `path` (`<endpoint>/<bucket>/<key>`, which most self-hosted servers need), `virtual` (`<bucket>.<endpoint>/<key>`) or `auto` (boto3's choice). |
+| `s3.presigned_urls` | `false` | Serve files via presigned URLs of their objects instead of through the app (see below). |
+| `s3.presigned_url_expiry` | `300` | Validity of presigned URLs, in seconds (at most 604800, 7 days). |
+| `s3.connect_timeout` | `5` | Seconds to connect to the S3 API. |
+| `s3.read_timeout` | `10` | Seconds per read from the S3 API. |
+
+TRS-Filer talks to the storage through the S3 API only (with
+[boto3](https://boto3.amazonaws.com/v1/documentation/api/latest/index.html)),
+so any S3-compatible server or service works, e.g.,
+[SeaweedFS](https://github.com/seaweedfs/seaweedfs) or [Zenko
+CloudServer](https://github.com/scality/cloudserver) (both Apache-2.0),
+Ceph RGW, or the S3 services of cloud and HPC providers. CI tests with
+SeaweedFS.
+
+**Credentials** are never part of the config (which rejects unknown
+settings): boto3 takes them from the environment with its [default
+credential
+chain](https://boto3.amazonaws.com/v1/documentation/api/latest/guide/credentials.html),
+e.g., from the environment variables `AWS_ACCESS_KEY_ID` and
+`AWS_SECRET_ACCESS_KEY` (set from a Secret, see [Object
+storage](deployment.md#object-storage) for the Helm chart), or a web
+identity token. The app needs the S3 permissions to put, get and delete
+objects in the bucket (with the prefix, if set); the bucket isn't created
+by the app.
+
+For example:
+
+```yaml
+custom:
+  storage:
+    backend: s3
+    s3:
+      endpoint_url: https://s3.example.org
+      bucket: trs-filer
+      region: us-east-1
+      prefix: trs-filer/
+```
+
+How files are stored:
+
+- When a version is registered (also with its tool, and when it is
+  replaced), the content of each of its files, once all files are valid
+  (and retrieved from their URLs, see [Remote files](#remote-files)), is
+  written once as a new object, under a random key with the prefix (as
+  `text/plain; charset=utf-8`). MongoDB keeps the file's metadata and a
+  reference to the object, with the SHA-256 checksum and the size of the
+  content; the reference is never served.
+- When files are served, their content is read from the object and checked
+  against the checksum and size; changed or missing objects fail the
+  request with `500 Internal Server Error`, and the app logs the key. A
+  missing object is first read again from the stored files once, as the
+  version may have been replaced or deleted meanwhile (this needs reads
+  from the primary: with a `readPreference` of secondaries in `MONGO_URI`,
+  the retry may still see the old files).
+- Objects that no stored file refers to any more are deleted at the end of
+  the request that released them: those of replaced and deleted versions
+  and tools, and those of registrations that failed. If deleting an object
+  fails, or the app stops during a request, objects can be left without a
+  file that refers to them (logged at `ERROR`); they are not served.
+- The backend only decides where new files go: files stay where they were
+  stored. With `backend: mongodb` and `s3` set, files in object storage are
+  still served (e.g., to switch back); without `s3`, they fail with `500
+  Internal Server Error`. Existing files are not moved to object storage.
+
+With **presigned URLs** (`s3.presigned_urls: true`), clients get files from
+the object storage directly, which then must be reachable by them: JSON
+responses with files (descriptors, tests, containerfiles) have the
+presigned URL of the object as `url`, instead of the `content` and of the
+URL given on registration, and the SHA-256 checksum of the content
+(`sha-256`, unless given on registration); plain responses (`PLAIN_`
+types) redirect to the presigned URL (`302 Found`). Presigned URLs serve
+the content as `text/plain` and as a download (`Content-Disposition:
+attachment`), so that browsers don't display it. Presigned URLs expire
+after `s3.presigned_url_expiry` seconds, or earlier, when the version is
+replaced or deleted (its objects are deleted). ZIP archives are still built
+by the app.
+
+A presigned URL lets anybody who has it read the file until it expires,
+without a token, also if the deployment requires login for reads (see
+[Requiring login for reads](access-control.md#requiring-login-for-reads)):
+keep the expiry short there, and keep the URLs out of logs. Serve the S3
+API on another host than TRS-Filer, so that clients don't send their
+access tokens along with the redirect.
+
+**Docker Compose** doesn't bundle an object store. To try object storage
+locally, add SeaweedFS (here with the S3 API without authentication, for
+tests only) in a `docker-compose.override.yaml`, and set the backend in a
+config overlay (e.g., `config.s3.yaml`, after `config.dev.yaml`):
+
+```yaml
+# docker-compose.override.yaml
+services:
+  trs-filer:
+    environment:
+      FOCA_CONFIG_OVERLAY: /etc/trs-filer/config.dev.yaml:/etc/trs-filer/config.s3.yaml
+      # Any values: SeaweedFS without authentication doesn't check them
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+    volumes:
+      - ./config.s3.yaml:/etc/trs-filer/config.s3.yaml:ro
+  seaweedfs:
+    image: docker.io/chrislusf/seaweedfs:4.51
+    command: server -s3 -ip.bind=0.0.0.0
+    ports:
+      - "127.0.0.1:8333:8333"
+```
+
+```yaml
+# config.s3.yaml
+custom:
+  storage:
+    backend: s3
+    s3:
+      endpoint_url: http://seaweedfs:8333
+      bucket: trs-filer
+      region: us-east-1
+```
+
+Then create the bucket, e.g., with the AWS CLI on the host:
+`aws --endpoint-url http://127.0.0.1:8333 s3 mb s3://trs-filer`.
+
 ## Request size limit
 
 Request bodies are limited to `server.max_content_length` bytes (default:
@@ -398,10 +533,11 @@ development: Flask's debugger allows executing arbitrary code.
 
 ## Database
 
-TRS-Filer stores tools (with their versions and files) and tool classes in
-the collections `tools` and `toolclasses` of the MongoDB database `trsStore`
-at `db.host` and `db.port` (in the base config: `mongodb:27017`, the service
-of Docker Compose). FOCA reads the environment variables `MONGO_HOST`,
+TRS-Filer stores tools (with their versions and files; the content of files
+optionally in object storage, see [File storage](#file-storage)) and tool
+classes in the collections `tools` and `toolclasses` of the MongoDB
+database `trsStore` at `db.host` and `db.port` (in the base config:
+`mongodb:27017`, the service of Docker Compose). FOCA reads the environment variables `MONGO_HOST`,
 `MONGO_PORT`, `MONGO_DBNAME`, `MONGO_USERNAME` and `MONGO_PASSWORD`, or a
 complete connection string in `MONGO_URI`, which take precedence over the
 config (see the [FOCA documentation](https://foca.readthedocs.io/en/latest/));

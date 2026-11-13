@@ -65,6 +65,14 @@ config: {}
 #       validation: true
 #       # Time limit of checking a file, in seconds
 #       timeout: 10
+#     # Store the content of files in S3-compatible object storage, with
+#     # the credentials from a Secret in `trsFiler.extraEnvFrom` (see
+#     # deployment/README.md, Object storage)
+#     storage:
+#       backend: s3
+#       s3:
+#         endpoint_url: https://s3.example.org
+#         bucket: trs-filer
 
 trsFiler:
   # Image repository; may include a tag or digest instead of setting `tag`

@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/uniqueg/ga4gh-io-schema/v0.3.0/schemas/vocabularies/annotations.schema.json",
+  "title": "GA4GH IO Profile Annotations",
+  "description": "Keywords that annotate a parameter for clients: UI hints, error message, description format and ontology term.",
+  "properties": {
+    "x-ga4gh-ontology": {
+      "type": "string",
+      "format": "uri",
+      "description": "URI to an ontology term (e.g., an EDAM data term) semantically describing the data of the parameter. The format of a file goes into ontology of x-ga4gh-file."
+    },
+    "x-ga4gh-ui-widget": {
+      "$ref": "https://raw.githubusercontent.com/uniqueg/ga4gh-io-schema/v0.3.0/schemas/vocabularies/ui-widgets.schema.json",
+      "description": "Hint for UI clients on how to render this input/output. References an external standardized vocabulary."
+    },
+    "x-ga4gh-description-format": {
+      "type": "string",
+      "enum": [
+        "plain_text",
+        "markdown"
+      ],
+      "default": "plain_text",
+      "description": "Hint for UI/CLI clients on how to parse and render the standard JSON Schema 'description' field, avoiding redundant text properties. 'markdown' is CommonMark 0.31.2 with raw HTML shown as text, images shown as their alt text, links only with allowed schemes, and of the GFM extensions only tables, strikethrough and autolinks (see Markdown descriptions in the specification)."
+    },
+    "x-ga4gh-hidden": {
+      "type": "boolean",
+      "description": "Inspired by nf-core. If true, UI generators should hide this parameter from default user views, unless users must set it (required without a default) or its value fails validation."
+    },
+    "x-ga4gh-error-message": {
+      "type": "string",
+      "description": "Inspired by nf-core. Custom, human-readable error message to display, in place of the validator's message, if validation fails at the location of the value that this schema describes (not for nested values); the outermost message wins where several apply."
+    }
+  },
+  "allOf": [
+    {
+      "$comment": "dependentSchemas is wrapped in an allOf: Ajv drops the properties that this schema evaluates (properties) when dependentSchemas sits next to them and its keyword is absent, and would reject them as unevaluated.",
+      "dependentSchemas": {
+        "x-ga4gh-ui-widget": {
+          "$comment": "A widget of the vocabulary needs the keywords that it fits in the same schema (e.g., a slider a numeric type and both bounds); see the table of widgets in the specification.",
+          "$ref": "https://raw.githubusercontent.com/uniqueg/ga4gh-io-schema/v0.3.0/schemas/vocabularies/ui-widgets.schema.json#/$defs/fit"
+        }
+      }
+    }
+  ]
+}

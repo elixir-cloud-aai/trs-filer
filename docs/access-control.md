@@ -312,6 +312,13 @@ rules after a list). Don't give readers rules for all paths under `/tools/`
 (e.g., `/ga4gh/trs/v2/tools/*`), as these would also let them list the roles
 on tools (`/tools/{id}/permissions`).
 
+With files in object storage and presigned URLs
+(`custom.storage.s3.presigned_urls`, see [File
+storage](configuration.md#file-storage)), the presigned URLs that logged-in
+users get let anybody who has them read the files, without a token, until
+they expire: keep `custom.storage.s3.presigned_url_expiry` short, or serve
+files through the app.
+
 !!! danger "With great power comes great responsibility"
     Patches and rules in overlays can weaken or remove authentication and
     access control as easily as they add them. Review them like code, keep
