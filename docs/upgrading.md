@@ -83,10 +83,12 @@ existing data needs no changes. Check clients and custom configs:
 - **Tokens for writes (breaking):** registering, changing and deleting tools,
   versions and tool classes (`POST`, `PUT` and `DELETE`, see [Registering
   tools](api.md#registering-tools)) need an access token (RFC 9068,
-  `at+jwt`) of a trusted OpenID Connect provider, of a user in a group mapped
-  to the role `admin`; without a valid token, they answer `401
-  Unauthorized`, with a token of other users `403 Forbidden`. Reads stay
-  public. The app refuses to start until the deployment sets its identity
+  `at+jwt`) of a trusted OpenID Connect provider; without a valid token,
+  they answer `401 Unauthorized`. Any authenticated user can register tools
+  and add tool classes; changing tools needs a role on them or the role
+  `admin` (a group mapped to it), replacing and deleting tool classes the
+  role `admin`; other users get `403 Forbidden` (see the next item). Reads
+  stay public. The app refuses to start until the deployment sets its identity
   provider and admin group (see [Access control](access-control.md)). To
   upgrade:
     1. Register TRS-Filer's clients (e.g., a portal, a gateway or the
@@ -128,6 +130,49 @@ existing data needs no changes. Check clients and custom configs:
   app as `FOCA_CONFIG_OVERLAY`, which lists the overlays); for
   local development without an identity provider, see [Running without
   authentication](development.md#running-without-authentication).
+- **Owners of tools (breaking):** the user registering a tool becomes its
+  owner, as for services in Cloud Registry (see [Roles on
+  tools](access-control.md#roles-on-tools)). Owners replace and delete their
+  tools and versions, and grant the roles `owner` and `maintainer` (add and
+  replace versions) to other users and to their groups via the new
+  endpoints `/tools/{id}/permissions`; admins can do everything. `PUT
+  /tools/{id}` replaces only tools that the user may change (`403
+  Forbidden` otherwise; it adds tools with the identifier of no tool, as
+  before), and `PUT /toolClasses/{id}` replaces tool classes only for admins.
+  Any authenticated user can add tool classes (`POST /toolClasses`, `PUT
+  /toolClasses/{id}` with new identifiers, and by registering tools with new
+  ones), as `custom.access_control.tool_classes: open` (the default) says. To
+  upgrade:
+    1. Tools stored before have no owners: only admins can change them.
+       Grant each the owner that should manage it (`PUT
+       /tools/{id}/permissions/users/{userId}` with `{"role": "owner"}`, as
+       an admin); the user identifier is the `sub` claim of the user's
+       tokens.
+    2. Config overlays that replace the read rules `get-tools` (e.g., for
+       readers, with `/ga4gh/trs/v2/tools/*`) by name: the base config now
+       has `get-tools` for `/tools/:id` only, plus `list-versions` and
+       `get-versions`. Rules for all paths under `/tools/` would also let
+       their subjects list (`GET`) or, for writes, change (`PUT`, `DELETE`)
+       the roles on tools: replace them as in [Requiring login for
+       reads](access-control.md#requiring-login-for-reads) and the editors
+       example of [Admins](access-control.md#admins).
+    3. Config overlays that give `security.access_control.policies` as a
+       list replace the new rules of the base config (`register-tools`,
+       `owners-*`, `maintainers-*`, `add-tool-classes`), so users can't
+       register or change tools: switch to named rules, or add these rules
+       to the list. Don't override `security.access_control.resource_roles`
+       or unset `keep_group_subjects` (the values of the group claim are now
+       also subjects, for roles of groups).
+    4. Nothing to do for the new internal fields of tools (`_createdBy`,
+       `_createdAt` and `_updatedAt`, not served): tools stored before get
+       `_updatedAt` on their next change, but neither who registered them
+       nor when. Instances of the old version that still run next to the
+       new one (e.g., in a rolling update of a setup of your own) serve
+       these fields of tools that the new version writes, i.e., who
+       registered them: stop them before the new version takes writes. With
+       the Helm chart, the new release replaces the old one anyway (see
+       below).
+
 - **Helm chart (breaking):** the chart is a thin chart over FOCA's library
   chart `foca-common`, with camelCase values, and **releases of earlier
   charts can't be upgraded**: uninstall them and install the new chart,

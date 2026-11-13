@@ -8,6 +8,7 @@ from connexion.exceptions import (
     Unauthorized,
 )
 from flask import Response
+from foca.errors import Conflict
 from foca.errors.exceptions import problem_response
 from werkzeug.exceptions import (
     BadRequest,
@@ -19,6 +20,8 @@ from werkzeug.exceptions import (
 
 __all__ = [
     "BadRequest",
+    "Conflict",
+    "Forbidden",
     "InternalServerError",
     "InvalidRequest",
     "NotAcceptable",
@@ -115,6 +118,7 @@ exceptions = {
         "detail": "The request is unauthorized.",
         "status": 401,
     },
+    # Also werkzeug's (the same class), e.g., of FOCA's role controllers
     Forbidden: {
         "title": "Forbidden",
         "detail": "The requester is not authorized to perform this action.",
@@ -135,6 +139,13 @@ exceptions = {
             "forms as text/plain."
         ),
         "status": 406,
+    },
+    # e.g., FOCA's `LastOwner`: the last owner of a tool can't be removed or
+    # downgraded
+    Conflict: {
+        "title": "Conflict",
+        "detail": "The request conflicts with the current state of the resource.",
+        "status": 409,
     },
     RequestEntityTooLarge: {
         "title": "Content Too Large",

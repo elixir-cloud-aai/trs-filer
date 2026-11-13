@@ -26,8 +26,9 @@ def create_app() -> App:
     (`security.auth.issuers`) with an audience, and refuses to start without
     admins (`security.access_control.require_admin`). The app additionally
     requires a size limit, refuses service clients (FOCA's
-    `require_no_service_clients()`), as only admins write until tools have
-    owners, and answers invalid requests
+    `require_no_service_clients()`), as service clients (or the users they
+    act for) would need their own roles on tools, and answers invalid
+    requests
     (`trs_filer.errors.exceptions.InvalidRequest`) with their reason as
     `detail`.
 

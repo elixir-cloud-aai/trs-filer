@@ -27,8 +27,9 @@ security: null
 # requirements set here replace theirs (`BEARER`), so that a patch can
 # require login for reads (`security: [{BEARER: []}]`) without changing the
 # vendored specification (see `api/patches/login-for-reads.yaml`). The
-# registration endpoints below (writes) require a bearer token (`BEARER`)
-# of an admin (see `docs/access-control.md`)
+# registration endpoints below (writes) and the permissions of tools require
+# a bearer token (`BEARER`); who may call them is decided by the policies of
+# `config.yaml` (see `docs/access-control.md`)
 paths:
   # Served by FOCA from the config (`service_info`), with the path item of
   # the service info specification instead of the remote one that TRS
@@ -121,6 +122,7 @@ paths:
     post:
       summary: Add a tool.
       description: Create a tool object with a randomly generated unique ID.
+        Any authenticated user may add tools, and becomes their owner.
       operationId: postTool
       security:
         - BEARER: []
@@ -171,9 +173,14 @@ paths:
       security: []
     put:
       summary: Add or update a tool.
-      description: Create a tool object with a predefined ID. Overwrites any
-        existing tool object with the same ID.
+      description: Create a tool object with a predefined ID, or overwrite the
+        existing tool object with the same ID. Any authenticated user may add
+        a tool with an ID of no tool, and becomes its owner; only owners of
+        the tool and admins may overwrite it (`403` for others).
       operationId: putTool
+      # Any authenticated user may add tools, so policies are checked by the
+      # controller, for stored tools only
+      x-foca-access-control: false
       security:
         - BEARER: []
       tags:
@@ -216,6 +223,13 @@ paths:
                 $ref: '#/components/schemas/Error'
         '403':
           description: The requester is not authorized to perform this action.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: The tool was deleted, or deleted and registered
+            again, while the request was processed.
           content:
             application/json:
               schema:
@@ -329,6 +343,13 @@ paths:
                 $ref: '#/components/schemas/Error'
         '403':
           description: The requester is not authorized to perform this action.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: The tool was deleted, or deleted and registered
+            again, while the version was processed.
           content:
             application/json:
               schema:
@@ -461,6 +482,13 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+        '409':
+          description: The tool was deleted, or deleted and registered
+            again, while the version was processed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '500':
           description: An unexpected error occurred.
           content:
@@ -507,6 +535,392 @@ paths:
                 $ref: '#/components/schemas/Error'
         '403':
           description: The requester is not authorized to perform this action.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: An unexpected error occurred.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  "/tools/{id}/permissions":
+    get:
+      summary: List the roles on a tool.
+      description: |
+        List the roles granted on a tool, to users and to groups. Only for
+        owners of the tool and admins. An extension of TRS-Filer.
+      operationId: getToolPermissions
+      x-openapi-router-controller: trs_filer.ga4gh.trs.permissions
+      security:
+        - BEARER: []
+      tags:
+        - TRS-Filer
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: A unique identifier of the tool, scoped to this
+            registry, for example `123456`.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Roles granted on the tool.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ResourceRole'
+        '400':
+          description: The request is malformed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: The request is unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: The requester is not authorized to perform this action.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: The requested tool was not found; for revocations,
+            also if the subject has no role on it.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: An unexpected error occurred.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  "/tools/{id}/permissions/users/{userId}":
+    put:
+      summary: Grant a user a role on a tool.
+      description: |
+        Grant a user a role on a tool, replacing any other role of the user
+        on the tool: `owner` (replace and delete the tool and its versions,
+        manage its roles) or `maintainer` (add and replace versions). Only
+        for owners of the tool and admins. The last owner of a tool (user
+        or group) can't be downgraded (`409`). An extension of TRS-Filer.
+      operationId: putToolPermission
+      x-openapi-router-controller: trs_filer.ga4gh.trs.permissions
+      security:
+        - BEARER: []
+      tags:
+        - TRS-Filer
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: A unique identifier of the tool, scoped to this
+            registry, for example `123456`.
+          schema:
+            type: string
+        - name: userId
+          in: path
+          required: true
+          description: |
+            Identifier of the user, i.e., the `sub` claim of the user's
+            tokens; if the deployment trusts several token issuers,
+            namespaced by issuer (`<namespace>|<sub>`), URL-encoded (may
+            contain `/`, but not start with it).
+          schema:
+            type: string
+            format: path
+      requestBody:
+        description: Role to grant.
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RoleRegister'
+      responses:
+        '200':
+          description: The role was granted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResourceRole'
+        '400':
+          description: The request is malformed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: The request is unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: The requester is not authorized to perform this action.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: The requested tool was not found; for revocations,
+            also if the subject has no role on it.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: The subject is the last owner of the tool, who can't
+            be removed or downgraded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: An unexpected error occurred.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      summary: Revoke the roles of a user on a tool.
+      description: |
+        Revoke the roles of a user on a tool. Only for owners of the tool
+        and admins. The last owner of a tool (user or group) can't be
+        removed (`409`); delete the tool instead. An extension of TRS-Filer.
+      operationId: deleteToolPermission
+      x-openapi-router-controller: trs_filer.ga4gh.trs.permissions
+      security:
+        - BEARER: []
+      tags:
+        - TRS-Filer
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: A unique identifier of the tool, scoped to this
+            registry, for example `123456`.
+          schema:
+            type: string
+        - name: userId
+          in: path
+          required: true
+          description: |
+            Identifier of the user, i.e., the `sub` claim of the user's
+            tokens; if the deployment trusts several token issuers,
+            namespaced by issuer (`<namespace>|<sub>`), URL-encoded (may
+            contain `/`, but not start with it).
+          schema:
+            type: string
+            format: path
+      responses:
+        '200':
+          description: The roles were revoked.
+          content:
+            application/json:
+              schema:
+                type: string
+                description: Identifier of the user.
+        '400':
+          description: The request is malformed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: The request is unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: The requester is not authorized to perform this action.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: The requested tool was not found; for revocations,
+            also if the subject has no role on it.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: The subject is the last owner of the tool, who can't
+            be removed or downgraded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: An unexpected error occurred.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  "/tools/{id}/permissions/groups/{group}":
+    put:
+      summary: Grant a group a role on a tool.
+      description: |
+        Grant a group a role on a tool, replacing any other role of the
+        group on the tool (see `PUT /tools/{id}/permissions/users/{userId}`).
+        All members of the group have the role. Only for owners of the tool
+        who are members of the group (`403` otherwise), and admins, who can
+        grant roles to any group. The last owner of a tool (user or group)
+        can't be downgraded (`409`). An extension of TRS-Filer.
+      operationId: putToolGroupPermission
+      x-openapi-router-controller: trs_filer.ga4gh.trs.permissions
+      security:
+        - BEARER: []
+      tags:
+        - TRS-Filer
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: A unique identifier of the tool, scoped to this
+            registry, for example `123456`.
+          schema:
+            type: string
+        - name: group
+          in: path
+          required: true
+          description: |
+            Group, i.e., a value of the group claim of its members' tokens
+            (`security.access_control.claim_groups`, set by the deployment),
+            URL-encoded (may contain `/`, but not start with it).
+          schema:
+            type: string
+            format: path
+      requestBody:
+        description: Role to grant.
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RoleRegister'
+      responses:
+        '200':
+          description: The role was granted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResourceRole'
+        '400':
+          description: The request is malformed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: The request is unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: The requester is not authorized to perform this action.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: The requested tool was not found; for revocations,
+            also if the subject has no role on it.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: The subject is the last owner of the tool, who can't
+            be removed or downgraded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: An unexpected error occurred.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      summary: Revoke the roles of a group on a tool.
+      description: |
+        Revoke the roles of a group on a tool. Only for owners of the tool
+        (also if they are not members of the group) and admins. The last
+        owner of a tool (user or group) can't be removed (`409`); delete the
+        tool instead. An extension of TRS-Filer.
+      operationId: deleteToolGroupPermission
+      x-openapi-router-controller: trs_filer.ga4gh.trs.permissions
+      security:
+        - BEARER: []
+      tags:
+        - TRS-Filer
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: A unique identifier of the tool, scoped to this
+            registry, for example `123456`.
+          schema:
+            type: string
+        - name: group
+          in: path
+          required: true
+          description: |
+            Group, i.e., a value of the group claim of its members' tokens
+            (`security.access_control.claim_groups`, set by the deployment),
+            URL-encoded (may contain `/`, but not start with it).
+          schema:
+            type: string
+            format: path
+      responses:
+        '200':
+          description: The roles were revoked.
+          content:
+            application/json:
+              schema:
+                type: string
+                description: The group.
+        '400':
+          description: The request is malformed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: The request is unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: The requester is not authorized to perform this action.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: The requested tool was not found; for revocations,
+            also if the subject has no role on it.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: The subject is the last owner of the tool, who can't
+            be removed or downgraded.
           content:
             application/json:
               schema:
@@ -574,9 +988,14 @@ paths:
                 $ref: '#/components/schemas/Error'
     put:
       summary: Create or update a tool class.
-      description: Create a tool class with a predefined unique ID. Overwrites
-        any existing tool object with the same ID.
+      description: Create a tool class with a predefined unique ID, or
+        overwrite the existing tool class with the same ID. Any authenticated
+        user may add a tool class with an ID of no tool class; only admins
+        may overwrite it (`403` for others).
       operationId: putToolClass
+      # Any authenticated user may add tool classes, so policies are checked
+      # by the controller, for stored tool classes only
+      x-foca-access-control: false
       security:
         - BEARER: []
       tags:
@@ -641,6 +1060,47 @@ components:
       in: null
     bearerAuth: null
   schemas:
+    # Roles on tools (FOCA's role controllers), extensions of TRS-Filer
+    Role:
+      description: |
+        Role on a tool: `owner` (replace and delete the tool and its
+        versions, manage its roles) or `maintainer` (add and replace
+        versions).
+      type: string
+      enum:
+        - owner
+        - maintainer
+    RoleRegister:
+      description: Role to grant on a tool.
+      type: object
+      required:
+        - role
+      additionalProperties: false
+      properties:
+        role:
+          $ref: '#/components/schemas/Role'
+    ResourceRole:
+      description: Role of a user or group on a tool.
+      type: object
+      required:
+        - subject_type
+        - subject
+        - role
+      additionalProperties: false
+      properties:
+        subject_type:
+          description: Type of the subject.
+          type: string
+          enum:
+            - user
+            - group
+        subject:
+          description: |
+            Identifier of the user, or the group (a value of the group
+            claim).
+          type: string
+        role:
+          $ref: '#/components/schemas/Role'
     # Extension of the TRS schema: the tags of tools, by which `GET /tools`
     # filters (`tags`)
     Tool:

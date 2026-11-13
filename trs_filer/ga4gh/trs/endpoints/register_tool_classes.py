@@ -3,10 +3,13 @@
 import logging
 from typing import Any
 
+from foca.utils.logging import escape_log_value
 from foca.utils.misc import generate_id
 from pymongo.errors import DuplicateKeyError
 
 from trs_filer.errors.exceptions import (
+    Conflict,
+    Forbidden,
     InternalServerError,
 )
 from trs_filer.utils import get_collection, get_custom_config
@@ -21,17 +24,24 @@ class RegisterToolClass:
         self,
         data: dict[str, Any],
         id: str | None = None,
+        allow_replace: bool = True,
+        replace_only: bool = False,
     ) -> None:
         """Initialize tool class data.
 
         Args:
             data: Tool class metadata consistent with the `ToolClass` schema.
             id: Tool class identifier. Auto-generated if not provided.
+            allow_replace: With `id`, whether a stored tool class with the
+                identifier may be replaced; if not, it is only created.
+            replace_only: With `allow_replace`, whether the tool class must be
+                stored: if it was deleted meanwhile, it isn't added again.
 
         Attributes:
             data: Tool metadata.
-            replace: Whether it is allowed to replace an existing tool. Set
-                to `True` if an `id` is provided, else set to `False`.
+            replace: Whether it is allowed to replace an existing tool class.
+                Set to `allow_replace` if an `id` is provided, else set to
+                `False`.
             id_charset: Allowed characters for generating object
                 identifiers.
             id_length: Length of generated object identifiers.
@@ -56,7 +66,8 @@ class RegisterToolClass:
         conf = get_custom_config()
         self.data = data
         self.data["id"] = None if id is None else id
-        self.replace = True
+        self.replace = allow_replace
+        self.replace_only = replace_only
         self.id_charset = conf.toolclass.id.charset
         self.id_length = int(conf.toolclass.id.length)
         self.meta_version_init = int(conf.toolclass.meta_version.init)
@@ -70,6 +81,10 @@ class RegisterToolClass:
         """Register toolClass with TRS.
 
         Raises:
+            Conflict: The tool class to be replaced (`replace_only`) was
+                deleted meanwhile.
+            Forbidden: A tool class with the given identifier is stored, but
+                may not be replaced (`allow_replace`): it was added meanwhile.
             InternalServerError: No unique identifier could be generated, or the
                 object could not be stored.
         """
@@ -94,12 +109,24 @@ class RegisterToolClass:
                 if result.matched_count:
                     logger.info("Replaced tool class with id '%s'.", self.data["id"])
                     break
+                if self.replace_only:
+                    logger.info(
+                        "Tool class '%s' not replaced: deleted meanwhile.",
+                        escape_log_value(self.data["id"]),
+                    )
+                    raise Conflict
 
             # insert tool class into database (a copy, as `insert_one()` adds
             # `_id`)
             try:
                 self.db_coll_classes.insert_one(document=dict(self.data))
             except DuplicateKeyError:
+                if not generate_ids and not self.replace:
+                    logger.info(
+                        "Tool class '%s' not added: added meanwhile.",
+                        escape_log_value(self.data["id"]),
+                    )
+                    raise Forbidden from None
                 continue
 
             logger.info("Added tool class with id '%s'.", self.data["id"])

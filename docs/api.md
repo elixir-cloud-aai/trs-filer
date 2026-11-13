@@ -216,6 +216,11 @@ These endpoints are TRS-Filer's own, in
 | `POST /toolClasses` | Register a tool class; returns its new identifier. |
 | `PUT /toolClasses/{id}` | Register a tool class with the given identifier, or replace the tool class with that identifier. |
 | `DELETE /toolClasses/{id}` | Delete a tool class; tool classes that tools use can't be deleted (`400 Bad Request`). |
+| `GET /tools/{id}/permissions` | List the roles granted on a tool (see [Roles on tools](access-control.md#roles-on-tools)). |
+| `PUT /tools/{id}/permissions/users/{userId}` | Grant a user the role `owner` or `maintainer` on a tool (`{"role": "maintainer"}`), replacing any other role of the user on it. |
+| `DELETE /tools/{id}/permissions/users/{userId}` | Revoke the roles of a user on a tool. |
+| `PUT /tools/{id}/permissions/groups/{group}` | Grant a group a role on a tool (see [Roles of groups](access-control.md#roles-of-groups)). |
+| `DELETE /tools/{id}/permissions/groups/{group}` | Revoke the roles of a group on a tool. |
 
 A tool has an `organization`, a tool class (`toolclass`) and a list of
 versions (`versions`), and optionally a `name`, a `description`, `aliases`,
@@ -256,10 +261,14 @@ versions increments their `meta_version`, and adding, replacing or
 deleting a version increments that of its tool, by default (see [Meta
 versions](configuration.md#meta-versions)).
 
-These endpoints need an access token of an admin (`Authorization: Bearer
-<token>`): without a valid token, they answer `401 Unauthorized`, with a
-token of other users `403 Forbidden` (see [Access
-control](access-control.md)).
+These endpoints need an access token (`Authorization: Bearer <token>`):
+without a valid token, they answer `401 Unauthorized`. Any authenticated user
+can register tools (`POST /tools`, and `PUT /tools/{id}` with the identifier
+of no tool) and becomes their owner, and can add tool classes (`POST
+/toolClasses`, and `PUT /toolClasses/{id}` with the identifier of no tool
+class). Changing tools, their versions and their roles needs a role on the
+tool, and replacing and deleting tool classes needs an admin; other users get
+`403 Forbidden` (see [Access control](access-control.md)).
 
 ## Errors
 
@@ -291,6 +300,11 @@ control](access-control.md#authentication)).
 
 Requests for descriptors or tests that don't accept the media type of the
 type get `406 Not Acceptable` (see [Media types](#media-types)).
+
+Replacing a tool (`PUT /tools/{id}`) and adding or replacing a version get
+`409 Conflict` if the tool is deleted, or deleted and registered again,
+while the request is processed: the request was checked against the
+roles on the tool that is gone. Read the tool again before retrying.
 
 Requests that don't match the API specification (e.g., an unknown
 descriptor type, or a body without required properties) get `400 Bad

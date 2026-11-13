@@ -9,8 +9,9 @@ The chart in the repository downloads the library chart with `helm
 dependency build` (see [Installation](#installation)).
 
 > **Note:** Writes (registering, changing and deleting tools and tool
-> classes) need an access token of an admin of your OpenID Connect provider;
-> reads are public. Set the provider and the admin group in `config` (see
+> classes) need an access token of your OpenID Connect provider: any user
+> registers tools and owns them, admins change all; reads are public. Set
+> the provider and the admin group in `config` (see
 > [Configuration](#configuration)): rendering fails without them.
 
 ## Configuration
@@ -296,8 +297,8 @@ the chart sets none at the proxy: for production, limit the rate of
 requests per client at the ingress controller or Gateway (see the library
 chart's documentation, linked above).
 
-Writes need an access token of an admin (see
-[Configuration](#configuration)). To also allow the methods that change
+Writes need an access token (of an owner of the tool, or of an admin to
+change tools of others; see [Configuration](#configuration)). To also allow the methods that change
 data (`POST`, `PUT`, `DELETE`) only from trusted clients, use the means of
 your ingress controller, Gateway or proxy. For example (an example only,
 adapt it to your setup), with ingress-nginx, which allows them only from the

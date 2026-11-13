@@ -6,10 +6,13 @@ reads](#requiring-login-for-reads). Writing, i.e., registering, changing and
 deleting tools, versions and tool classes (see [Registering
 tools](api.md#registering-tools)), requires an access token of an OpenID
 Connect provider that the deployment trusts (see
-[Authentication](#authentication)), of a user with the role `admin` (see
-[Admins](#admins)). The identity provider, its claims and the groups mapped
-to roles are deployment configuration, without defaults (see [Deployment
-configuration](configuration.md#deployment-configuration)). Authentication
+[Authentication](#authentication)). Any authenticated user can register
+tools and add tool classes; tools are changed by their owners and
+maintainers (see [Roles on tools](#roles-on-tools)), tool classes by admins
+(see [Admins](#admins)). The identity provider, its claims and the groups
+mapped to roles are deployment configuration, without defaults (see
+[Deployment configuration](configuration.md#deployment-configuration)).
+Authentication
 and access control are implemented with
 [FOCA](https://foca.readthedocs.io/en/latest/access-control/), as in [Cloud
 Registry](https://cloud-registry.readthedocs.io/en/latest/access-control/);
@@ -57,7 +60,7 @@ client of your own for scripts. TRS-Filer accepts tokens only:
 
 TRS-Filer reads the user's group memberships from the group claim
 (`security.access_control.claim_groups`, needed for the [admin
-role](#admins)). Claims in `security.auth.userinfo_claims` are read from the
+role](#admins) and [roles of groups](#roles-of-groups)). Claims in `security.auth.userinfo_claims` are read from the
 identity provider's user info endpoint with the token, for identity
 providers that don't put them in access tokens, so the token must be allowed
 to release them (e.g., request the corresponding scopes when logging in).
@@ -74,12 +77,101 @@ disabled with a config overlay (see [Running without
 authentication](development.md#running-without-authentication)); never do
 this in deployments.
 
+## Roles on tools
+
+As for services in [Cloud
+Registry](https://cloud-registry.readthedocs.io/en/latest/access-control/#roles-on-services):
+
+- Any authenticated user can register a tool (`POST /tools`, or `PUT
+  /tools/{id}` with the identifier of no tool) and becomes its **owner**.
+  Identifiers of new tools must not contain commas or line breaks (`400 Bad
+  Request`), as roles can't be stored for them.
+- Owners can replace (`PUT`) and delete (`DELETE`) their tools, add, replace
+  and delete their versions, and grant other users the roles `owner` or
+  `maintainer` on them, by their user identifier (`sub` claim; with several
+  trusted token issuers, namespaced by issuer, as `<namespace>|<sub>`:
+  encode it in URLs, slashes may also be kept):
+
+  ```bash
+  curl -X PUT "http://localhost:8080/ga4gh/trs/v2/tools/<id>/permissions/users/<user-id>" \
+    -H "Authorization: Bearer <token>" -H "Content-Type: application/json" \
+    -d '{"role": "maintainer"}'
+  ```
+
+  `GET /tools/<id>/permissions` lists the roles granted on a tool, as
+  `{"subject_type": "user", "subject": <user-id>, "role": <role>}` (and
+  `"subject_type": "group"` for [groups](#roles-of-groups)), and `DELETE
+  /tools/<id>/permissions/users/<user-id>` revokes them. The last owner of a
+  tool can't be removed or downgraded (`409 Conflict`); delete the tool
+  instead.
+- **Maintainers** can add (`POST /tools/<id>/versions`) and replace (`PUT
+  /tools/<id>/versions/<version-id>`) versions, but not delete versions,
+  replace or delete the tool, or change its roles.
+- [Admins](#admins) can do everything.
+- Everybody else gets `403 Forbidden` for changes of tools (`PUT` of a stored
+  tool included) and their roles, and for listing the roles.
+
+Deleting a tool revokes all roles granted on it, so a tool registered later
+with the same identifier belongs to whoever registers it. Who registered a
+tool and when, and when it or one of its versions last changed, is stored
+with the tool (internal fields `_createdBy`, `_createdAt` and `_updatedAt`,
+not served by the API); replacing a tool keeps who registered it and when.
+
+Tools stored before tools had owners have none: only admins can change
+them, and grant them an owner (`PUT /tools/<id>/permissions/users/<user-id>`
+with `{"role": "owner"}`); the role `maintainer` is only granted on tools with
+an owner (`400 Bad Request` otherwise). See the [upgrade guide](upgrading.md).
+
+Roles are granted, revoked and listed with FOCA's [resource ownership
+helpers](https://foca.readthedocs.io/en/latest/access-control/#resource-ownership)
+and its ready-made role controllers, for the roles in
+`security.access_control.resource_roles` (`owner` and `maintainer`; don't
+change them, as the API and the policies are written for them). What each
+role may do is set by the named rules of `security.access_control.policies`
+(e.g., `owners-change-tools`, `maintainers-add-versions`), which overlays can
+change by name. Groups must not be mapped to these roles
+(`security.access_control.group_mapping`), as all members of such a group
+would have the role on all tools; FOCA refuses to start then.
+
+## Roles of groups
+
+Owners can also grant these roles to **groups** they are members of, by the
+group (a value of the group claim, e.g., a group of the team that maintains
+the tool), URL-encoded in the path (e.g., `:` as `%3A` and `#` as `%23` for
+entitlements); all members of the group then have the role, so team changes
+are handled centrally in the identity provider instead of per tool:
+
+```bash
+curl -X PUT "http://localhost:8080/ga4gh/trs/v2/tools/<id>/permissions/groups/urn%3Aexample%3Agroup%3Atool-team%23login.example.org" \
+  -H "Authorization: Bearer <token>" -H "Content-Type: application/json" \
+  -d '{"role": "owner"}'
+```
+
+Granting roles to groups the owner is not a member of is refused (`403
+Forbidden`), as owners could otherwise hand a tool to any group; admins can
+grant roles to any group. Any owner can revoke the roles of a group (`DELETE
+/tools/<id>/permissions/groups/<group>`). Groups count as owners: the last
+user owner can be removed while a group is owner, and the last owner group
+can't be removed or downgraded (`409 Conflict`). Roles of groups apply because
+the base config sets `security.access_control.keep_group_subjects` (all
+values of the group claim are used as subjects, besides the admin group
+mapping); don't unset it in overlays.
+
+!!! warning
+    All members of an owner group are owners: they can list the identifiers
+    of all users with roles on the tool, and remove the other owners, users
+    and groups. Don't grant roles to broad groups, e.g., to all members of a
+    virtual organization (VO), but to groups of the team that maintains the
+    tool.
+
 ## Admins
 
 Members of the groups that the deployment maps to the role `admin`
 (`security.access_control.group_mapping`) are **admins**: they can do
 everything, i.e., register, change and delete all tools, versions and tool
-classes. E.g., with the group claim `groups`:
+classes, and manage the roles on all tools: tool registries are public, so
+their operators must be able to moderate them. E.g., with the group claim
+`groups`:
 
 ```yaml
 security:
@@ -92,19 +184,19 @@ security:
 The app refuses to start without a group mapped to `admin`
 (`security.access_control.require_admin`, FOCA), unless a deployment sets
 `require_admin: false` (as the Docker Compose setup does): then nobody can
-write. On startup, FOCA logs the groups mapped to `admin`.
+change tools of others or tool classes. On startup, FOCA logs the groups
+mapped to `admin`.
 
-Until tools have owners
-([#86](https://github.com/elixir-cloud-aai/trs-filer/issues/86)), only admins
-may write, so that no user can change the tools of others. Tool classes are
-a vocabulary that all tools share, so changing them stays with admins, too
-(see [Adding tool classes](configuration.md#adding-tool-classes)). Unlike
+Tool classes are a vocabulary that all tools share: any authenticated user
+can add tool classes (explicitly, or by registering a tool with a new one;
+see [Adding tool classes](configuration.md#adding-tool-classes)), but only
+admins can replace (`PUT` of a stored tool class) and delete them. Unlike
 Cloud Registry, TRS-Filer has no admin mode yet: admins act as admins on
 every request, without the header `X-Request-Roles`.
 
-To let other users write, map a group to a role of your own and give the role
-write rules in a config overlay, e.g., for editors who may register, change
-and delete all tools and versions:
+To let other users change all tools, map a group to a role of your own and
+give the role write rules in a config overlay, e.g., for editors who may
+replace and delete all tools and versions:
 
 ```yaml title="editors.yaml"
 security:
@@ -113,14 +205,17 @@ security:
             trs-admins: admin
             trs-editors: editor
         policies:
-            editors-register-tools: [p, editor, /ga4gh/trs/v2/tools, POST]
-            editors-change-tools: [p, editor, "/ga4gh/trs/v2/tools/*", "(POST)|(PUT)|(DELETE)"]
+            editors-change-tools: [p, editor, "/ga4gh/trs/v2/tools/:id", "(PUT)|(DELETE)"]
+            editors-add-versions: [p, editor, "/ga4gh/trs/v2/tools/:id/versions", POST]
+            editors-change-versions: [p, editor, "/ga4gh/trs/v2/tools/:id/versions/:version_id", "(PUT)|(DELETE)"]
 ```
 
-Editors can then change all tools, also those that others registered, and
-add tool classes by registering tools with new ones (unless
-`custom.toolclass.validation` is true), but not change or delete tool
-classes (`/toolClasses`). Mappings are merged with those of the base config,
+Editors can then change all tools, also those that others registered, but
+not their roles, nor replace or delete tool classes (`/toolClasses`). Don't
+give such roles rules for all paths under `/tools/` (e.g.,
+`/ga4gh/trs/v2/tools/*`), as these would also let them change the roles on
+tools (`/tools/{id}/permissions/...`), i.e., make themselves owners.
+Mappings are merged with those of the base config,
 but `group_mapping` has no entries there, so an overlay that sets it lists
 the admin groups, too.
 
@@ -172,9 +267,12 @@ With the Helm chart, put the same in the `config` value. Requests
 to the patched reads without a valid token are then rejected with `401
 Unauthorized`; any authenticated user may read, by the default policies (in
 `security.access_control.policies`, which are only evaluated for reads that
-require login): `list-tools` (`GET /tools`), `get-tools` (`GET` of a tool,
-its versions and their descriptors, tests, files and containerfiles, i.e.,
-of all paths under `/tools/`) and `list-tool-classes` (`GET /toolClasses`).
+require login): `list-tools` (`GET /tools`), `get-tools` (`GET` of a tool),
+`list-versions` (`GET` of its versions), `get-versions` (`GET` of a version
+and its descriptors, tests, files and containerfiles, i.e., of all paths
+under `/tools/{id}/versions/`) and `list-tool-classes` (`GET /toolClasses`).
+The roles on tools (`GET /tools/{id}/permissions`) always need a token, of an
+owner of the tool or an admin.
 `GET /service-info`, the API specification (`openapi.json`) and the Swagger
 UI (`ui/`) stay public. The rules allow `HEAD` too, which Flask serves
 from the `GET` operations and which access control checks as `HEAD`.
@@ -191,13 +289,17 @@ security:
             trs-readers: reader
         policies:
             list-tools: [p, reader, /ga4gh/trs/v2/tools, "GET|HEAD"]
-            get-tools: [p, reader, "/ga4gh/trs/v2/tools/*", "GET|HEAD"]
+            get-tools: [p, reader, "/ga4gh/trs/v2/tools/:id", "GET|HEAD"]
+            list-versions: [p, reader, "/ga4gh/trs/v2/tools/:id/versions", "GET|HEAD"]
+            get-versions: [p, reader, "/ga4gh/trs/v2/tools/:id/versions/*", "GET|HEAD"]
             list-tool-classes: [p, reader, /ga4gh/trs/v2/toolClasses, "GET|HEAD"]
 ```
 
 If an overlay of the deployment gives the policies as a list, which replaces
 the rules of the base config, add these rules to the list (FOCA refuses named
-rules after a list).
+rules after a list). Don't give readers rules for all paths under `/tools/`
+(e.g., `/ga4gh/trs/v2/tools/*`), as these would also let them list the roles
+on tools (`/tools/{id}/permissions`).
 
 !!! danger "With great power comes great responsibility"
     Patches and rules in overlays can weaken or remove authentication and

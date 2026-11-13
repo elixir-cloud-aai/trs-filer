@@ -21,8 +21,8 @@ hostName: ""
 # App config overriding the base config in the image (`trs_filer/config.yaml`
 # of the image's version); mappings are merged recursively, other values
 # (including lists) are replaced. Stored in a ConfigMap, so must not contain
-# secrets. Reads are public; writes need an access token of an admin, so
-# deployments must set the trusted token issuers (`security.auth.issuers`) and
+# secrets. Reads are public; writes need an access token (any user
+# registers tools and owns them, admins change all), so deployments must set the trusted token issuers (`security.auth.issuers`) and
 # `security.auth.audience` (unless each issuer has an `audience` of its own,
 # or `security.auth.verify_audience` is false), and map an admin group to the
 # role `admin` (unless `security.access_control.require_admin` is false), with

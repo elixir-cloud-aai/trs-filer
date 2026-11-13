@@ -1,14 +1,18 @@
 """Controllers for registering new objects."""
 
 from collections import defaultdict
+from datetime import UTC, datetime
 import logging
 from typing import Any, ClassVar
 
+from foca.utils.logging import escape_log_value
 from foca.utils.misc import generate_id
 from pymongo.collection import Collection
 from pymongo.errors import DuplicateKeyError
 
 from trs_filer.errors.exceptions import (
+    Conflict,
+    Forbidden,
     InternalServerError,
     InvalidRequest,
     NotFound,
@@ -19,6 +23,29 @@ from trs_filer.remote_files import fetch_remote_file
 from trs_filer.utils import get_collection, get_custom_config
 
 logger = logging.getLogger(__name__)
+
+# Internal fields of stored tools (not part of TRS, and not served): who
+# registered the tool (the identifier of the user, or `None` without
+# authentication), when, and when it or one of its versions last changed
+CREATED_BY = "_createdBy"
+CREATED_AT = "_createdAt"
+UPDATED_AT = "_updatedAt"
+INTERNAL_FIELDS = (CREATED_BY, CREATED_AT, UPDATED_AT)
+# Projection of tools as served: without MongoDB's `_id` and internal fields
+TOOL_PROJECTION: dict[str, bool] = {
+    "_id": False,
+    **dict.fromkeys(INTERNAL_FIELDS, False),
+}
+
+
+def now() -> datetime:
+    """Get the current time, for timestamps of tools.
+
+    Returns:
+        Current time (UTC), to the millisecond, as MongoDB stores it.
+    """
+    time = datetime.now(UTC)
+    return time.replace(microsecond=time.microsecond // 1000 * 1000)
 
 
 def next_meta_version(previous: object, init: int, increment: int) -> str:
@@ -81,17 +108,34 @@ class RegisterTool:
         self,
         data: dict[str, Any],
         id: str | None = None,
+        created_by: str | None = None,
+        allow_replace: bool = True,
+        stored_id: Any = None,
     ) -> None:
         """Initialize tool data.
 
         Args:
             data: Tool metadata consistent with the `ToolVersion` schema.
             id: Tool identifier. Auto-generated if not provided.
+            created_by: Identifier of the user registering the tool, stored
+                with new tools (`_createdBy`); `None` if unknown.
+            allow_replace: With `id`, whether a stored tool with the
+                identifier may be replaced; if not, the tool is only created.
+            stored_id: MongoDB identifier (`_id`) of the stored tool that may
+                be replaced, as checked by the caller; if given, no other is
+                replaced (e.g., a tool registered again with the identifier
+                meanwhile).
 
         Attributes:
             data: Tool metadata.
             replace: Whether it is allowed to replace an existing tool. Set
-                to `True` if an `id` is provided, else set to `False`.
+                to `allow_replace` if an `id` is provided, else set to
+                `False`.
+            created_by: Identifier of the user registering the tool.
+            was_created: Whether the tool was created (not replaced), once
+                it is registered.
+            stored_id: `stored_id`; for created tools, the MongoDB identifier
+                (`_id`) of the new one, once it is registered.
             id_charset: Allowed characters for generating object
                 identifiers.
             id_length: Length of generated object identifiers.
@@ -124,7 +168,10 @@ class RegisterTool:
         conf = get_custom_config()
         self.data = data
         self.data["id"] = None if id is None else id
-        self.replace = True
+        self.replace = allow_replace
+        self.stored_id = stored_id
+        self.created_by = created_by
+        self.was_created = False
         self.id_charset: str = conf.tool.id.charset
         self.id_length = int(conf.tool.id.length)
         self.meta_version_init = int(conf.tool.meta_version.init)
@@ -151,9 +198,15 @@ class RegisterTool:
         identifier, if any; their meta version, and those of their versions
         that replace stored versions, are incremented. Unless tool classes are
         validated, the tool class is created if it does not exist; existing
-        tool classes are not changed, and tools store a copy of them.
+        tool classes are not changed, and tools store a copy of them. New
+        tools store who registered them and when; replaced tools keep these,
+        and store when they were replaced.
 
         Raises:
+            Conflict: The stored tool isn't the one that may be replaced
+                (`stored_id`): it was deleted or registered again meanwhile.
+            Forbidden: A tool with the given identifier is stored, but may not
+                be replaced (`allow_replace`): it was registered meanwhile.
             InvalidRequest: Version identifiers are duplicated, the files of a
                 version are invalid, or the tool class does not exist while
                 tool classes are validated.
@@ -214,6 +267,7 @@ class RegisterTool:
             # Modifies the version's dict in place
             version_proc.process_metadata()
 
+        timestamp = now()
         # keep trying to generate unique ID
         for attempt in range(10):
             # set another random ID unless ID is provided
@@ -230,15 +284,30 @@ class RegisterTool:
                 f"{self.api_path}/tools/{self.data['id']}"
             )
 
-            if self.replace and self._replace():
+            if self.replace and self._replace(timestamp):
                 logger.info("Replaced tool with id '%s'.", self.data["id"])
                 break
 
             # insert tool into database (a copy, as `insert_one()` adds `_id`)
             try:
-                self.db_coll_tools.insert_one(document=dict(self.data))
+                inserted = self.db_coll_tools.insert_one(
+                    document={
+                        **self.data,
+                        CREATED_BY: self.created_by,
+                        CREATED_AT: timestamp,
+                        UPDATED_AT: timestamp,
+                    }
+                )
             except DuplicateKeyError:
+                if not generate_ids and not self.replace:
+                    logger.info(
+                        "Tool '%s' not registered: registered meanwhile.",
+                        escape_log_value(self.data["id"]),
+                    )
+                    raise Forbidden from None
                 continue
+            self.was_created = True
+            self.stored_id = inserted.inserted_id
             logger.info("Added tool with id '%s'.", self.data["id"])
             break
         else:
@@ -290,16 +359,32 @@ class RegisterTool:
             tool_class["id"],
         )
 
-    def _replace(self) -> bool:
+    def _replace(self, timestamp: datetime) -> bool:
         """Replace the stored tool with the same identifier, if any.
 
         The meta versions of the tool, and of its versions that replace
         stored versions, are those of the stored ones plus the increments.
+        Who registered the stored tool and when is kept.
+
+        Args:
+            timestamp: Time of the replacement.
 
         Returns:
             Whether a stored tool was replaced.
+
+        Raises:
+            Conflict: The stored tool isn't the one that may be replaced
+                (`stored_id`), or there is none.
         """
         stored = self.db_coll_tools.find_one(filter={"id": self.data["id"]})
+        if self.stored_id is not None and (
+            stored is None or stored["_id"] != self.stored_id
+        ):
+            logger.info(
+                "Tool '%s' not replaced: deleted or registered again meanwhile.",
+                escape_log_value(self.data["id"]),
+            )
+            raise Conflict
         if stored is None:
             return False
         self.data["meta_version"] = next_meta_version(
@@ -317,10 +402,22 @@ class RegisterTool:
                     init=self.version_meta_version_init,
                     increment=self.version_meta_version_increment,
                 )
+        kept = {
+            field: stored[field]
+            for field in (CREATED_BY, CREATED_AT)
+            if field in stored
+        }
         result = self.db_coll_tools.replace_one(
-            filter={"id": self.data["id"]},
-            replacement=dict(self.data),
+            filter={"id": self.data["id"], "_id": stored["_id"]},
+            replacement={**self.data, **kept, UPDATED_AT: timestamp},
         )
+        if not result.matched_count and self.stored_id is not None:
+            # deleted after it was read: not added again
+            logger.info(
+                "Tool '%s' not replaced: deleted meanwhile.",
+                escape_log_value(self.data["id"]),
+            )
+            raise Conflict
         return bool(result.matched_count)
 
 
@@ -580,6 +677,8 @@ class RegisterToolVersion:
             InvalidRequest: The files of the version are invalid.
             InternalServerError: No unique identifier could be generated, or the
                 object could not be stored.
+            Conflict: The tool was deleted, or deleted and registered again,
+                while the version was processed.
             NotFound: The tool does not exist.
             trs_filer.errors.exceptions.RemoteFileError: The content of a file
                 could not be retrieved from its URL.
@@ -588,6 +687,9 @@ class RegisterToolVersion:
         obj = self.db_coll_tools.find_one(filter={"id": self.id})
         if obj is None:
             raise NotFound
+        # writes go only to this tool, not to one registered again with the
+        # identifier while the files are fetched (with other owners)
+        self.tool_oid = obj["_id"]
 
         generate_ids = self.data["id"] is None
         self.process_metadata()
@@ -605,13 +707,17 @@ class RegisterToolVersion:
                 break
 
             # insert tool version into database
-            update: dict[str, Any] = {"$push": {"versions": self.data}}
-            tool_change = tool_meta_version_change(self.db_coll_tools, self.id)
-            if tool_change:
-                update["$set"] = tool_change
+            update: dict[str, Any] = {
+                "$push": {"versions": self.data},
+                "$set": {
+                    **tool_meta_version_change(self.db_coll_tools, self.id),
+                    UPDATED_AT: now(),
+                },
+            }
             result_tools = self.db_coll_tools.update_one(
                 filter={
                     "id": self.id,
+                    "_id": self.tool_oid,
                     "versions.id": {"$ne": self.data["id"]},
                 },
                 update=update,
@@ -625,12 +731,27 @@ class RegisterToolVersion:
                     self.id,
                 )
                 break
+            self._check_stored()
         else:
             raise InternalServerError
         logger.debug(
             "Entry in 'tools' collection: %s",
             self.db_coll_tools.find_one({"id": self.id}),
         )
+
+    def _check_stored(self) -> None:
+        """Check that the tool read first is still stored.
+
+        Raises:
+            Conflict: The tool was deleted meanwhile (and maybe registered
+                again with its identifier).
+        """
+        if self.db_coll_tools.find_one({"_id": self.tool_oid}) is None:
+            logger.info(
+                "Version not registered: tool '%s' deleted meanwhile.",
+                escape_log_value(self.id),
+            )
+            raise Conflict
 
     def _replace(self) -> bool:
         """Replace the stored version of the tool with the same identifier.
@@ -642,7 +763,11 @@ class RegisterToolVersion:
             Whether a stored version was replaced.
         """
         stored = self.db_coll_tools.find_one(
-            filter={"id": self.id, "versions.id": self.data["id"]},
+            filter={
+                "id": self.id,
+                "_id": self.tool_oid,
+                "versions.id": self.data["id"],
+            },
             projection={"versions": {"$elemMatch": {"id": self.data["id"]}}},
         )
         if stored is None:
@@ -655,6 +780,7 @@ class RegisterToolVersion:
         result = self.db_coll_tools.update_one(
             filter={
                 "id": self.id,
+                "_id": self.tool_oid,
                 "versions.id": self.data["id"],
             },
             update={
@@ -662,6 +788,7 @@ class RegisterToolVersion:
                 # after a positional one (`versions.$`)
                 "$set": {
                     **tool_meta_version_change(self.db_coll_tools, self.id),
+                    UPDATED_AT: now(),
                     "versions.$": self.data,
                 },
             },

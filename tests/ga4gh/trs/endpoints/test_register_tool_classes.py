@@ -22,6 +22,7 @@ from tests.mock_data import (
     TOOL_VERSION_CONFIG_ONE_ID,
 )
 from trs_filer.errors.exceptions import (
+    Forbidden,
     InternalServerError,
 )
 from trs_filer.ga4gh.trs.endpoints.register_tool_classes import (
@@ -113,3 +114,23 @@ class TestRegisterToolClass:
         del data["id"]
         with app.app_context(), pytest.raises(InternalServerError):
             RegisterToolClass(data=data).register_metadata()
+
+
+def test_register_metadata_not_replaced() -> None:
+    """Tool classes that may not be replaced are only created.
+
+    If one with the identifier is stored (e.g., added meanwhile), it is
+    kept, and registering is forbidden.
+    """
+    app = make_app(CUSTOM_CONFIG)
+    mock_unset_collections(app)
+    collection = mock_collection(app, "toolclasses")
+    collection.insert_one({**MOCK_TOOL_CLASS, "id": MOCK_ID})
+
+    data = {**deepcopy(MOCK_TOOL_CLASS), "name": "Other"}
+    with app.app_context():
+        tool_class = RegisterToolClass(data=data, id=MOCK_ID, allow_replace=False)
+        with pytest.raises(Forbidden):
+            tool_class.register_metadata()
+    stored = collection.find_one({"id": MOCK_ID}, {"_id": False})
+    assert stored == {**MOCK_TOOL_CLASS, "id": MOCK_ID}
