@@ -397,7 +397,9 @@ How files are stored:
   against the checksum and size; changed or missing objects fail the
   request with `500 Internal Server Error`, and the app logs the key. A
   missing object is first read again from the stored files once, as the
-  version may have been replaced or deleted meanwhile.
+  version may have been replaced or deleted meanwhile (this needs reads
+  from the primary: with a `readPreference` of secondaries in `MONGO_URI`,
+  the retry may still see the old files).
 - Objects that no stored file refers to any more are deleted at the end of
   the request that released them: those of replaced and deleted versions
   and tools, and those of registrations that failed. If deleting an object

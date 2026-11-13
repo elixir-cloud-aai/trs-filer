@@ -25,7 +25,7 @@ from zipfile import ZipFile
 
 import boto3
 from botocore.config import Config as BotoConfig
-from botocore.exceptions import ClientError
+from botocore.exceptions import ClientError, EndpointConnectionError
 from connexion import App
 from flask.testing import FlaskClient
 from moto import mock_aws
@@ -871,6 +871,21 @@ def test_store_errors(records: Records) -> None:
     assert "No presigned URL" in text
     assert "'k1' could not be deleted" in text
     assert "'k2' could not be deleted" in text
+
+
+def test_store_read_error(records: Records) -> None:
+    """Errors of botocore (e.g., of the connection) on reads are internal errors.
+
+    Args:
+        records: Log records of `trs_filer.storage`.
+    """
+    client = MagicMock()
+    client.get_object.side_effect = EndpointConnectionError(endpoint_url="u")
+    store = FileStore(S3StorageConfig(bucket=BUCKET), client)
+    with pytest.raises(InternalServerError) as info:
+        store.get({"key": "k", "sha256": "", "size": 1})
+    assert not isinstance(info.value, ObjectMissing)
+    assert any("'k' could not be read" in m for m in records.messages)
 
 
 def test_store_created_once(s3_app: App) -> None:

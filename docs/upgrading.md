@@ -21,7 +21,9 @@ existing data needs no changes. Check clients and custom configs:
   storage](configuration.md#file-storage)). Nothing changes by default
   (`mongodb`); existing files stay in MongoDB, as there is no migration of
   stored files. With object storage, back up the bucket with the database
-  (see [Backups](operations.md#backups)).
+  (see [Backups](operations.md#backups)). The app creates a new index on
+  `tools` on startup (see [Backups](operations.md#backups)), as for the
+  other indexes.
 
 - `GET /tools` filters by `tags` (comma-separated; tools must have all of
   them) instead of refusing the filter with `400 Bad Request`. Tools get

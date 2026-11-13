@@ -71,7 +71,10 @@ archive inconsistent: stop writes (e.g., stop the app with
 MongoDB that takes consistent snapshots.
 
 The base config creates unique indexes on the identifiers (`id`) of tools
-and tool classes on startup.
+and tool classes on startup, and a sparse index on the keys of the objects
+of files in object storage (`versions.files._storage.key` of `tools`, see
+[File storage](configuration.md#file-storage)), which the check of released
+objects on every write uses.
 
 With object storage (`custom.storage.backend: s3`, see [File
 storage](configuration.md#file-storage)), back up the bucket (the objects
