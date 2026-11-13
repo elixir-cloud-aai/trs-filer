@@ -21,7 +21,7 @@ TRS-Filer works with any OpenID Connect provider that issues access tokens
 as per [RFC 9068](https://www.rfc-editor.org/rfc/rfc9068) (JWTs). The
 identity provider, its claims and the groups mapped to roles are deployment
 configuration: the base config has no defaults for them, so each deployment
-sets them in an overlay (or in the Helm chart's `trs_filer.config` value),
+sets them in an overlay (or in the Helm chart's `config` value),
 otherwise the app refuses to start:
 
 - `security.auth.issuers`: the trusted token issuers (the `iss` claim of their
@@ -164,7 +164,7 @@ custom:
 ```
 
 The Helm chart sets it from its values (see [Deployment](deployment.md));
-other parts of the config go into its `trs_filer.config` value (see
+other parts of the config go into its `config` value (see
 [Configuration](deployment.md#configuration) there).
 
 ## Identifiers
@@ -331,8 +331,8 @@ Override settings with the environment variable `GUNICORN_CMD_ARGS` (e.g.,
 `--workers 2 --threads 8`), but not `--bind`: the image's health check and
 the Helm chart expect port 8080. Behind a reverse proxy, set its addresses
 in `FORWARDED_ALLOW_IPS`, so that Gunicorn trusts its `X-Forwarded-*`
-headers (the Helm chart sets it from `trs_filer.forwardedAllowIps`, see
-[Forwarded headers](deployment.md#forwarded-headers)). `server.host` and `server.port` of the config only apply to Flask's
+headers (with the Helm chart, in `trsFiler.extraEnv`, see [Forwarded
+headers](deployment.md#forwarded-headers)). `server.host` and `server.port` of the config only apply to Flask's
 development server (`python -m trs_filer.app`). `server.debug` must stay off
 outside local development: Flask's debugger allows executing arbitrary code.
 
