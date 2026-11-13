@@ -52,13 +52,20 @@ security:
         issuers: []
         # Claims that the identity provider releases via user info only, not
         # in access tokens, e.g., the group claim (`claim_groups`, needed for
-        # the admin role); none by default. E.g.:
+        # the admin role and roles of groups); none by default. E.g.:
         # userinfo_claims:
         #   - groups
-    # Access control: anyone may read (the read operations are public;
-    # deployments may require login for them, see "Requiring login for reads"
-    # in `docs/access-control.md`); only admins may write (register, change
-    # and delete tools, versions and tool classes), until tools have owners
+    # Access control, as in Cloud Registry: anyone may read (the read
+    # operations are public; deployments may require login for them, see
+    # "Requiring login for reads" in `docs/access-control.md`); any
+    # authenticated user may register tools and becomes their owner; owners
+    # may replace and delete their tools and their versions, and grant other
+    # users, or groups they are members of, the roles `owner` or `maintainer`
+    # (add and replace versions) on them; any authenticated user may add tool
+    # classes (`custom.access_control.tool_classes: open`), which only admins
+    # may replace and delete; admins may do everything. Roles on tools are
+    # managed with FOCA's resource ownership helpers (see
+    # `trs_filer/ga4gh/trs/permissions.py`)
     # Cf. https://foca.readthedocs.io/en/latest/access-control/
     access_control:
         enabled: True
@@ -66,6 +73,12 @@ security:
         model: access_control/model.conf
         db_name: trsStore
         collection_name: policy_rules
+        # Roles on tools, which FOCA's ownership helpers grant and revoke;
+        # groups must not be mapped to them (`group_mapping`), as their
+        # members would get the role on all tools
+        resource_roles:
+            - owner
+            - maintainer
         # Deployments set the claim with the groups of users (`claim_groups`)
         # and map their admin groups (values of that claim) to the role
         # `admin` (`group_mapping`); the app refuses to start without them,
@@ -73,24 +86,55 @@ security:
         # claim_groups: groups
         # group_mapping:
         #   trs-admins: admin
+        # Also use all values of `claim_groups` (prefixed with `group:`) as
+        # subjects, so that roles on tools granted to groups apply while
+        # `group_mapping` is set
+        keep_group_subjects: True
         # Refuse to start without admins, i.e., unless a group is mapped to
         # the role `admin` (`group_mapping`) or a rule of `policies` grants
         # it (FOCA; false: start with a warning)
         require_admin: True
         # Managed on startup (removed rules are deleted); cannot be changed
         # via the permissions API. Named, so that overlays can change, add or
-        # remove single rules by name (`null` removes a rule). No rules for
-        # writes (`POST`, `PUT` and `DELETE` of tools, versions and tool
-        # classes): only admins may write
+        # remove single rules by name (`null` removes a rule)
         policies:
-            # Any authenticated user may read: list tools, get a tool, its
-            # versions and their descriptors, tests, files and containerfiles
-            # (`/tools/*`), and list tool classes. Only evaluated if a
-            # deployment requires login for these reads, which are public
-            # otherwise (see "Requiring login for reads" in
-            # `docs/access-control.md`)
+            # any authenticated user may register tools (and becomes their
+            # owner); also with `PUT /tools/{id}` for identifiers of no tool,
+            # which doesn't enforce policies itself and checks
+            # `owners-change-tools` (and admins) for stored tools
+            register-tools: [p, "*", /ga4gh/trs/v2/tools, POST]
+            # owners may replace and delete their tools, add, replace and
+            # delete their versions, and manage their permissions
+            owners-change-tools: [p, owner, "/ga4gh/trs/v2/tools/:id", "(PUT)|(DELETE)"]
+            owners-add-versions: [p, owner, "/ga4gh/trs/v2/tools/:id/versions", POST]
+            owners-change-versions: [p, owner, "/ga4gh/trs/v2/tools/:id/versions/:version_id", "(PUT)|(DELETE)"]
+            owners-list-permissions: [p, owner, "/ga4gh/trs/v2/tools/:id/permissions", GET]
+            # users (namespaced by issuer, with several issuers) and groups
+            # may contain slashes; each rule covers only one of them, so
+            # overlays can restrict them separately
+            owners-change-permissions: [p, owner, "/ga4gh/trs/v2/tools/:id/permissions/users/*", "(PUT)|(DELETE)"]
+            owners-change-group-permissions: [p, owner, "/ga4gh/trs/v2/tools/:id/permissions/groups/*", "(PUT)|(DELETE)"]
+            # maintainers may add and replace versions, but not delete them
+            maintainers-add-versions: [p, maintainer, "/ga4gh/trs/v2/tools/:id/versions", POST]
+            maintainers-replace-versions: [p, maintainer, "/ga4gh/trs/v2/tools/:id/versions/:version_id", PUT]
+            # any authenticated user may add tool classes
+            # (`custom.access_control.tool_classes: open`), also with `PUT
+            # /toolClasses/{id}` for identifiers of no tool class, which
+            # doesn't enforce policies itself; no rules for replacing and
+            # deleting tool classes: only admins may
+            add-tool-classes: [p, "*", /ga4gh/trs/v2/toolClasses, POST]
+
+            # Any authenticated user may read: list tools, get a tool
+            # (`/tools/:id`), list its versions, get a version and its
+            # descriptors, tests, files and containerfiles
+            # (`/tools/:id/versions/*`), and list tool classes; not the
+            # permissions of tools. Only evaluated if a deployment requires
+            # login for these reads, which are public otherwise (see
+            # "Requiring login for reads" in `docs/access-control.md`)
             list-tools: [p, "*", /ga4gh/trs/v2/tools, "GET|HEAD"]
-            get-tools: [p, "*", "/ga4gh/trs/v2/tools/*", "GET|HEAD"]
+            get-tools: [p, "*", "/ga4gh/trs/v2/tools/:id", "GET|HEAD"]
+            list-versions: [p, "*", "/ga4gh/trs/v2/tools/:id/versions", "GET|HEAD"]
+            get-versions: [p, "*", "/ga4gh/trs/v2/tools/:id/versions/*", "GET|HEAD"]
             list-tool-classes: [p, "*", /ga4gh/trs/v2/toolClasses, "GET|HEAD"]
 
 # Database configuration
@@ -267,11 +311,11 @@ custom:
         # if false, unknown tool classes are created
         validation: False
     # Who may add tool classes (as `custom.access_control.service_types` of
-    # Cloud Registry): `open`, any user who may register tools, explicitly
-    # (`POST /toolClasses`) or by registering a tool with a new tool class
-    # (unless `toolclass.validation` is true); by default, only admins write.
-    # `controlled` and `moderated` matter only once other users may write
-    # (with owners of tools), and are rejected on startup until supported
+    # Cloud Registry): `open`, any authenticated user, explicitly (`POST
+    # /toolClasses`, `PUT /toolClasses/{id}` for new identifiers) or by
+    # registering a tool with a new tool class (unless `toolclass.validation`
+    # is true); only admins replace and delete tool classes. `controlled`
+    # and `moderated` are rejected on startup until supported
     access_control:
         tool_classes: open
     # Retrieval of file content from URLs: on registration, for files with a

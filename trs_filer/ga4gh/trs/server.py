@@ -8,20 +8,36 @@ from urllib.parse import unquote, urlencode
 from zipfile import ZIP_DEFLATED, ZipFile
 
 from flask import Response, request, send_file
+from foca.security.access_control import (
+    get_current_claims,
+    get_current_subject,
+    is_permitted,
+    is_permitted_for,
+)
 from foca.utils.logging import escape_log_value, log_traffic
 
 from trs_filer.errors.exceptions import (
+    Forbidden,
     InternalServerError,
     InvalidRequest,
     NotFound,
     RemoteFileError,
 )
 from trs_filer.ga4gh.trs.endpoints.register_objects import (
+    TOOL_PROJECTION,
+    UPDATED_AT,
     RegisterTool,
     RegisterToolVersion,
+    now,
     tool_meta_version_change,
 )
 from trs_filer.ga4gh.trs.endpoints.register_tool_classes import RegisterToolClass
+from trs_filer.ga4gh.trs.permissions import (
+    is_usable_id,
+    own_tool,
+    remove_roles,
+    tool_exists,
+)
 from trs_filer.remote_files import fetch_remote_file
 from trs_filer.utils import get_collection, get_custom_config
 
@@ -49,10 +65,9 @@ def toolsIdGet(id: str) -> dict[str, Any]:
         NotFound: No tool with the given identifier exists.
     """
     db_coll_tools = get_collection("tools")
-    obj = db_coll_tools.find_one({"id": id})
+    obj = db_coll_tools.find_one({"id": id}, TOOL_PROJECTION)
     if obj is None:
         raise NotFound
-    del obj["_id"]
 
     if "versions" in obj:
         for _version in obj["versions"]:
@@ -235,7 +250,7 @@ def toolsGet(
     cursor = (
         db_coll_tools.find(
             filter=filt,
-            projection={"_id": False},
+            projection=TOOL_PROJECTION,
         )
         # Sort by object ID: roughly the order in which tools were added
         # (see `docs/api.md`); stable, so that pages don't overlap
@@ -678,9 +693,76 @@ def toolClassesGet() -> list[dict[str, Any]]:
     return list(records)
 
 
+def _check_put(kind: str, id: str, exists: bool) -> bool:
+    """Check whether the current user may add or replace an object (`PUT`).
+
+    For `PUT` operations that add objects with the identifier of no object,
+    or replace the stored one, and don't enforce policies themselves
+    (`x-foca-access-control: false`), as the policies of the paths of objects
+    are for their owners: stored objects may be replaced by users whom the
+    policies allow the request (e.g., owners of tools, and admins); new
+    objects may be added by those, and by users whom the policies allow to
+    add objects to the collection (`POST`, e.g., any authenticated user).
+    Without authentication (`disable_auth`), the request is allowed.
+
+    Args:
+        kind: Kind of the object, for logs (e.g., `tool`).
+        id: Identifier of the object.
+        exists: Whether the object is stored.
+
+    Returns:
+        Whether the user may replace the object (if stored meanwhile).
+
+    Raises:
+        Forbidden: The user may not replace the stored object, or may not
+            add a new one.
+    """
+    # Only requests without authentication have no token
+    if not get_current_claims():
+        return True
+    if is_permitted():
+        return True
+    collection = request.path.rsplit("/", 1)[0]
+    if not exists and is_permitted_for(collection, "POST"):
+        return False
+    logger.info(
+        "%s '%s' not %s: '%s' may not %s it.",
+        kind.capitalize(),
+        escape_log_value(id),
+        "replaced" if exists else "added",
+        escape_log_value(get_current_subject()),
+        "replace" if exists else "add",
+    )
+    raise Forbidden
+
+
+def _register_tool(tool: RegisterTool) -> str:
+    """Register a tool, and make the user registering it its owner if new.
+
+    If the owner role can't be granted, the new tool is deleted again.
+
+    Args:
+        tool: Tool to register.
+
+    Returns:
+        Identifier of the tool.
+    """
+    tool.register_metadata()
+    if tool.was_created:
+        try:
+            own_tool(tool.data["id"])
+        except Exception:
+            get_collection("tools").delete_one({"id": tool.data["id"]})
+            remove_roles(tool.data["id"])
+            raise
+    return str(tool.data["id"])
+
+
 @log_traffic
 def postTool() -> str:
     """Add tool with an auto-generated ID.
+
+    The user registering the tool becomes its owner.
 
     Returns:
         Identifier of created tool.
@@ -694,9 +776,8 @@ def postTool() -> str:
         RemoteFileError: The content of a file could not be retrieved from its
             URL.
     """
-    tool = RegisterTool(data=request.json)
-    tool.register_metadata()
-    return tool.data["id"]
+    tool = RegisterTool(data=request.json, created_by=get_current_subject())
+    return _register_tool(tool)
 
 
 @log_traffic
@@ -705,6 +786,11 @@ def putTool(
 ) -> str:
     """Add/replace tool with a user-supplied ID.
 
+    Users who may register tools (`POST /tools`; by default, any
+    authenticated user) may add a tool with the identifier of no tool, and
+    become its owner; only those that the policies allow (owners of the tool
+    and admins, by default) may replace it (cf. `_check_put()`).
+
     Args:
         id: Identifier of tool to be created/updated.
 
@@ -712,27 +798,44 @@ def putTool(
         Identifier of created/updated tool.
 
     Raises:
+        Forbidden: The user may not replace the tool, or may not add it.
         InvalidRequest: The tool is invalid, e.g., its version identifiers are
             duplicated or the files of a version are invalid, or its tool
-            class does not exist while tool classes are validated.
+            class does not exist while tool classes are validated; or the
+            identifier of a new tool can't be stored in roles (e.g., with
+            commas).
         InternalServerError: No unique identifier could be generated, or the
             object could not be stored.
         RemoteFileError: The content of a file could not be retrieved from its
             URL.
     """
+    exists = tool_exists(id)
+    allow_replace = _check_put("tool", id, exists)
+    if not exists and not is_usable_id(id):
+        logger.info("Tool '%s' not added: unusable identifier.", escape_log_value(id))
+        raise InvalidRequest(
+            "The identifier can't be used for tools; it must not contain commas "
+            "or line breaks."
+        )
     tool = RegisterTool(
         data=request.json,
         id=id,
+        created_by=get_current_subject(),
+        allow_replace=allow_replace,
     )
-    tool.register_metadata()
-    return tool.data["id"]
+    return _register_tool(tool)
 
 
 @log_traffic
 def deleteTool(
     id: str,
 ) -> str:
-    """Delete tool.
+    """Delete tool, with the roles granted on it.
+
+    The roles are revoked before the tool is deleted, so that nobody can act
+    on it meanwhile, and again afterwards, as roles may have been granted
+    meanwhile. If deleting fails, the tool is left without roles: admins can
+    still delete it, or grant it an owner.
 
     Args:
         id: Identifier of tool to be deleted.
@@ -744,7 +847,11 @@ def deleteTool(
         NotFound: No tool with the given identifier exists.
     """
     db_coll_tools = get_collection("tools")
+    if not tool_exists(id):
+        raise NotFound
+    remove_roles(id)
     del_obj_tools = db_coll_tools.delete_one({"id": id})
+    remove_roles(id)
 
     if del_obj_tools.deleted_count:
         return id
@@ -844,10 +951,11 @@ def deleteToolVersion(
         "$pull": {
             "versions": {"id": version_id},
         },
+        "$set": {
+            **tool_meta_version_change(db_coll_tools, id),
+            UPDATED_AT: now(),
+        },
     }
-    tool_change = tool_meta_version_change(db_coll_tools, id)
-    if tool_change:
-        update["$set"] = tool_change
     del_ver_tools = db_coll_tools.update_one(
         filter=filt,
         update=update,
@@ -886,7 +994,13 @@ def postToolClass() -> str:
 def putToolClass(
     id: str,
 ) -> str:
-    """Add tool class with a user-supplied ID.
+    """Add/replace tool class with a user-supplied ID.
+
+    Users who may add tool classes (`POST /toolClasses`; by default, any
+    authenticated user, as in mode `open` of
+    `custom.access_control.tool_classes`) may add a tool class with the
+    identifier of no tool class; only those that the policies allow (admins,
+    by default) may replace it (cf. `_check_put()`).
 
     Args:
         id: Identifier of tool class to be created/updated.
@@ -895,12 +1009,16 @@ def putToolClass(
         Identifier of created/updated tool class.
 
     Raises:
+        Forbidden: The user may not replace the tool class (also if it was
+            added meanwhile), or may not add it.
         InternalServerError: No unique identifier could be generated, or the
             object could not be stored.
     """
+    exists = get_collection("toolclasses").count_documents({"id": id}, limit=1) > 0
     tool_class = RegisterToolClass(
         data=request.json,
         id=id,
+        allow_replace=_check_put("tool class", id, exists),
     )
     tool_class.register_metadata()
     return tool_class.data["id"]

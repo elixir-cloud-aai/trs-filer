@@ -397,13 +397,12 @@ class AccessControlConfig(FOCABaseConfig):
 
     Args:
         tool_classes: Who may add tool classes: `open` (the default), any
-            user who may register tools, explicitly (`POST /toolClasses`) or
-            by registering a tool with a new tool class (unless
-            `custom.toolclass.validation` is set). `controlled` (only admins
-            add tool classes) and `moderated` (tool classes of users other
-            than admins are pending until an admin approves them) matter
-            only once users other than admins may write (with owners of
-            tools), and are not supported yet.
+            authenticated user, explicitly (`POST /toolClasses`, `PUT
+            /toolClasses/{id}` with new identifiers) or by registering a tool
+            with a new tool class (unless `custom.toolclass.validation` is
+            set). `controlled` (only admins add tool classes) and `moderated`
+            (tool classes of users other than admins are pending until an
+            admin approves them) are not supported yet.
 
     Attributes:
         tool_classes: Who may add tool classes.

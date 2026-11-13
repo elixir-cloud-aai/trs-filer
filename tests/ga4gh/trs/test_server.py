@@ -33,7 +33,10 @@ from trs_filer.app import create_app
 from trs_filer.custom_config import RemoteFilesConfig
 from trs_filer.errors.exceptions import RemoteFileError
 from trs_filer.ga4gh.trs import server
-from trs_filer.ga4gh.trs.endpoints.register_objects import RegisterTool
+from trs_filer.ga4gh.trs.endpoints.register_objects import (
+    TOOL_PROJECTION,
+    RegisterTool,
+)
 from trs_filer.remote_files import RemoteFile
 from trs_filer.utils import DB, get_custom_config
 
@@ -97,16 +100,16 @@ def _without_files(tool: dict[str, Any]) -> dict[str, Any]:
 
 
 def _stored(collection: Collection[dict[str, Any]], obj_id: str) -> dict[str, Any]:
-    """Get a stored object by its identifier, without `_id`.
+    """Get a stored object by its identifier, as served.
 
     Args:
         collection: Collection of the object.
         obj_id: Identifier of the object.
 
     Returns:
-        The object.
+        The object, without `_id` and the internal fields of tools.
     """
-    obj = collection.find_one({"id": obj_id}, projection={"_id": False})
+    obj = collection.find_one({"id": obj_id}, projection=TOOL_PROJECTION)
     assert obj is not None
     return obj
 

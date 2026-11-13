@@ -41,7 +41,8 @@ docker compose logs
 ## Usage
 
 [Endpoints](api.md) can be probed with `curl`, as above, or tried in the
-Swagger UI. Reads are public; writes need an access token of an admin (see
+Swagger UI. Reads are public; writes need an access token: any user can
+register tools, which they then own, and admins can change all tools (see
 [Access control](access-control.md)). The Docker Compose setup trusts a
 fictitious identity provider, so writes are refused (`401 Unauthorized`)
 until you set your own (see [Local

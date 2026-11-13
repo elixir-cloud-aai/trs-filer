@@ -6,8 +6,8 @@ security:
   auth:
     # A fictitious identity provider, as the app refuses to start without
     # trusted issuers; set your identity provider in `config.local.yaml` to
-    # send requests with tokens (writes need a token of an admin; without a
-    # token, they are refused with `401 Unauthorized`)
+    # send requests with tokens (writes need a token; without one, they are
+    # refused with `401 Unauthorized`)
     issuers:
       - https://login.example.org/oidc/
     # Accept tokens for any audience (i.e., of any app)

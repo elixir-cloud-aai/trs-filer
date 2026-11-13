@@ -1,8 +1,8 @@
 # TRS filer Helm chart
 
 > **Note:** Writes (registering, changing and deleting tools and tool
-> classes) need an access token of an admin of your OpenID Connect provider;
-> reads are public. Set the provider and the admin group in
+> classes) need an access token of your OpenID Connect provider: any user
+> registers tools and owns them, admins change all; reads are public. Set the provider and the admin group in
 > `trs_filer.config` (see [Configuration](#configuration)): rendering fails
 > without trusted token issuers.
 
@@ -118,8 +118,9 @@ The values of `values.yaml`; the sections below describe them.
 
 ## Security notes
 
-- **Writes need an access token of an admin** of the identity provider set
-  in `trs_filer.config`; reads are public (see [Access
+- **Writes need an access token** of the identity provider set in
+  `trs_filer.config` (of an owner of the tool, or of an admin, to change
+  tools of others); reads are public (see [Access
   control](https://trs-filer.readthedocs.io/en/latest/access-control/)).
   FOCA's permissions API (`/admin/access-control/`, admins only) is served
   like the TRS API: to keep it off the internet, route only `/ga4gh/trs/v2/`
@@ -268,7 +269,7 @@ all paths (`/`) to the app and is configured with:
   the app advertises `https://<host_name>` URLs (e.g., the `url` of tools).
 
 The chart sets no annotations for particular ingress controllers. Writes
-need an access token of an admin (see [Configuration](#configuration)); to
+need an access token (see [Configuration](#configuration)); to
 also allow the methods that change data (`POST`, `PUT`, `DELETE`) only
 from trusted clients, use the means of your ingress controller or proxy.
 For example (an example
@@ -393,7 +394,7 @@ order into the base config of the image):
    `db.host`). The app restarts when the value changes (the pod template
    has its checksum).
 
-Writes need an access token of an admin (see [Access
+Writes need an access token, and admins change all tools (see [Access
 control](https://trs-filer.readthedocs.io/en/latest/access-control/)), so
 `trs_filer.config` must set the identity provider and the admin group (see
 [Deployment

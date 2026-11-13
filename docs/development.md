@@ -90,8 +90,8 @@ suppress a false positive, add a comment with the reason to the line:
 
 ## Running without authentication
 
-Writes need an access token of an admin (see [Access
-control](access-control.md)), also with Docker Compose, whose development
+Writes need an access token (see [Access control](access-control.md)),
+also with Docker Compose, whose development
 overlay (`config.dev.yaml`) trusts a fictitious identity provider. To set
 your own, see [Local overrides](configuration.md#local-overrides). To try
 writes locally without an identity provider, disable authentication with the

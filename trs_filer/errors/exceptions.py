@@ -11,13 +11,16 @@ from flask import Response
 from foca.errors.exceptions import problem_response
 from werkzeug.exceptions import (
     BadRequest,
+    Conflict,
     InternalServerError,
     NotFound,
     RequestEntityTooLarge,
 )
+from werkzeug.exceptions import Forbidden as HTTPForbidden
 
 __all__ = [
     "BadRequest",
+    "Forbidden",
     "InternalServerError",
     "InvalidRequest",
     "NotFound",
@@ -118,10 +121,23 @@ exceptions = {
         "detail": "The requester is not authorized to perform this action.",
         "status": 403,
     },
+    # e.g., of FOCA's role controllers, for groups that owners aren't members of
+    HTTPForbidden: {
+        "title": "Forbidden",
+        "detail": "The requester is not authorized to perform this action.",
+        "status": 403,
+    },
     NotFound: {
         "title": "Not found",
         "detail": "The requested resource wasn't found.",
         "status": 404,
+    },
+    # e.g., the last owner of a tool, which can't be removed (FOCA's
+    # `LastOwner`)
+    Conflict: {
+        "title": "Conflict",
+        "detail": "The last owner of a tool can't be removed or downgraded.",
+        "status": 409,
     },
     RequestEntityTooLarge: {
         "title": "Content Too Large",

@@ -24,7 +24,7 @@ from tests.conftest import Records
 from tests.mock_data import BASE_PATH, MOCK_TOOL
 from trs_filer.app import create_app, main
 from trs_filer.custom_config import CustomConfig
-from trs_filer.ga4gh.trs import server
+from trs_filer.ga4gh.trs import permissions, server
 from trs_filer.utils import DB, get_collection, get_custom_config
 
 
@@ -488,7 +488,8 @@ def _served(app: App) -> dict[tuple[str, str], Callable[..., Any]]:
 def test_operations_resolve(app: App) -> None:
     """Every operation of the specs is served by its controller.
 
-    The service info is served by FOCA, all other operations by
+    The service info is served by FOCA, the roles on tools by
+    `trs_filer.ga4gh.trs.permissions`, all other operations by
     `trs_filer.ga4gh.trs.server`.
 
     Args:
@@ -496,12 +497,15 @@ def test_operations_resolve(app: App) -> None:
     """
     controllers = _spec_operations(app)
     served = _served(app)
-    # The 19 operations of TRS and its additions, and the service info
-    assert len(controllers) == 20
+    # The 19 operations of TRS and its additions, the 5 of roles on tools,
+    # and the service info
+    assert len(controllers) == 25
     assert controllers.pop(("GET", "/service-info")) is getServiceInfo
-    assert {controller.__module__ for controller in controllers.values()} == {
-        server.__name__
+    modules = {
+        key: permissions.__name__ if "/permissions" in key[1] else server.__name__
+        for key in controllers
     }
+    assert {key: c.__module__ for key, c in controllers.items()} == modules
     for key, controller in controllers.items():
         assert served.get(key) is inspect.unwrap(controller), key
 

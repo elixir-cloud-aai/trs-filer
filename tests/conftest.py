@@ -61,7 +61,11 @@ CONFIG_OVERLAY = Path(__file__).parent / "config_overlay.yaml"
 ISSUER = "https://login.example.org/oidc/"
 AUDIENCE = "client-id"
 USER = "alice@example.org"
+# Another user, in the same group as `USER` (`USERS_GROUP`)
+COLLEAGUE = "bob@example.org"
 ADMIN = "admin@example.org"
+# Another admin, with no roles on the tools that `ADMIN` registers
+OTHER_ADMIN = "other-admin@example.org"
 # Claim with the group memberships of users (`claim_groups` of the test
 # overlay), released via user info only (`userinfo_claims`)
 GROUP_CLAIM = "entitlement"
@@ -72,10 +76,14 @@ ADMIN_GROUP = "urn:example:group:trs-admins#login.example.org"
 # groups those examples map to `editor` and `reader`
 EDITOR = "editor@example.org"
 READER = "reader@example.org"
+# Group of `USER` and `COLLEAGUE`
+USERS_GROUP = "urn:example:group:trs-users#login.example.org"
 # Group memberships that the identity provider returns as user info
 GROUPS = {
-    USER: ["urn:example:group:trs-users#login.example.org"],
+    USER: [USERS_GROUP],
+    COLLEAGUE: [USERS_GROUP],
     ADMIN: [ADMIN_GROUP],
+    OTHER_ADMIN: [ADMIN_GROUP],
     EDITOR: ["trs-editors"],
     READER: ["trs-readers"],
 }

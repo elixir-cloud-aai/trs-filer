@@ -241,25 +241,30 @@ created, and the others store a copy of it, too.
 the modes of the service types of [Cloud
 Registry](https://cloud-registry.readthedocs.io/en/latest/configuration/#service-types):
 
-- `open` (the default): any user who may register tools, explicitly (`POST
-  /toolClasses`, `PUT /toolClasses/{id}`) or by registering a tool with a
-  new tool class (see above; not with `custom.toolclass.validation: true`,
-  which leaves only the explicit way);
+- `open` (the default): any authenticated user, explicitly (`POST
+  /toolClasses`, or `PUT /toolClasses/{id}` with the identifier of no tool
+  class) or by registering a tool with a new tool class (see above; not with
+  `custom.toolclass.validation: true`, which leaves only the explicit way);
+  only admins replace and delete tool classes;
 - `controlled`: only admins add tool classes; tools must have a registered
   tool class;
 - `moderated`: tool classes added by users other than admins are pending
   until an admin approves them, and so are the tools that have them.
 
-Until tools have owners, only admins may write by default (see [Access
-control](access-control.md#admins)), so `open` is the only mode TRS-Filer
-supports for now: the app refuses to start with `controlled` or
-`moderated`, with an error that the custom config doesn't match its model,
-caused by one that names the setting (`access_control.tool_classes: Value
-error, only the mode 'open' of adding tool classes is supported yet`).
-For the same reason, it doesn't limit the number of tool classes that no
-tool has per user, as Cloud Registry does for service types: anybody who
-may write (by default, admins only) can add tool classes without bound;
-delete unwanted tool classes with `DELETE /toolClasses/{id}`.
+`open` is the only mode TRS-Filer supports for now: the app refuses to
+start with `controlled` or `moderated`, with an error that the custom config
+doesn't match its model, caused by one that names the setting
+(`access_control.tool_classes: Value error, only the mode 'open' of adding
+tool classes is supported yet`). Nor does it limit the number of tool
+classes that no tool has per user, as Cloud Registry does for service types:
+any authenticated user can add tool classes without bound; admins delete
+unwanted ones with `DELETE /toolClasses/{id}` (see [Access
+control](access-control.md#admins)). To keep users from adding tool classes
+explicitly until `controlled` is supported, remove the rule
+`add-tool-classes` in a config overlay (`security.access_control.policies`,
+`add-tool-classes: null`): `POST /toolClasses` and `PUT /toolClasses/{id}`
+are then for admins only, but registering tools with new tool classes still
+adds them, unless `custom.toolclass.validation` is true.
 
 For example, in a config overlay:
 

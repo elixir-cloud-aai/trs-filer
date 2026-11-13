@@ -2,7 +2,8 @@
 
 The app is created from `config.yaml` and the test overlay, whose identity
 provider is mocked (see `tests/conftest.py`): reads are public, writes need
-an access token of an admin.
+an access token; who may write what is tested here for users without roles
+and admins, and in `tests/test_ownership.py` for owners and maintainers.
 """
 
 from copy import deepcopy
@@ -25,6 +26,7 @@ from tests.conftest import (
     ADMIN,
     EDITOR,
     ISSUER,
+    OTHER_ADMIN,
     READER,
     USER,
     Records,
@@ -47,8 +49,8 @@ VERSION = MOCK_VERSION_NO_ID
 TOOL_CLASS_ID = "spare"
 TOOL_CLASS = {"name": "Workflow", "description": "A workflow."}
 # The write operations of the API: method, path and body; the tool `TOOL_ID`
-# (with version `VERSION_ID` and another one) and the tool class
-# `TOOL_CLASS_ID` exist (cf. `_add_tool()`)
+# (with version `VERSION_ID` and another one), registered by an admin, and
+# the tool class `TOOL_CLASS_ID` exist (cf. `_add_tool()`)
 WRITES: list[tuple[str, str, Any]] = [
     ("POST", "/tools", MOCK_TOOL),
     ("PUT", f"/tools/{TOOL_ID}", MOCK_TOOL),
@@ -59,6 +61,14 @@ WRITES: list[tuple[str, str, Any]] = [
     ("POST", "/toolClasses", TOOL_CLASS),
     ("PUT", f"/toolClasses/{TOOL_CLASS_ID}", TOOL_CLASS),
     ("DELETE", f"/toolClasses/{TOOL_CLASS_ID}", None),
+]
+# The writes that any authenticated user may do: register tools and add tool
+# classes, also with identifiers of no tool or tool class (cf.
+# `NEW_WRITES`); the others need a role on the tool, or are for admins only
+OPEN_WRITES = {("POST", "/tools"), ("POST", "/toolClasses")}
+NEW_WRITES: list[tuple[str, str, Any]] = [
+    ("PUT", "/tools/NEWTOOL", MOCK_TOOL),
+    ("PUT", "/toolClasses/new", TOOL_CLASS),
 ]
 # The read operations of TRS, with paths of the tool `TOOL_ID`
 READS = [
@@ -166,37 +176,66 @@ def test_writes_need_token(
     assert list(tools.find({}, {"_id": False})) == stored
 
 
-@pytest.mark.parametrize("write", WRITES, ids=lambda w: f"{w[0]} {w[1]}")
-def test_writes_need_admin(
+@pytest.mark.parametrize(
+    "write",
+    [write for write in WRITES if write[:2] not in OPEN_WRITES],
+    ids=lambda w: f"{w[0]} {w[1]}",
+)
+def test_writes_need_role(
     client: FlaskClient,
     tools: Collection[dict[str, Any]],
+    toolclasses: Collection[dict[str, Any]],
     write: tuple[str, str, Any],
 ) -> None:
-    """Writes of users who aren't admins are forbidden.
+    """Changes of tools of others and of tool classes are forbidden.
+
+    For users without a role on the tool, who aren't admins.
 
     Args:
         client: Test client, with an admin's token.
         tools: Collection `tools`.
+        toolclasses: Collection `toolclasses`.
         write: Method, path and body.
     """
     _add_tool(client)
     stored = list(tools.find({}, {"_id": False}))
+    classes = list(toolclasses.find({}, {"_id": False}))
     response = _write(client, write, make_headers(USER))
     assert response.status_code == 403
     assert response.get_json()["status"] == 403
     assert list(tools.find({}, {"_id": False})) == stored
+    assert list(toolclasses.find({}, {"_id": False})) == classes
 
 
-@pytest.mark.parametrize("write", WRITES, ids=lambda w: f"{w[0]} {w[1]}")
-def test_writes_of_admins(client: FlaskClient, write: tuple[str, str, Any]) -> None:
-    """Admins (members of the group mapped to `admin`) may write.
+@pytest.mark.parametrize(
+    "write",
+    [write for write in WRITES if write[:2] in OPEN_WRITES] + NEW_WRITES,
+    ids=lambda w: f"{w[0]} {w[1]}",
+)
+def test_writes_of_users(client: FlaskClient, write: tuple[str, str, Any]) -> None:
+    """Any authenticated user may register tools and add tool classes.
 
     Args:
         client: Test client, with an admin's token.
         write: Method, path and body.
     """
     _add_tool(client)
-    response = _write(client, write, make_headers(ADMIN))
+    response = _write(client, write, make_headers(USER))
+    assert response.status_code == 200, response.get_json()
+
+
+@pytest.mark.parametrize("write", WRITES, ids=lambda w: f"{w[0]} {w[1]}")
+def test_writes_of_admins(client: FlaskClient, write: tuple[str, str, Any]) -> None:
+    """Admins (members of the group mapped to `admin`) may do all writes.
+
+    Also on tools that they have no role on (registered by another admin).
+
+    Args:
+        client: Test client, with an admin's token.
+        write: Method, path and body.
+    """
+    _add_tool(client)
+    response = _write(client, write, make_headers(OTHER_ADMIN))
     assert response.status_code == 200, response.get_json()
 
 
@@ -516,7 +555,12 @@ def test_noauth_overlay(
     response = client.post(f"{BASE_PATH}/tools", json=MOCK_TOOL)
     assert response.status_code == 200, response.get_json()
     tool_id = response.get_json()
+    for _ in range(2):
+        response = client.put(f"{BASE_PATH}/tools/{tool_id}", json=MOCK_TOOL)
+        assert response.status_code == 200, response.get_json()
     assert client.delete(f"{BASE_PATH}/tools/{tool_id}").status_code == 200
+    response = client.put(f"{BASE_PATH}/tools/NEWTOOL", json=MOCK_TOOL)
+    assert response.status_code == 200, response.get_json()
     assert any("Authentication is disabled" in m for m in records.messages)
 
 
@@ -551,7 +595,9 @@ def _doc_example(title: str) -> dict[str, Any]:
 def test_editors_example(
     mongo_client: MongoClient[dict[str, Any]], overlay: Path
 ) -> None:
-    """With the documented overlay for editors, they write tools, not classes.
+    """With the documented overlay for editors, they change all tools.
+
+    But they may only add tool classes, as other users.
 
     Args:
         mongo_client: MongoDB client.
@@ -564,17 +610,21 @@ def test_editors_example(
     for write in WRITES:
         _add_tool(admin_client(app))
         response = _write(client, write, headers)
-        expected = 403 if write[1].startswith("/toolClasses") else 200
+        expected = (
+            403
+            if write[1].startswith("/toolClasses") and write[:2] not in OPEN_WRITES
+            else 200
+        )
         assert response.status_code == expected, write
-    # Registering a tool with a new class creates the class, which editors
-    # may do, although they may not write `/toolClasses`
+    # Registering a tool with a new class creates the class
     tool = deepcopy(MOCK_TOOL)
     tool["toolclass"] = {"name": "EditorClass", "description": "New class"}
     response = client.post(f"{BASE_PATH}/tools", json=tool, headers=headers)
     assert response.status_code == 200
     classes = client.get(f"{BASE_PATH}/toolClasses").get_json()
     assert "EditorClass" in [tool_class["name"] for tool_class in classes]
-    response = _write(client, WRITES[0], make_headers(USER))
+    # Other users may not change the tools of others
+    response = _write(client, WRITES[1], make_headers(USER))
     assert response.status_code == 403
 
 
@@ -645,8 +695,22 @@ def test_permissions_api(anonymous_client: FlaskClient) -> None:
     response = anonymous_client.get(path, headers=make_headers(ADMIN))
     assert response.status_code == 200
     rules = {tuple(rule["rule"].values()) for rule in response.get_json()["results"]}
+    tool = f"{BASE_PATH}/tools/:id"
+    version = f"{tool}/versions/:version_id"
     assert rules == {
+        ("*", f"{BASE_PATH}/tools", "POST"),
+        ("owner", tool, "(PUT)|(DELETE)"),
+        ("owner", f"{tool}/versions", "POST"),
+        ("owner", version, "(PUT)|(DELETE)"),
+        ("owner", f"{tool}/permissions", "GET"),
+        ("owner", f"{tool}/permissions/users/*", "(PUT)|(DELETE)"),
+        ("owner", f"{tool}/permissions/groups/*", "(PUT)|(DELETE)"),
+        ("maintainer", f"{tool}/versions", "POST"),
+        ("maintainer", version, "PUT"),
+        ("*", f"{BASE_PATH}/toolClasses", "POST"),
         ("*", f"{BASE_PATH}/tools", "GET|HEAD"),
-        ("*", f"{BASE_PATH}/tools/*", "GET|HEAD"),
+        ("*", tool, "GET|HEAD"),
+        ("*", f"{tool}/versions", "GET|HEAD"),
+        ("*", f"{tool}/versions/*", "GET|HEAD"),
         ("*", f"{BASE_PATH}/toolClasses", "GET|HEAD"),
     }

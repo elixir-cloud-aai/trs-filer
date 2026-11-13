@@ -7,8 +7,9 @@ host_name: ""
 trs_filer:
   # Config overlay of the app (FOCA), merged after the one that the config
   # Job writes (public URL and MongoDB host; don't set these here). Reads
-  # are public; writes need an access token of an admin, so each deployment
-  # sets its identity provider and admin group: rendering fails without
+  # are public; writes need an access token (any user registers tools and
+  # owns them, admins change all), so each deployment sets its identity
+  # provider and admin group: rendering fails without
   # trusted token issuers (see deployment/README.md, Configuration). E.g.:
   #   security:
   #     auth:
