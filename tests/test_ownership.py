@@ -560,9 +560,11 @@ def test_tool_classes(
     changed = {**tool_class, "name": "Changed"}
     response = client.put(path, json=changed, headers=make_headers(ADMIN))
     assert response.status_code == 200
+    # the user who added the tool class is kept
     assert toolclasses.find_one({"id": "new"}, {"_id": False}) == {
         **changed,
         "id": "new",
+        "_createdBy": USER,
     }
     response = client.post(
         f"{BASE_PATH}/toolClasses", json=tool_class, headers=make_headers(USER)

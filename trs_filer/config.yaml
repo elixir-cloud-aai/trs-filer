@@ -62,8 +62,9 @@ security:
     # may replace and delete their tools and their versions, and grant other
     # users, or groups they are members of, the roles `owner` or `maintainer`
     # (add and replace versions) on them; any authenticated user may add tool
-    # classes (`custom.access_control.tool_classes: open`), which only admins
-    # may replace and delete; admins may do everything. Roles on tools are
+    # classes (unless only admins may, `custom.access_control.tool_classes`),
+    # which only admins may replace, approve and delete; admins may do
+    # everything. Roles on tools are
     # managed with FOCA's resource ownership helpers (see
     # `trs_filer/ga4gh/trs/permissions.py`)
     # Cf. https://foca.readthedocs.io/en/latest/access-control/
@@ -117,12 +118,19 @@ security:
             # maintainers may add and replace versions, but not delete them
             maintainers-add-versions: [p, maintainer, "/ga4gh/trs/v2/tools/:id/versions", POST]
             maintainers-replace-versions: [p, maintainer, "/ga4gh/trs/v2/tools/:id/versions/:version_id", PUT]
-            # any authenticated user may add tool classes
-            # (`custom.access_control.tool_classes: open`), also with `PUT
-            # /toolClasses/{id}` for identifiers of no tool class, which
-            # doesn't enforce policies itself; no rules for replacing and
-            # deleting tool classes: only admins may
+            # any authenticated user may add tool classes, unless only admins
+            # may (`custom.access_control.tool_classes: controlled`, checked
+            # by the app; keep this rule and set that option instead, as
+            # users also add tool classes by registering tools), also with
+            # `PUT /toolClasses/{id}` for identifiers of no tool class, which
+            # doesn't enforce policies itself; no rules for replacing,
+            # approving (`PUT /toolClasses/{id}/approval`) and deleting tool
+            # classes: only admins may
             add-tool-classes: [p, "*", /ga4gh/trs/v2/toolClasses, POST]
+            # any authenticated user may list the pending tool classes and
+            # tools they may see (`custom.access_control.tool_classes:
+            # moderated`)
+            list-approvals: [p, "*", /ga4gh/trs/v2/approvals, "GET|HEAD"]
 
             # Any authenticated user may read: list tools, get a tool
             # (`/tools/:id`), list its versions, get a version and its
@@ -154,12 +162,23 @@ db:
                               id: 1
                           options:
                             'unique': True
+                        # Pending tools, which reads filter by (internal
+                        # flag, set while their tool class is pending)
+                        - keys:
+                              _pending: 1
+                          options:
+                            'sparse': True
                 toolclasses:
                     indexes:
                         - keys:
                               id: 1
                           options:
                             'unique': True
+                        # Pending tool classes (`GET /approvals`)
+                        - keys:
+                              _pending: 1
+                          options:
+                            'sparse': True
 
 # API configuration
 # Cf. https://foca.readthedocs.io/en/latest/configuration/api/
@@ -307,15 +326,18 @@ custom:
         meta_version:
             init: 1
             increment: 1
-        # Whether tools may only be registered with existing tool classes;
-        # if false, unknown tool classes are created
+        # Deprecated (removed in the next breaking release): true sets
+        # `access_control.tool_classes` to `controlled`, which replaces it
         validation: False
     # Who may add tool classes (as `custom.access_control.service_types` of
     # Cloud Registry): `open`, any authenticated user, explicitly (`POST
     # /toolClasses`, `PUT /toolClasses/{id}` for new identifiers) or by
-    # registering a tool with a new tool class (unless `toolclass.validation`
-    # is true); only admins replace and delete tool classes. `controlled`
-    # and `moderated` are rejected on startup until supported
+    # registering a tool with a new tool class; `controlled`, admins only,
+    # and tools of other users must have a registered tool class;
+    # `moderated`, any authenticated user, but tool classes of other users
+    # than admins are pending until an admin approves them, and so are the
+    # tools that have them (see "Tool classes" in `docs/configuration.md`).
+    # Only admins replace and delete tool classes
     access_control:
         tool_classes: open
     # Retrieval of file content from URLs: on registration, for files with a

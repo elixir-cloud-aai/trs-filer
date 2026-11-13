@@ -25,7 +25,11 @@ Read operations (the `GET` endpoints of [GA4GH TRS
 endpoints](api.md#ga4gh-trs-endpoints)), the service info, the API
 specification (`/ga4gh/trs/v2/openapi.json`) and the Swagger UI
 (`/ga4gh/trs/v2/ui/`) are public by default (see [Requiring login for
-reads](#requiring-login-for-reads)); they ignore tokens, also invalid ones.
+reads](#requiring-login-for-reads)). The TRS reads also accept a token, so
+that admins and the users with a role on a pending tool see it (mode
+`moderated`, see [Adding tool
+classes](configuration.md#adding-tool-classes)); invalid tokens are read as
+anonymous.
 All write operations (`POST`, `PUT` and `DELETE`) require an access token of
 a trusted issuer, sent as a bearer token:
 
@@ -116,6 +120,9 @@ with the same identifier belongs to whoever registers it. Who registered a
 tool and when, and when it or one of its versions last changed, is stored
 with the tool (internal fields `_createdBy`, `_createdAt` and `_updatedAt`,
 not served by the API); replacing a tool keeps who registered it and when.
+So is whether the tool is pending, as its tool class is (`_pending`, mode
+`moderated`): pending tools are served only to admins and the users with a
+role on them.
 
 Tools stored before tools had owners have none: only admins can change
 them, and grant them an owner (`PUT /tools/<id>/permissions/users/<user-id>`
@@ -188,9 +195,13 @@ change tools of others or tool classes. On startup, FOCA logs the groups
 mapped to `admin`.
 
 Tool classes are a vocabulary that all tools share: any authenticated user
-can add tool classes (explicitly, or by registering a tool with a new one;
-see [Adding tool classes](configuration.md#adding-tool-classes)), but only
-admins can replace (`PUT` of a stored tool class) and delete them. Unlike
+can add tool classes (explicitly, or by registering a tool with a new one),
+unless the deployment lets only admins add them (mode `controlled`) or
+moderates them (mode `moderated`: those of other users are pending until
+an admin approves them, `PUT /toolClasses/{id}/approval`; see [Adding tool
+classes](configuration.md#adding-tool-classes)). Only admins can replace
+(`PUT` of a stored tool class), approve and delete them, as no policy
+allows it to other users. Unlike
 Cloud Registry, TRS-Filer has no admin mode yet: admins act as admins on
 every request, without the header `X-Request-Roles`.
 

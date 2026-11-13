@@ -12,9 +12,14 @@ from trs_filer.errors.exceptions import (
     Forbidden,
     InternalServerError,
 )
+from trs_filer.ga4gh.trs.tool_classes import CREATED_BY, PENDING
 from trs_filer.utils import get_collection, get_custom_config
 
 logger = logging.getLogger(__name__)
+
+# Fields of tool classes that requests set (`ToolClassRegister`), besides the
+# identifier
+FIELDS = ("name", "description")
 
 
 class RegisterToolClass:
@@ -26,6 +31,8 @@ class RegisterToolClass:
         id: str | None = None,
         allow_replace: bool = True,
         replace_only: bool = False,
+        created_by: str | None = None,
+        pending: bool = False,
     ) -> None:
         """Initialize tool class data.
 
@@ -36,6 +43,12 @@ class RegisterToolClass:
                 identifier may be replaced; if not, it is only created.
             replace_only: With `allow_replace`, whether the tool class must be
                 stored: if it was deleted meanwhile, it isn't added again.
+            created_by: Identifier of the user adding the tool class, stored
+                with new tool classes (cf.
+                `trs_filer.ga4gh.trs.tool_classes.CREATED_BY`); `None` if
+                unknown.
+            pending: Whether a new tool class is pending (cf.
+                `trs_filer.ga4gh.trs.tool_classes.PENDING`).
 
         Attributes:
             data: Tool metadata.
@@ -54,12 +67,8 @@ class RegisterToolClass:
                 constructing tool and version `url` properties.
             api_path: Base path at which API endpoints can be reached. For
                 constructing tool and version `url` properties.
-            tool_class_validation: Whether a tool is only allowed to be added
-                if it is associated with a pre-existing tool class; if `False`,
-                the tool class associated with the tool to be added is inserted
-                into the tool class database collection on the fly.
-            db_coll_tools: Database collection for storing tool objects.
-            db_coll_files: Database collection for storing file objects.
+            created_by: Identifier of the user adding the tool class.
+            pending: Whether a new tool class is pending.
             db_coll_classes: Database collection for storing tool class
                 objects.
         """
@@ -68,6 +77,8 @@ class RegisterToolClass:
         self.data["id"] = None if id is None else id
         self.replace = allow_replace
         self.replace_only = replace_only
+        self.created_by = created_by
+        self.pending = pending
         self.id_charset = conf.toolclass.id.charset
         self.id_length = int(conf.toolclass.id.length)
         self.meta_version_init = int(conf.toolclass.meta_version.init)
@@ -79,6 +90,9 @@ class RegisterToolClass:
 
     def register_metadata(self) -> None:
         """Register toolClass with TRS.
+
+        New tool classes store who added them, and whether they are pending.
+        Replaced tool classes keep these: replacing doesn't approve them.
 
         Raises:
             Conflict: The tool class to be replaced (`replace_only`) was
@@ -100,10 +114,20 @@ class RegisterToolClass:
                 )
 
             if self.replace:
-                # replace tool class in database (a copy, see below)
-                result = self.db_coll_classes.replace_one(
-                    filter={"id": self.data["id"]},
-                    replacement=dict(self.data),
+                # replace the fields of the tool class in the database,
+                # keeping its internal fields
+                update: dict[str, Any] = {
+                    "$set": {
+                        field: self.data[field]
+                        for field in ("id", *FIELDS)
+                        if field in self.data
+                    }
+                }
+                unset = {field: "" for field in FIELDS if field not in self.data}
+                if unset:
+                    update["$unset"] = unset
+                result = self.db_coll_classes.update_one(
+                    filter={"id": self.data["id"]}, update=update
                 )
                 # verify replacement (also of identical tool classes)
                 if result.matched_count:
@@ -118,8 +142,11 @@ class RegisterToolClass:
 
             # insert tool class into database (a copy, as `insert_one()` adds
             # `_id`)
+            internal: dict[str, Any] = {CREATED_BY: self.created_by}
+            if self.pending:
+                internal[PENDING] = True
             try:
-                self.db_coll_classes.insert_one(document=dict(self.data))
+                self.db_coll_classes.insert_one(document={**self.data, **internal})
             except DuplicateKeyError:
                 if not generate_ids and not self.replace:
                     logger.info(

@@ -17,6 +17,17 @@ from trs_filer.errors.exceptions import (
     InvalidRequest,
     NotFound,
 )
+from trs_filer.ga4gh.trs.tool_classes import (
+    CREATED_BY as TOOL_CLASS_CREATED_BY,
+)
+from trs_filer.ga4gh.trs.tool_classes import (
+    PENDING,
+    TOOL_CLASS_PROJECTION,
+    UNREGISTERED_TOOL_CLASS,
+    may_add_tool_classes,
+    sync_pending_flags,
+    tool_classes_pending,
+)
 from trs_filer.io_schema import is_io_schema_file
 from trs_filer.io_schema.check import check_io_schema
 from trs_filer.remote_files import fetch_remote_file
@@ -26,11 +37,13 @@ logger = logging.getLogger(__name__)
 
 # Internal fields of stored tools (not part of TRS, and not served): who
 # registered the tool (the identifier of the user, or `None` without
-# authentication), when, and when it or one of its versions last changed
+# authentication), when, when it or one of its versions last changed, and
+# whether it is pending, as its tool class is (`PENDING`, cf.
+# `trs_filer.ga4gh.trs.tool_classes`; not set for tools that aren't)
 CREATED_BY = "_createdBy"
 CREATED_AT = "_createdAt"
 UPDATED_AT = "_updatedAt"
-INTERNAL_FIELDS = (CREATED_BY, CREATED_AT, UPDATED_AT)
+INTERNAL_FIELDS = (CREATED_BY, CREATED_AT, UPDATED_AT, PENDING)
 # Projection of tools as served: without MongoDB's `_id` and internal fields
 TOOL_PROJECTION: dict[str, bool] = {
     "_id": False,
@@ -118,7 +131,8 @@ class RegisterTool:
             data: Tool metadata consistent with the `ToolVersion` schema.
             id: Tool identifier. Auto-generated if not provided.
             created_by: Identifier of the user registering the tool, stored
-                with new tools (`_createdBy`); `None` if unknown.
+                with new tools (`_createdBy`), and with tool classes that
+                the registration adds; `None` if unknown.
             allow_replace: With `id`, whether a stored tool with the
                 identifier may be replaced; if not, the tool is only created.
             stored_id: MongoDB identifier (`_id`) of the stored tool that may
@@ -134,6 +148,8 @@ class RegisterTool:
             created_by: Identifier of the user registering the tool.
             was_created: Whether the tool was created (not replaced), once
                 it is registered.
+            pending: Whether the tool is pending, as its tool class is (cf.
+                `trs_filer.ga4gh.trs.tool_classes`), once it is registered.
             stored_id: `stored_id`; for created tools, the MongoDB identifier
                 (`_id`) of the new one, once it is registered.
             id_charset: Allowed characters for generating object
@@ -156,11 +172,6 @@ class RegisterTool:
                 constructing tool and version `url` properties.
             api_path: Base path at which API endpoints can be reached. For
                 constructing tool and version `url` properties.
-            tool_class_validation: Whether a tool is only allowed to be added
-                if it is associated with a pre-existing tool class; if `False`,
-                the tool class associated with the tool to be added is inserted
-                into the tool class database collection on the fly, unless
-                it exists (existing tool classes are not changed).
             db_coll_tools: Database collection for storing tool objects.
             db_coll_classes: Database collection for storing tool class
                 objects.
@@ -172,6 +183,7 @@ class RegisterTool:
         self.stored_id = stored_id
         self.created_by = created_by
         self.was_created = False
+        self.pending = False
         self.id_charset: str = conf.tool.id.charset
         self.id_length = int(conf.tool.id.length)
         self.meta_version_init = int(conf.tool.meta_version.init)
@@ -182,7 +194,6 @@ class RegisterTool:
         self.host_name = conf.service.external_host
         self.external_port = conf.service.external_port
         self.api_path = conf.service.api_path
-        self.tool_class_validation = conf.toolclass.validation
         self.db_coll_tools = get_collection("tools")
         self.db_coll_classes = get_collection("toolclasses")
 
@@ -196,9 +207,12 @@ class RegisterTool:
 
         Tools with a given identifier replace a stored tool with that
         identifier, if any; their meta version, and those of their versions
-        that replace stored versions, are incremented. Unless tool classes are
-        validated, the tool class is created if it does not exist; existing
-        tool classes are not changed, and tools store a copy of them. New
+        that replace stored versions, are incremented. If the tool class does
+        not exist, it is created, if the user may add tool classes (cf.
+        `trs_filer.ga4gh.trs.tool_classes`): after the tool, or before it if
+        it is pending, so that the tool is never served as approved; existing
+        tool classes are not changed, and tools store a copy of them (without
+        internal fields). Tools with a pending tool class are pending too. New
         tools store who registered them and when; replaced tools keep these,
         and store when they were replaced.
 
@@ -208,8 +222,8 @@ class RegisterTool:
             Forbidden: A tool with the given identifier is stored, but may not
                 be replaced (`allow_replace`): it was registered meanwhile.
             InvalidRequest: Version identifiers are duplicated, the files of a
-                version are invalid, or the tool class does not exist while
-                tool classes are validated.
+                version are invalid, or the tool class does not exist and the
+                user may not add tool classes.
             InternalServerError: No unique identifier could be generated, or the
                 object could not be stored.
             trs_filer.errors.exceptions.RemoteFileError: The content of a file
@@ -227,16 +241,21 @@ class RegisterTool:
             self.data["toolclass"]["id"] = tool_class_id
         # tools store a copy of their tool class: that of an existing one
         stored_class = self.db_coll_classes.find_one(
-            filter={"id": tool_class_id}, projection={"_id": False}
+            filter={"id": tool_class_id},
+            projection={"_id": False, TOOL_CLASS_CREATED_BY: False},
         )
         if stored_class is not None:
+            self.pending = stored_class.pop(PENDING, None) is True
             self.data["toolclass"] = stored_class
-        elif self.tool_class_validation:
-            logger.error("Tool class '%s' does not exist.", tool_class_id)
-            raise InvalidRequest(
-                "The tool class doesn't exist; register it first (tool classes "
-                "are validated)."
+        elif not may_add_tool_classes():
+            logger.info(
+                "Tool class '%s' does not exist, and '%s' may not add it.",
+                escape_log_value(tool_class_id),
+                escape_log_value(self.created_by),
             )
+            raise InvalidRequest(UNREGISTERED_TOOL_CLASS)
+        else:
+            self.pending = tool_classes_pending()
 
         version_list = [
             v.get("id", None)
@@ -267,6 +286,13 @@ class RegisterTool:
             # Modifies the version's dict in place
             version_proc.process_metadata()
 
+        # pending tool classes are stored before the tool (and stay if the
+        # registration fails, for admins to delete), so that the tool is
+        # never served as approved
+        if stored_class is None and self.pending:
+            self._create_tool_class()
+        pending_field = {PENDING: True} if self.pending else {}
+
         timestamp = now()
         # keep trying to generate unique ID
         for attempt in range(10):
@@ -284,7 +310,7 @@ class RegisterTool:
                 f"{self.api_path}/tools/{self.data['id']}"
             )
 
-            if self.replace and self._replace(timestamp):
+            if self.replace and self._replace(timestamp, pending_field):
                 logger.info("Replaced tool with id '%s'.", self.data["id"])
                 break
 
@@ -296,6 +322,7 @@ class RegisterTool:
                         CREATED_BY: self.created_by,
                         CREATED_AT: timestamp,
                         UPDATED_AT: timestamp,
+                        **pending_field,
                     }
                 )
             except DuplicateKeyError:
@@ -313,8 +340,13 @@ class RegisterTool:
         else:
             raise InternalServerError
 
-        if stored_class is None:
+        if stored_class is None and not self.pending:
             self._create_tool_class()
+        # the tool class may have been approved (or deleted and added again)
+        # meanwhile
+        mode = get_custom_config().access_control.tool_classes
+        if self.pending or mode == "moderated":
+            sync_pending_flags(tool_class_id, {"id": self.data["id"]})
         logger.debug(
             "Entry in 'tools' collection: %s",
             self.db_coll_tools.find_one({"id": self.data["id"]}),
@@ -323,16 +355,20 @@ class RegisterTool:
     def _create_tool_class(self) -> None:
         """Create the tool class of the tool, unless it exists.
 
-        Existing tool classes are shared by tools and not changed. If another
-        registration created the tool class in the meantime (with other
-        content), the tool stores a copy of that one instead, unless the tool
-        was replaced in the meantime, too.
+        The tool class stores who added it, and whether it is pending (cf.
+        `trs_filer.ga4gh.trs.tool_classes`). Existing tool classes are shared
+        by tools and not changed. If another registration created the tool
+        class in the meantime (with other content), the tool stores a copy of
+        that one instead, unless the tool was replaced in the meantime, too.
         """
         tool_class = dict(self.data["toolclass"])
+        internal: dict[str, Any] = {TOOL_CLASS_CREATED_BY: self.created_by}
+        if self.pending:
+            internal[PENDING] = True
         try:
             result = self.db_coll_classes.update_one(
                 filter={"id": tool_class["id"]},
-                update={"$setOnInsert": tool_class},
+                update={"$setOnInsert": {**tool_class, **internal}},
                 upsert=True,
             )
         except DuplicateKeyError:
@@ -344,7 +380,7 @@ class RegisterTool:
                 logger.info("Added tool class with id '%s'.", tool_class["id"])
                 return
         stored = self.db_coll_classes.find_one(
-            filter={"id": tool_class["id"]}, projection={"_id": False}
+            filter={"id": tool_class["id"]}, projection=TOOL_CLASS_PROJECTION
         )
         if stored is None or stored == tool_class:
             return
@@ -359,7 +395,7 @@ class RegisterTool:
             tool_class["id"],
         )
 
-    def _replace(self, timestamp: datetime) -> bool:
+    def _replace(self, timestamp: datetime, pending_field: dict[str, bool]) -> bool:
         """Replace the stored tool with the same identifier, if any.
 
         The meta versions of the tool, and of its versions that replace
@@ -368,6 +404,8 @@ class RegisterTool:
 
         Args:
             timestamp: Time of the replacement.
+            pending_field: The pending flag of the tool (`PENDING`), if it is
+                pending; empty otherwise.
 
         Returns:
             Whether a stored tool was replaced.
@@ -409,7 +447,12 @@ class RegisterTool:
         }
         result = self.db_coll_tools.replace_one(
             filter={"id": self.data["id"], "_id": stored["_id"]},
-            replacement={**self.data, **kept, UPDATED_AT: timestamp},
+            replacement={
+                **self.data,
+                **kept,
+                UPDATED_AT: timestamp,
+                **pending_field,
+            },
         )
         if not result.matched_count and self.stored_id is not None:
             # deleted after it was read: not added again

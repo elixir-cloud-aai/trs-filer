@@ -5,6 +5,7 @@ The image serves the app with Gunicorn (`trs_filer.app:create_app()`, see
 development server.
 """
 
+import logging
 from pathlib import Path
 
 from connexion import App
@@ -12,6 +13,10 @@ from foca import Foca, get_config
 from foca.security.auth import require_no_service_clients
 
 from trs_filer.errors.exceptions import InvalidRequest, describe_invalid_request
+from trs_filer.ga4gh.trs.tool_classes import sync_pending_tools
+from trs_filer.utils import get_custom_config
+
+logger = logging.getLogger(__name__)
 
 
 def create_app() -> App:
@@ -30,7 +35,9 @@ def create_app() -> App:
     act for) would need their own roles on tools, and answers invalid
     requests
     (`trs_filer.errors.exceptions.InvalidRequest`) with their reason as
-    `detail`.
+    `detail`. It warns of the deprecated `custom.toolclass.validation`, and
+    corrects the pending flags of tools (cf.
+    `trs_filer.ga4gh.trs.tool_classes.sync_pending_tools()`).
 
     Gunicorn calls this in each worker, after forking (MongoDB clients must
     not be shared across forks), so the checks run in each worker; if they
@@ -72,6 +79,13 @@ def create_app() -> App:
                 "Request bodies must be limited in size: set "
                 "`server.max_content_length` (bytes), not null"
             )
+        if get_custom_config().toolclass.validation:
+            logger.warning(
+                "`custom.toolclass.validation` is deprecated and will be removed "
+                "in the next breaking release: set "
+                "`custom.access_control.tool_classes: controlled` instead (applied)"
+            )
+        sync_pending_tools()
     return app
 
 

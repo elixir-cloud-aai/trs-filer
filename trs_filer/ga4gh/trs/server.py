@@ -41,6 +41,16 @@ from trs_filer.ga4gh.trs.permissions import (
     remove_roles,
     tool_class_exists,
 )
+from trs_filer.ga4gh.trs.tool_classes import (
+    PENDING,
+    TOOL_CLASS_PROJECTION,
+    may_add_tool_classes,
+    own_tools,
+    sync_pending_flags,
+    tool_classes_pending,
+    visible_tool_classes,
+    visible_tools,
+)
 from trs_filer.remote_files import fetch_remote_file
 from trs_filer.utils import get_collection, get_custom_config
 
@@ -73,10 +83,12 @@ def toolsIdGet(id: str) -> dict[str, Any]:
         Tool object dict corresponding given tool id.
 
     Raises:
-        NotFound: No tool with the given identifier exists.
+        NotFound: No tool with the given identifier exists, or it is pending
+            and the user may not see it (cf.
+            `trs_filer.ga4gh.trs.tool_classes.visible_tools()`).
     """
     db_coll_tools = get_collection("tools")
-    obj = db_coll_tools.find_one({"id": id}, TOOL_PROJECTION)
+    obj = db_coll_tools.find_one(visible_tools({"id": id}), TOOL_PROJECTION)
     if obj is None:
         raise NotFound
 
@@ -132,7 +144,7 @@ def toolsIdVersionsVersionIdGet(
         },
     }
     data = db_coll_tools.find_one(
-        filter={"id": id},
+        filter=visible_tools({"id": id}),
         projection=proj,
     )
     if data is None:
@@ -166,7 +178,9 @@ def toolsGet(
     """List all tools.
 
     Filter parameters to subset the tools list can be specified. Filter
-    parameters are additive.
+    parameters are additive. Pending tools are only listed to admins and the
+    users with a role on them (cf.
+    `trs_filer.ga4gh.trs.tool_classes.visible_tools()`).
 
     Args:
         id: Return only entries with the given identifier.
@@ -256,6 +270,7 @@ def toolsGet(
     limit = min(limit, MAX_LIMIT)
 
     # fetch data
+    filt = visible_tools(filt)
     db_coll_tools = get_collection("tools")
     total = db_coll_tools.count_documents(filter=filt)
     cursor = (
@@ -508,7 +523,7 @@ def _version_files(id: str, version_id: str) -> list[dict[str, Any]]:
         NotFound: The tool version does not exist or has no files.
     """
     data = get_collection("tools").find_one(
-        filter={"id": id},
+        filter=visible_tools({"id": id}),
         projection={
             "_id": False,
             "versions": {"$elemMatch": {"id": version_id}},
@@ -658,7 +673,7 @@ def toolsIdVersionsVersionIdTypeFilesGet(
         "versions": {"$elemMatch": {"id": version_id}},
     }
     data = db_coll_tools.find_one(
-        filter={"id": id},
+        filter=visible_tools({"id": id}),
         projection=proj,
     )
 
@@ -728,7 +743,7 @@ def toolsIdVersionsVersionIdContainerfileGet(
         "versions": {"$elemMatch": {"id": version_id}},
     }
     data = db_coll_tools.find_one(
-        filter={"id": id},
+        filter=visible_tools({"id": id}),
         projection=proj,
     )
     if data is None:
@@ -751,13 +766,16 @@ def toolsIdVersionsVersionIdContainerfileGet(
 def toolClassesGet() -> list[dict[str, Any]]:
     """List all tool classes.
 
+    Pending tool classes are only listed to admins and the user who added
+    them (cf. `trs_filer.ga4gh.trs.tool_classes.visible_tool_classes()`).
+
     Returns:
         List of tool class objects.
     """
     db_collection_class = get_collection("toolclasses")
     records = db_collection_class.find(
-        filter={},
-        projection={"_id": False},
+        filter=visible_tool_classes(),
+        projection=TOOL_CLASS_PROJECTION,
     )
     return list(records)
 
@@ -1058,16 +1076,41 @@ def deleteToolVersion(
 def postToolClass() -> str:
     """Add tool class with an auto-generated ID.
 
+    Only users who may add tool classes may (cf.
+    `trs_filer.ga4gh.trs.tool_classes.may_add_tool_classes()`); the tool
+    class is pending if the user's tool classes are.
+
     Returns:
         Identifier of created tool class.
 
     Raises:
+        Forbidden: The user may not add tool classes.
         InternalServerError: No unique identifier could be generated, or the
             object could not be stored.
     """
-    tool_class = RegisterToolClass(data=request.json)
+    _check_add_tool_class()
+    tool_class = RegisterToolClass(
+        data=request.json,
+        created_by=get_current_subject(),
+        pending=tool_classes_pending(),
+    )
     tool_class.register_metadata()
     return tool_class.data["id"]
+
+
+def _check_add_tool_class() -> None:
+    """Check that the current user may add tool classes.
+
+    Raises:
+        Forbidden: The user may not add tool classes (cf.
+            `trs_filer.ga4gh.trs.tool_classes.may_add_tool_classes()`).
+    """
+    if not may_add_tool_classes():
+        logger.info(
+            "Tool class not added: '%s' may not add tool classes.",
+            escape_log_value(get_current_subject()),
+        )
+        raise Forbidden
 
 
 @log_traffic
@@ -1076,11 +1119,13 @@ def putToolClass(
 ) -> str:
     """Add/replace tool class with a user-supplied ID.
 
-    Users who may add tool classes (`POST /toolClasses`; by default, any
-    authenticated user, as in mode `open` of
-    `custom.access_control.tool_classes`) may add a tool class with the
-    identifier of no tool class; only those that the policies allow (admins,
-    by default) may replace it (cf. `_check_put()`).
+    Users who may add tool classes (`POST /toolClasses`, by default any
+    authenticated user, and as the mode of
+    `custom.access_control.tool_classes` allows, cf.
+    `_check_add_tool_class()`) may add a tool class with the identifier of
+    no tool class, which is pending if the user's tool classes are; only
+    those that the policies allow (admins, by default) may replace it (cf.
+    `_check_put()`), which keeps whether it is pending.
 
     Args:
         id: Identifier of tool class to be created/updated.
@@ -1096,6 +1141,8 @@ def putToolClass(
     """
     exists = tool_class_exists(id)
     allow_replace = _check_put("tool class", id, exists)
+    if not exists:
+        _check_add_tool_class()
     tool_class = RegisterToolClass(
         data=request.json,
         id=id,
@@ -1103,6 +1150,8 @@ def putToolClass(
         # replacing was checked for the stored tool class: if it was deleted
         # meanwhile, it isn't added again
         replace_only=allow_replace and exists,
+        created_by=get_current_subject(),
+        pending=tool_classes_pending(),
     )
     tool_class.register_metadata()
     return tool_class.data["id"]
@@ -1135,6 +1184,70 @@ def deleteToolClass(
         return id
     else:
         raise NotFound
+
+
+@log_traffic
+def putToolClassApproval(
+    id: str,
+) -> str:
+    """Approve a pending tool class, and so the tools that have it.
+
+    Only for admins: no policy in `config.yaml` allows it to other users.
+
+    Args:
+        id: Identifier of the tool class.
+
+    Returns:
+        Identifier of the tool class, also if it was approved before.
+
+    Raises:
+        NotFound: No tool class with the given identifier exists.
+    """
+    approved = get_collection("toolclasses").find_one_and_update(
+        {"id": id, PENDING: True}, {"$unset": {PENDING: ""}}
+    )
+    # also if the tool class was approved before, to clear flags missed
+    # meanwhile
+    sync_pending_flags(id)
+    if approved is None:
+        if not tool_class_exists(id):
+            raise NotFound
+        return id
+    logger.info(
+        "Tool class '%s' approved by '%s'.",
+        escape_log_value(id),
+        escape_log_value(get_current_subject()),
+    )
+    return id
+
+
+@log_traffic
+def getApprovals() -> dict[str, list[dict[str, Any]]]:
+    """List the pending tool classes and tools the current user may see.
+
+    Returns:
+        Pending tool classes (`toolClasses`), sorted by identifier: all for
+        admins, those the user added for other users; and pending tools
+        (`tools`, without the files of their versions), sorted by
+        identifier: all for admins, those the user has a role on for other
+        users.
+    """
+    tool_classes = get_collection("toolclasses").find(
+        {"$and": [{PENDING: True}, visible_tool_classes()]},
+        TOOL_CLASS_PROJECTION,
+        sort=[("id", 1)],
+    )
+    tools = list(
+        get_collection("tools").find(
+            {"$and": [{PENDING: True}, own_tools()]},
+            TOOL_PROJECTION,
+            sort=[("id", 1)],
+        )
+    )
+    for tool in tools:
+        for version in tool.get("versions", []):
+            version.pop("files", None)
+    return {"toolClasses": list(tool_classes), "tools": tools}
 
 
 def validate_descriptor_type(type: str) -> None:

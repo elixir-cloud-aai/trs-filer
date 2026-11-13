@@ -217,12 +217,12 @@ Each tool has a tool class (e.g., workflow or command-line tool), which is
 stored with the tool and in the list of tool classes (`GET /toolClasses`).
 When a tool is registered or replaced (`POST /tools`, `PUT /tools/{id}`):
 
-- If a tool class with the identifier of the tool's `toolclass.id` exists,
-  the tool stores a copy of that tool class, not the one it was sent with,
-  and the tool class is not changed.
-- Otherwise, with `custom.toolclass.validation: false` (the default), the
-  tool class is created as sent with the tool (with a generated identifier
-  if it has none); with `custom.toolclass.validation: true`, the
+- If a tool class with the identifier of the tool's `toolclass.id` exists
+  (also if it is pending), the tool stores a copy of that tool class, not
+  the one it was sent with, and the tool class is not changed.
+- Otherwise, if the user may add tool classes (see [Adding tool
+  classes](#adding-tool-classes)), the tool class is created as sent with
+  the tool (with a generated identifier if it has none); if not, the
   registration fails with `400 Bad Request` and nothing is stored.
 
 Tool classes are changed only with the [tool class
@@ -243,31 +243,51 @@ Registry](https://cloud-registry.readthedocs.io/en/latest/configuration/#service
 
 - `open` (the default): any authenticated user, explicitly (`POST
   /toolClasses`, or `PUT /toolClasses/{id}` with the identifier of no tool
-  class) or by registering a tool with a new tool class (see above; not with
-  `custom.toolclass.validation: true`, which leaves only the explicit way);
-  only admins replace and delete tool classes;
-- `controlled`: only admins add tool classes; tools must have a registered
-  tool class;
-- `moderated`: tool classes added by users other than admins are pending
-  until an admin approves them, and so are the tools that have them.
+  class) or by registering a tool with a new tool class (see above);
+- `controlled`: only admins, both ways; tools of other users must have a
+  registered tool class (`400 Bad Request` otherwise), and their `POST
+  /toolClasses` and `PUT /toolClasses/{id}` with new identifiers get `403
+  Forbidden`;
+- `moderated`: any authenticated user, both ways, but the tool classes that
+  users other than admins add are pending until an admin approves them
+  (`PUT /toolClasses/{id}/approval`), and so are the tools that have them.
 
-`open` is the only mode TRS-Filer supports for now: the app refuses to
-start with `controlled` or `moderated`, with an error that the custom config
-doesn't match its model, caused by one that names the setting
-(`access_control.tool_classes: Value error, only the mode 'open' of adding
-tool classes is supported yet`). Nor does it limit the number of tool
-classes that no tool has per user, as Cloud Registry does for service types:
-any authenticated user can add tool classes without bound; admins delete
-unwanted ones with `DELETE /toolClasses/{id}` (see [Access
-control](access-control.md#admins)). To keep users from adding tool classes
-explicitly until `controlled` is supported, remove the rule
-`add-tool-classes` in a config overlay (`security.access_control.policies`,
-`add-tool-classes: null`): `POST /toolClasses` and `PUT /toolClasses/{id}`
-are then for admins only, but registering tools with new tool classes still
-adds them, unless `custom.toolclass.validation` is true. Without the rule
-for adding to a collection (`register-tools` for tools, `add-tool-classes`
-for tool classes), `PUT` with a new identifier is refused (`403`) also for
-users whom other rules allow to replace objects (e.g., editors, see
+In every mode, only admins replace (`PUT /toolClasses/{id}` with the
+identifier of a tool class), approve and delete tool classes; replacing a
+pending tool class doesn't approve it. Tool classes store who added them
+(internal field `_createdBy`, not served).
+
+**Pending tool classes and tools.** In mode `moderated`, pending tool
+classes are listed (`GET /toolClasses`) only to admins and the user who
+added them, and pending tools are served (all reads of tools, also `GET
+/tools`) only to admins and the users with a role on them (see [Roles on
+tools](access-control.md#roles-on-tools)): the reads accept a token for
+that (anonymous reads, and reads with an invalid token, see neither).
+Others can still register tools with a pending tool class, whose tools are
+pending too. `GET /approvals` lists the pending tool classes and tools that
+the user may see (see [Approving tool classes](api.md#approving-tool-classes)).
+An admin's approval of a tool class approves all tools that have it. There is
+no way back to pending: admins delete unwanted tool classes instead (`DELETE
+/toolClasses/{id}`, once no tool has them). Pending tool classes stay
+pending if the mode changes, and tools registered with them are pending
+then too. Tools store whether they are pending (internal field `_pending`,
+not served); the app sets it on registration, clears it on approval and
+corrects it on startup. Without authentication (see [Running without
+authentication](development.md#running-without-authentication)), there are
+no admins: nothing is pending, and all tools are served.
+
+TRS-Filer does not limit the number of tool classes that no tool has per
+user, as Cloud Registry does for service types: in modes `open` and
+`moderated`, any authenticated user can add tool classes without bound;
+admins delete unwanted ones with `DELETE /toolClasses/{id}` (see [Access
+control](access-control.md#admins)). Keep the rule `add-tool-classes`
+(`security.access_control.policies`) and set the mode instead of removing
+the rule: without it, `POST /toolClasses` and `PUT /toolClasses/{id}` are
+for admins only, but registering tools with new tool classes still adds
+them, unless the mode is `controlled`. Without the rule for adding to a
+collection (`register-tools` for tools, `add-tool-classes` for tool
+classes), `PUT` with a new identifier is refused (`403`) also for users
+whom other rules allow to replace objects (e.g., editors, see
 [Admins](access-control.md#admins)): such rules let them replace stored
 objects, not add new ones.
 
@@ -276,8 +296,21 @@ For example, in a config overlay:
 ```yaml
 custom:
     access_control:
-        tool_classes: open
+        tool_classes: moderated
 ```
+
+**Deprecated: `custom.toolclass.validation`.** `custom.toolclass.validation:
+true` required stored tool classes for all tools; it now sets the mode
+`controlled`, which replaces it, and the app warns of it on startup
+(`` `custom.toolclass.validation` is deprecated ... ``). It is removed in
+the next breaking release: set `custom.access_control.tool_classes:
+controlled` instead. With the mode `moderated`, the app refuses to start
+(the two contradict each other). Unlike before, admins add tool classes by
+registering tools in mode `controlled`, and other users can't add tool
+classes explicitly either (see [Upgrading](upgrading.md#from-050)). The TRS
+specification leaves who adds tool classes to registries (`GET
+/toolClasses` lists "all tool-classes available"); in mode `controlled`,
+every tool has a listed tool class, as with the old setting.
 
 ## Remote files
 

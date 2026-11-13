@@ -172,6 +172,35 @@ existing data needs no changes. Check clients and custom configs:
        registered them: stop them before the new version takes writes. With
        the Helm chart, the new release replaces the old one anyway (see
        below).
+- **Modes of adding tool classes:** `custom.access_control.tool_classes`
+  supports `controlled` (only admins add tool classes) and `moderated`
+  (tool classes of other users, and their tools, are pending until an admin
+  approves them, `PUT /toolClasses/{id}/approval`; `GET /approvals` lists
+  them), which the app refused on startup before (see [Adding tool
+  classes](configuration.md#adding-tool-classes)). The TRS reads accept a
+  token (optional), for the pending tools and tool classes that its user
+  may see; invalid tokens are still read as anonymous. Tool classes store
+  who added them, and pending ones and their tools a flag (internal fields
+  `_createdBy` and `_pending`, not served; tool classes stored before have
+  no `_createdBy`). To upgrade:
+    1. **Deprecated `custom.toolclass.validation` (breaking for some
+       setups):** `true` now sets the mode `controlled`, with a warning on
+       startup; set `custom.access_control.tool_classes: controlled`
+       instead and remove `validation`, which is removed in the next
+       breaking release. Behaviour changes with it: users other than
+       admins can't add tool classes explicitly anymore (`POST
+       /toolClasses`, `PUT /toolClasses/{id}` with new identifiers: `403
+       Forbidden` instead of adding them), and admins add tool classes by
+       registering tools with new ones (instead of `400 Bad Request`).
+       Combined with `moderated`, the app refuses to start.
+    2. Config overlays that give `security.access_control.policies` as a
+       list: add the new rule `list-approvals` (`[p, "*",
+       /ga4gh/trs/v2/approvals, "GET|HEAD"]`), or users other than admins
+       get `403 Forbidden` from `GET /approvals`.
+    3. Instances of the old version that still run next to the new one
+       serve the internal fields of the tool classes that the new one adds
+       (who added them), and pending tools to everybody: stop them before
+       the new version takes writes.
 
 - **Helm chart (breaking):** the chart is a thin chart over FOCA's library
   chart `foca-common`, with camelCase values, and **releases of earlier

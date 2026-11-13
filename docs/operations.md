@@ -67,7 +67,8 @@ archive inconsistent: stop writes (e.g., stop the app with
 MongoDB that takes consistent snapshots.
 
 The base config creates unique indexes on the identifiers (`id`) of tools
-and tool classes on startup.
+and tool classes on startup, and sparse indexes on their pending flags
+(`_pending`, see [Adding tool classes](configuration.md#adding-tool-classes)).
 
 ## Permissions API
 
