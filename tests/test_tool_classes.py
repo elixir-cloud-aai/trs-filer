@@ -379,9 +379,7 @@ def test_open_mode_keeps_pending(
     tools = mongo_client[DB]["tools"]
     assert _doc(tools, tool_id)[PENDING] is True
     assert PENDING not in _doc(tools, other_id)
-    assert _doc(mongo_client[DB]["toolclasses"], "other")[
-        "_createdBy"
-    ] == (COLLEAGUE)
+    assert _doc(mongo_client[DB]["toolclasses"], "other")["_createdBy"] == (COLLEAGUE)
 
 
 def test_startup_sync(mongo_client: MongoClient[dict[str, Any]], overlay: Path) -> None:
@@ -418,8 +416,8 @@ def test_sync_pending_flags_changed(
     """
     tools = mongo_client[DB]["tools"]
     tools.insert_one({"id": "TOOL", "toolclass": {"id": "new"}})
-    states = iter([True, False, False])
-    monkeypatch.setattr(tool_classes, "is_pending", lambda id: next(states))
+    states = iter([False, True, True])
+    monkeypatch.setattr(tool_classes, "is_approved", lambda id: next(states))
     with app.app.app_context():
         sync_pending_flags("new")
         sync_pending_tools()

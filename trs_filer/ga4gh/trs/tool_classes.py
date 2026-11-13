@@ -102,17 +102,17 @@ def tool_classes_pending() -> bool:
     return mode == "moderated" and not auth_disabled() and not is_admin()
 
 
-def is_pending(id: str) -> bool:
-    """Check whether a tool class is pending.
+def is_approved(id: str) -> bool:
+    """Check whether a tool class is stored and approved.
 
     Args:
         id: Tool class identifier.
 
     Returns:
-        Whether the tool class is stored as pending (cf. `PENDING`).
+        Whether the tool class is stored and not pending (cf. `PENDING`).
     """
     collection = get_collection("toolclasses")
-    return collection.count_documents({"id": id, PENDING: True}, limit=1) > 0
+    return collection.count_documents({"id": id, **APPROVED}, limit=1) > 0
 
 
 def visible_tool_classes() -> dict[str, Any]:
@@ -154,28 +154,32 @@ def visible_tools(query: dict[str, Any] | None = None) -> dict[str, Any]:
         query: Query of tools; all tools if `None`.
 
     Returns:
-        The query if no tool is pending (one indexed lookup), the user is an
-        admin or authentication is disabled; otherwise, the query restricted
-        to the tools that aren't pending, and those the user has a role on.
+        The query if the user is an admin or authentication is disabled;
+        otherwise, the query restricted to the tools that aren't pending, and,
+        if any tool is pending (one indexed lookup), those the user has a role
+        on.
     """
     query = {} if query is None else query
+    if auth_disabled() or is_admin():
+        return query
     tools = get_collection("tools")
     if tools.find_one({PENDING: True}, {"_id": True}) is None:
-        return query
-    own = own_tools()
-    if not own:
-        return query
-    visible = {"$or": [dict(APPROVED), own]}
+        # also for tools that become pending meanwhile
+        visible: dict[str, Any] = dict(APPROVED)
+    else:
+        visible = {"$or": [dict(APPROVED), own_tools()]}
     return {"$and": [query, visible]} if query else visible
 
 
 def sync_pending_flags(id: str, query: dict[str, Any] | None = None) -> None:
     """Set or clear the pending flags of tools by their tool class.
 
-    Writes first, then checks the tool class again, and writes again if its
-    state changed meanwhile (e.g., approved, or deleted and added again as
-    pending), so that concurrent calls and approvals end with the flags of
-    its last state: each change of the state is followed by a call (cf.
+    Tools are pending unless their tool class is stored and approved (e.g.,
+    also while it is deleted, or not yet added). Writes first, then checks
+    the tool class again, and writes again if its state changed meanwhile
+    (e.g., approved, or deleted and added again as pending), so that
+    concurrent calls and approvals end with the flags of its last state:
+    each change of the state is followed by a call (cf.
     `putToolClassApproval()`, `RegisterTool.register_metadata()`), and
     either that call or the check here sees the other's write.
 
@@ -186,13 +190,13 @@ def sync_pending_flags(id: str, query: dict[str, Any] | None = None) -> None:
     """
     tools = get_collection("tools")
     query = {**(query or {}), "toolclass.id": id}
-    pending = is_pending(id)
+    pending = not is_approved(id)
     while True:
         if pending:
             tools.update_many({**query, **APPROVED}, {"$set": {PENDING: True}})
         else:
             tools.update_many({**query, PENDING: True}, {"$unset": {PENDING: ""}})
-        changed = is_pending(id)
+        changed = not is_approved(id)
         if changed == pending:
             return
         pending = changed

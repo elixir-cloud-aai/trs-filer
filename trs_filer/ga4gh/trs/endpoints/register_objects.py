@@ -18,9 +18,7 @@ from trs_filer.errors.exceptions import (
     NotFound,
 )
 from trs_filer.ga4gh.trs.tool_classes import (
-    CREATED_BY as TOOL_CLASS_CREATED_BY,
-)
-from trs_filer.ga4gh.trs.tool_classes import (
+    CREATED_BY,
     PENDING,
     TOOL_CLASS_PROJECTION,
     UNREGISTERED_TOOL_CLASS,
@@ -38,10 +36,10 @@ logger = logging.getLogger(__name__)
 
 # Internal fields of stored tools (not part of TRS, and not served): who
 # registered the tool (the identifier of the user, or `None` without
-# authentication), when, when it or one of its versions last changed, and
-# whether it is pending, as its tool class is (`PENDING`, cf.
-# `trs_filer.ga4gh.trs.tool_classes`; not set for tools that aren't)
-CREATED_BY = "_createdBy"
+# authentication; `CREATED_BY`, as for tool classes), when, when it or one
+# of its versions last changed, and whether it is pending, as its tool class
+# is (`PENDING`, cf. `trs_filer.ga4gh.trs.tool_classes`; not set for tools
+# that aren't)
 CREATED_AT = "_createdAt"
 UPDATED_AT = "_updatedAt"
 INTERNAL_FIELDS = (CREATED_BY, CREATED_AT, UPDATED_AT, PENDING)
@@ -243,7 +241,7 @@ class RegisterTool:
         # tools store a copy of their tool class: that of an existing one
         stored_class = self.db_coll_classes.find_one(
             filter={"id": tool_class_id},
-            projection={"_id": False, TOOL_CLASS_CREATED_BY: False},
+            projection={"_id": False, CREATED_BY: False},
         )
         if stored_class is not None:
             self.pending = stored_class.pop(PENDING, None) is True
@@ -363,7 +361,7 @@ class RegisterTool:
         that one instead, unless the tool was replaced in the meantime, too.
         """
         tool_class = dict(self.data["toolclass"])
-        internal: dict[str, Any] = {TOOL_CLASS_CREATED_BY: self.created_by}
+        internal: dict[str, Any] = {CREATED_BY: self.created_by}
         if self.pending:
             internal[PENDING] = True
         try:

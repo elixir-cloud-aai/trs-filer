@@ -285,7 +285,8 @@ and deleting tool classes needs an admin; other users get `403 Forbidden`
 In mode `moderated` of `custom.access_control.tool_classes` (see [Adding
 tool classes](configuration.md#adding-tool-classes)), the tool classes that
 users other than admins add are pending, and so are the tools that have
-them: they are served only to admins and to the user who added the tool
+them, also those of other users (who then see the tool class in their
+tools): they are served only to admins and to the user who added the tool
 class, or who has a role on the tool. Users list what they may see of them
 with `GET /approvals` (any authenticated user; tools without the files of
 their versions), e.g.:

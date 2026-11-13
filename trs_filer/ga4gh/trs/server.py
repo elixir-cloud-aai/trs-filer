@@ -1237,18 +1237,17 @@ def putToolClassApproval(
     approved = get_collection("toolclasses").find_one_and_update(
         {"id": id, PENDING: True}, {"$unset": {PENDING: ""}}
     )
+    if approved is None and not tool_class_exists(id):
+        raise NotFound
     # also if the tool class was approved before, to clear flags missed
     # meanwhile
     sync_pending_flags(id)
-    if approved is None:
-        if not tool_class_exists(id):
-            raise NotFound
-        return id
-    logger.info(
-        "Tool class '%s' approved by '%s'.",
-        escape_log_value(id),
-        escape_log_value(get_current_subject()),
-    )
+    if approved is not None:
+        logger.info(
+            "Tool class '%s' approved by '%s'.",
+            escape_log_value(id),
+            escape_log_value(get_current_subject()),
+        )
     return id
 
 
