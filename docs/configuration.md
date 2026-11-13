@@ -416,7 +416,9 @@ responses with files (descriptors, tests, containerfiles) have the
 presigned URL of the object as `url`, instead of the `content` and of the
 URL given on registration, and the SHA-256 checksum of the content
 (`sha-256`, unless given on registration); plain responses (`PLAIN_`
-types) redirect to the presigned URL (`302 Found`). Presigned URLs expire
+types) redirect to the presigned URL (`302 Found`). Presigned URLs serve
+the content as `text/plain` and as a download (`Content-Disposition:
+attachment`), so that browsers don't display it. Presigned URLs expire
 after `s3.presigned_url_expiry` seconds, or earlier, when the version is
 replaced or deleted (its objects are deleted). ZIP archives are still built
 by the app.

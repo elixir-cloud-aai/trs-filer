@@ -484,6 +484,7 @@ def test_presigned_urls(
     url = response.headers["Location"]
     assert "X-Amz-Signature=" in url
     assert "response-content-type=text%2Fplain" in url
+    assert "response-content-disposition=attachment" in url
     if S3_TEST_ENDPOINT_URL:
         # the server serves the object at the URL, without credentials
         # (`requests` is mocked in the tests)
@@ -784,6 +785,40 @@ def test_failed_registration_deletes_objects(
     assert _keys(s3) == set()
 
 
+def test_failed_upload_deletes_object(
+    s3_client: FlaskClient,
+    s3: "S3Client",
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Objects of uploads that fail although stored (lost response) are deleted.
+
+    Args:
+        s3_client: Test client.
+        s3: S3 client.
+        monkeypatch: Patch of `FileStore.put()`.
+    """
+    put = FileStore.put
+
+    def stored_but_failed(self: FileStore, key: str, content: bytes) -> None:
+        """Store the object, then fail as if the response was lost.
+
+        Args:
+            self: Store.
+            key: Key of the object.
+            content: Content.
+
+        Raises:
+            InternalServerError: Always.
+        """
+        put(self, key, content)
+        raise InternalServerError
+
+    monkeypatch.setattr(FileStore, "put", stored_but_failed)
+    response = s3_client.put(TOOL_PATH, json=_tool())
+    assert response.status_code == 500
+    assert _keys(s3) == set()
+
+
 def test_invalid_version_stores_nothing(s3_client: FlaskClient, s3: "S3Client") -> None:
     """Versions with invalid files store no objects.
 
@@ -859,7 +894,7 @@ def test_store_errors(records: Records) -> None:
     client.generate_presigned_url.side_effect = _client_error("GetObject")
     store = FileStore(S3StorageConfig(bucket=BUCKET), client)
     with pytest.raises(InternalServerError):
-        store.put(b"content")
+        store.put("k", b"content")
     with pytest.raises(InternalServerError):
         store.get({"key": "k", "sha256": "", "size": 1})
     with pytest.raises(InternalServerError):

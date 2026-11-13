@@ -106,10 +106,19 @@ class FileStore:
             )
         self.client: S3Client = client
 
-    def put(self, content: bytes) -> dict[str, Any]:
+    def new_key(self) -> str:
+        """Get the key of a new object: random, with the prefix.
+
+        Returns:
+            Key.
+        """
+        return f"{self.config.prefix}{uuid.uuid4().hex}"
+
+    def put(self, key: str, content: bytes) -> dict[str, Any]:
         """Store content as a new object.
 
         Args:
+            key: Key of the object (cf. `new_key()`).
             content: Content of a file.
 
         Returns:
@@ -117,9 +126,10 @@ class FileStore:
             (hex) and `size` (bytes) of the content.
 
         Raises:
-            InternalServerError: The object could not be stored.
+            InternalServerError: The object could not be stored (it may
+                have been stored nevertheless, e.g., if the response was
+                lost).
         """
-        key = f"{self.config.prefix}{uuid.uuid4().hex}"
         try:
             self.client.put_object(
                 Bucket=self.config.bucket,
@@ -153,9 +163,14 @@ class FileStore:
         key = ref["key"]
         try:
             response = self.client.get_object(Bucket=self.config.bucket, Key=key)
-            # At most one byte more than expected, to detect larger objects
-            # without reading them
-            content = response["Body"].read(ref["size"] + 1)
+            body = response["Body"]
+            try:
+                # At most one byte more than expected, to detect larger
+                # objects without reading them; the connection is closed
+                # rather than reused, as the rest of the body is left unread
+                content = body.read(ref["size"] + 1)
+            finally:
+                body.close()
         except ClientError as exc:
             if exc.response.get("Error", {}).get("Code") in ("NoSuchKey", "404"):
                 logger.warning("Object '%s' doesn't exist.", key)
@@ -194,7 +209,8 @@ class FileStore:
         """Get a presigned URL to read an object.
 
         The URL is valid for `presigned_url_expiry` seconds; responses are
-        `text/plain`, as when files are served through the app.
+        `text/plain`, as when files are served through the app, and
+        downloads (`Content-Disposition: attachment`).
 
         Args:
             key: Key of the object.
@@ -213,6 +229,9 @@ class FileStore:
                     "Bucket": self.config.bucket,
                     "Key": key,
                     "ResponseContentType": CONTENT_TYPE,
+                    # downloaded, never shown, as browsers might take the
+                    # content for HTML (no `X-Content-Type-Options` here)
+                    "ResponseContentDisposition": "attachment",
                 },
                 ExpiresIn=self.config.presigned_url_expiry,
             )
@@ -266,9 +285,12 @@ def store_file(entry: dict[str, Any]) -> None:
     if store is None:  # pragma: no cover (`StorageConfig` requires `s3`)
         raise InternalServerError
     wrapper = entry["file_wrapper"]
-    ref = store.put(str(wrapper["content"]).encode("utf-8"))
+    # remembered before the upload, which may store the object although it
+    # fails (e.g., if the response is lost)
+    key = store.new_key()
     new_keys: list[str] = g.setdefault(NEW_KEYS, [])
-    new_keys.append(ref["key"])
+    new_keys.append(key)
+    ref = store.put(key, str(wrapper["content"]).encode("utf-8"))
     del wrapper["content"]
     entry[STORAGE_FIELD] = ref
 
