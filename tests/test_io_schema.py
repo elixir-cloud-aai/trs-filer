@@ -15,6 +15,7 @@ from typing import Any, NoReturn
 import pytest
 
 from trs_filer import io_schema
+from trs_filer.custom_config import IoSchemaConfig
 from trs_filer.errors.exceptions import InternalServerError, InvalidRequest
 from trs_filer.io_schema import (
     IO_SCHEMA_FILE_NAME,
@@ -38,25 +39,25 @@ ROOT = Path(__file__).resolve().parents[1]
 EXAMPLE = ROOT / "docs" / "examples" / "io-schema"
 # The vendored meta-schema of the profile, by path relative to
 # `META_SCHEMA_DIR`, with the SHA-256 checksums of the files of
-# uniqueg/ga4gh-io-schema (`schemas/`) at commit 573f65e
+# uniqueg/ga4gh-io-schema (`schemas/`) at commit d44e8d4
 VENDORED = {
     "ga4gh-io-profile.schema.json": (
-        "65e0971a61ea57c8f0a4e50c5127089fd9fc3ae7385ce8788bdc05a822bf315f"
+        "96b86700af3b0179ce1a3987716e044203c47a351cb3ac5300cb18e4c418ab2f"
     ),
     "vocabularies/annotations.schema.json": (
-        "8a479bc5adc05b84eed171954484fb2caf2746b6a2f681e366519dba95101dc5"
+        "01f80107c0f40d96f78849fabcfbd618f1fff33c762d9c4f41cab086a8d8e43c"
     ),
     "vocabularies/file.schema.json": (
-        "71c35c70e852385d9b07cdf5388164827ccf168cabf069f2a437e7a7d1790908"
+        "064ad2f640e4e5b79fce7ceb1558ee7078773cf6230f1bdeebb70c32004d97b8"
     ),
     "vocabularies/outputs.schema.json": (
-        "258378e87087f1a8122a22df192b1d33e225fafdfd01705c4a69da168329dfcc"
+        "2bcf4d16f4b6d6e7190537a58d12919620cfa2af2b2de2d381bc52a3f267c103"
     ),
     "vocabularies/parameter.schema.json": (
         "f0e25228d50b73168039a7b7c424b460c0f8882fa6eb53d0886a3fd086cf0870"
     ),
     "vocabularies/ui-widgets.schema.json": (
-        "23829092a9b661903213ab6505df00549ea96806f0c5666c6a7bd0b149c56cc1"
+        "0fdb3d3b0989b4f719ad737a8364bc8f5af4e9774a3393d8ec0418a5dc395ed1"
     ),
     "vocabularies/workflow.schema.json": (
         "f362277ba39661fb4ebf35909f1f523b0dc8eda81b7e856e83dd7ffa1e2822f8"
@@ -501,6 +502,75 @@ def test_validator_formats() -> None:
     assert sorted(checker.checkers) == sorted(META_SCHEMA_FORMATS)
 
 
+def _nested_arrays(depth: int) -> dict[str, Any]:
+    """Get the schema of an input of nested arrays (e.g., CWL's `File[][]`).
+
+    Args:
+        depth: Number of nested arrays.
+
+    Returns:
+        The schema, with a file as the innermost items.
+    """
+    schema: dict[str, Any] = {
+        "type": "string",
+        "x-ga4gh-file": {"kind": "file"},
+        "x-ga4gh-parameter": {"type": "File"},
+    }
+    for _ in range(depth):
+        schema = {
+            "type": "array",
+            "items": schema,
+            "x-ga4gh-parameter": {"type": "File[]"},
+        }
+    return schema
+
+
+def _nested_records(depth: int, width: int) -> dict[str, Any]:
+    """Get the schema of an input of nested records.
+
+    Args:
+        depth: Number of nested records.
+        width: Number of fields of each record.
+
+    Returns:
+        The schema, with strings as the innermost fields.
+    """
+    schema: dict[str, Any] = {"type": "string"}
+    for _ in range(depth):
+        schema = {
+            "type": "object",
+            "properties": {f"field_{index}": schema for index in range(width)},
+        }
+    return schema
+
+
+@pytest.mark.parametrize(
+    "parameter",
+    [_nested_arrays(10), _nested_records(4, 3)],
+    ids=["arrays-10", "records-4x3"],
+)
+def test_check_io_schema_nested(parameter: dict[str, Any]) -> None:
+    """Nested schemas are checked within the default time limit.
+
+    Regression test of uniqueg/ga4gh-io-schema #47: against the meta-schema
+    of commit 573f65e, validating either schema took more than 70 s (time
+    exponential in the depth of nesting); against that of commit d44e8d4,
+    each is checked well within the time limit (about 0.2 s, including the
+    start of the process).
+
+    Args:
+        parameter: Schema of the only input.
+    """
+    schema = {
+        "$schema": META_SCHEMA_ID,
+        "type": "object",
+        "properties": {
+            "inputs": {"type": "object", "properties": {"parameter": parameter}},
+        },
+    }
+    check_io_schema(json.dumps(schema), "CWL", timeout=IoSchemaConfig().timeout)
+
+
 def test_check_io_schema_timeout() -> None:
     """Schemas not checked within the time limit are rejected."""
     content = json.dumps(_schema())
@@ -508,8 +578,7 @@ def test_check_io_schema_timeout() -> None:
         check_io_schema(content, "WDL", timeout=0.001)
     assert exc_info.value.description == (
         "The I/O Schema file (ga4gh-io.schema.json) could not be checked within "
-        "the time limit of 0.001 s; simplify it (e.g., nest its schemas less "
-        "deeply)."
+        "the time limit of 0.001 s; simplify it (e.g., make it smaller)."
     )
 
 

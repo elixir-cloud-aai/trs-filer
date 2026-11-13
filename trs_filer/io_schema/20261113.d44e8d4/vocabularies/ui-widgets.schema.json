@@ -1,0 +1,622 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/uniqueg/ga4gh-io-schema/v0.3.0/schemas/vocabularies/ui-widgets.schema.json",
+  "title": "GA4GH UI Widgets Vocabulary",
+  "description": "Controlled vocabulary defining UI rendering hints for input and output properties.",
+  "type": "string",
+  "anyOf": [
+    {
+      "enum": [
+        "text",
+        "textarea",
+        "number",
+        "slider",
+        "dropdown",
+        "typeahead",
+        "radio",
+        "checkbox",
+        "switch",
+        "date-picker",
+        "time-picker",
+        "datetime-picker",
+        "color-picker",
+        "file-picker",
+        "directory-picker",
+        "tags",
+        "html-viewer",
+        "table-viewer"
+      ]
+    },
+    {
+      "type": "string",
+      "pattern": "^custom:[a-z0-9-]+$",
+      "not": {
+        "pattern": "\\n"
+      },
+      "description": "Custom widget fallback allowing platform-specific experimental UI components (e.g., custom:my-widget)."
+    }
+  ],
+  "$defs": {
+    "inputParameters": {
+      "description": "The value of properties of inputs: the parameters directly under inputs take no output viewer. A best-effort check: it doesn't reach nested schemas or definitions, where clients ignore viewers on inputs.",
+      "additionalProperties": {
+        "properties": {
+          "x-ga4gh-ui-widget": {
+            "not": {
+              "enum": [
+                "html-viewer",
+                "table-viewer"
+              ]
+            }
+          }
+        }
+      }
+    },
+    "outputParameters": {
+      "description": "The value of properties of outputs: the outputs take output viewers and custom widgets only, no input widget. A best-effort check: it doesn't reach nested schemas, where clients ignore input widgets on outputs.",
+      "additionalProperties": {
+        "properties": {
+          "x-ga4gh-ui-widget": {
+            "not": {
+              "enum": [
+                "text",
+                "textarea",
+                "number",
+                "slider",
+                "dropdown",
+                "typeahead",
+                "radio",
+                "checkbox",
+                "switch",
+                "date-picker",
+                "time-picker",
+                "datetime-picker",
+                "color-picker",
+                "file-picker",
+                "directory-picker",
+                "tags"
+              ]
+            }
+          }
+        }
+      }
+    },
+    "type": {
+      "description": "Rules for the type keyword of a schema with a widget: the type, or an array of types with null (e.g., [\"string\", \"null\"]).",
+      "$defs": {
+        "string": {
+          "required": [
+            "type"
+          ],
+          "properties": {
+            "type": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "string"
+                  ]
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "enum": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "contains": {
+                    "enum": [
+                      "string"
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        },
+        "numeric": {
+          "required": [
+            "type"
+          ],
+          "properties": {
+            "type": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "integer",
+                    "number"
+                  ]
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "enum": [
+                      "integer",
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "contains": {
+                    "enum": [
+                      "integer",
+                      "number"
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        },
+        "boolean": {
+          "required": [
+            "type"
+          ],
+          "properties": {
+            "type": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "boolean"
+                  ]
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "enum": [
+                      "boolean",
+                      "null"
+                    ]
+                  },
+                  "contains": {
+                    "enum": [
+                      "boolean"
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        },
+        "array": {
+          "required": [
+            "type"
+          ],
+          "properties": {
+            "type": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "array"
+                  ]
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "enum": [
+                      "array",
+                      "null"
+                    ]
+                  },
+                  "contains": {
+                    "enum": [
+                      "array"
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
+    "fit": {
+      "title": "Widget fit",
+      "description": "The keywords that each widget of the vocabulary needs in the schema that carries it (see the table of widgets in the specification). Applied to every schema; custom widgets are not checked. The keywords must be in the same schema as the widget, not only in a schema that it refers to.",
+      "allOf": [
+        {
+          "$comment": "Strings: one line, several lines, or a colour #rrggbb.",
+          "if": {
+            "required": [
+              "x-ga4gh-ui-widget"
+            ],
+            "properties": {
+              "x-ga4gh-ui-widget": {
+                "enum": [
+                  "text",
+                  "textarea",
+                  "color-picker"
+                ]
+              }
+            }
+          },
+          "then": {
+            "$ref": "#/$defs/type/$defs/string"
+          }
+        },
+        {
+          "$comment": "A number field for integer or number.",
+          "if": {
+            "required": [
+              "x-ga4gh-ui-widget"
+            ],
+            "properties": {
+              "x-ga4gh-ui-widget": {
+                "enum": [
+                  "number"
+                ]
+              }
+            }
+          },
+          "then": {
+            "$ref": "#/$defs/type/$defs/numeric"
+          }
+        },
+        {
+          "$comment": "A slider needs both bounds.",
+          "if": {
+            "required": [
+              "x-ga4gh-ui-widget"
+            ],
+            "properties": {
+              "x-ga4gh-ui-widget": {
+                "enum": [
+                  "slider"
+                ]
+              }
+            }
+          },
+          "then": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/type/$defs/numeric"
+              },
+              {
+                "anyOf": [
+                  {
+                    "required": [
+                      "minimum"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "exclusiveMinimum"
+                    ]
+                  }
+                ]
+              },
+              {
+                "anyOf": [
+                  {
+                    "required": [
+                      "maximum"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "exclusiveMaximum"
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "$comment": "One value of enum, or several (an array whose items have enum).",
+          "if": {
+            "required": [
+              "x-ga4gh-ui-widget"
+            ],
+            "properties": {
+              "x-ga4gh-ui-widget": {
+                "enum": [
+                  "dropdown"
+                ]
+              }
+            }
+          },
+          "then": {
+            "anyOf": [
+              {
+                "required": [
+                  "enum"
+                ]
+              },
+              {
+                "allOf": [
+                  {
+                    "$ref": "#/$defs/type/$defs/array"
+                  },
+                  {
+                    "required": [
+                      "items"
+                    ],
+                    "properties": {
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "enum"
+                        ]
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "$comment": "One value of enum.",
+          "if": {
+            "required": [
+              "x-ga4gh-ui-widget"
+            ],
+            "properties": {
+              "x-ga4gh-ui-widget": {
+                "enum": [
+                  "radio"
+                ]
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "enum"
+            ]
+          }
+        },
+        {
+          "$comment": "Suggestions from enum (values restricted) or examples (free text).",
+          "if": {
+            "required": [
+              "x-ga4gh-ui-widget"
+            ],
+            "properties": {
+              "x-ga4gh-ui-widget": {
+                "enum": [
+                  "typeahead"
+                ]
+              }
+            }
+          },
+          "then": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/type/$defs/string"
+              },
+              {
+                "anyOf": [
+                  {
+                    "required": [
+                      "enum"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "examples"
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "$comment": "A boolean.",
+          "if": {
+            "required": [
+              "x-ga4gh-ui-widget"
+            ],
+            "properties": {
+              "x-ga4gh-ui-widget": {
+                "enum": [
+                  "checkbox",
+                  "switch"
+                ]
+              }
+            }
+          },
+          "then": {
+            "$ref": "#/$defs/type/$defs/boolean"
+          }
+        },
+        {
+          "$comment": "An RFC 3339 full-date.",
+          "if": {
+            "required": [
+              "x-ga4gh-ui-widget"
+            ],
+            "properties": {
+              "x-ga4gh-ui-widget": {
+                "enum": [
+                  "date-picker"
+                ]
+              }
+            }
+          },
+          "then": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/type/$defs/string"
+              },
+              {
+                "required": [
+                  "format"
+                ],
+                "properties": {
+                  "format": {
+                    "const": "date"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        {
+          "$comment": "An RFC 3339 full-time, with offset.",
+          "if": {
+            "required": [
+              "x-ga4gh-ui-widget"
+            ],
+            "properties": {
+              "x-ga4gh-ui-widget": {
+                "enum": [
+                  "time-picker"
+                ]
+              }
+            }
+          },
+          "then": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/type/$defs/string"
+              },
+              {
+                "required": [
+                  "format"
+                ],
+                "properties": {
+                  "format": {
+                    "const": "time"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        {
+          "$comment": "An RFC 3339 date-time.",
+          "if": {
+            "required": [
+              "x-ga4gh-ui-widget"
+            ],
+            "properties": {
+              "x-ga4gh-ui-widget": {
+                "enum": [
+                  "datetime-picker"
+                ]
+              }
+            }
+          },
+          "then": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/type/$defs/string"
+              },
+              {
+                "required": [
+                  "format"
+                ],
+                "properties": {
+                  "format": {
+                    "const": "date-time"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        {
+          "$comment": "A file reference to a file.",
+          "if": {
+            "required": [
+              "x-ga4gh-ui-widget"
+            ],
+            "properties": {
+              "x-ga4gh-ui-widget": {
+                "enum": [
+                  "file-picker",
+                  "html-viewer",
+                  "table-viewer"
+                ]
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "x-ga4gh-file"
+            ],
+            "properties": {
+              "x-ga4gh-file": {
+                "properties": {
+                  "kind": {
+                    "const": "file"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "$comment": "A file reference to a directory.",
+          "if": {
+            "required": [
+              "x-ga4gh-ui-widget"
+            ],
+            "properties": {
+              "x-ga4gh-ui-widget": {
+                "enum": [
+                  "directory-picker"
+                ]
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "x-ga4gh-file"
+            ],
+            "properties": {
+              "x-ga4gh-file": {
+                "properties": {
+                  "kind": {
+                    "const": "directory"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "$comment": "An array of strings, one per tag.",
+          "if": {
+            "required": [
+              "x-ga4gh-ui-widget"
+            ],
+            "properties": {
+              "x-ga4gh-ui-widget": {
+                "enum": [
+                  "tags"
+                ]
+              }
+            }
+          },
+          "then": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/type/$defs/array"
+              },
+              {
+                "required": [
+                  "items"
+                ],
+                "properties": {
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "type"
+                    ],
+                    "properties": {
+                      "type": {
+                        "const": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}
