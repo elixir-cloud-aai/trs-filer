@@ -362,6 +362,28 @@ def test_extra_env() -> None:
     assert variables["FORWARDED_ALLOW_IPS"] == "192.0.2.0/24"
 
 
+def test_object_storage() -> None:
+    """Object storage is set in `config`, its credentials from a Secret.
+
+    As in "Object storage" of `deployment/README.md`: the ConfigMap has the
+    connection, but no credentials, which come from `trsFiler.extraEnvFrom`.
+    """
+    storage = {
+        "backend": "s3",
+        "s3": {"endpoint_url": "https://s3.example.org", "bucket": "trs-filer"},
+    }
+    secret = [{"secretRef": {"name": "trs-filer-s3-credentials"}}]
+    resources = render(
+        "--set-json",
+        f"config.custom.storage={json.dumps(storage)}",
+        "--set-json",
+        f"trsFiler.extraEnvFrom={json.dumps(secret)}",
+    )
+    assert overlay(resources)["custom"]["storage"] == storage
+    assert container(resources)["envFrom"] == secret
+    assert not any(name.startswith("AWS_") for name in env(resources))
+
+
 def test_extra_env_reserved() -> None:
     """`trsFiler.extraEnv` must not set the chart's variables."""
     extra = [{"name": "FOCA_CONFIG_OVERLAY", "value": "/etc/other.yaml"}]

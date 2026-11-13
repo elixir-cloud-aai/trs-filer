@@ -35,6 +35,10 @@ HTTP API, see [API](api.md) and the Swagger UI of a deployment.
 
 ::: trs_filer.remote_files
 
+## File storage
+
+::: trs_filer.storage
+
 ## Errors
 
 ::: trs_filer.errors.exceptions
