@@ -40,7 +40,6 @@ from trs_filer.ga4gh.trs.permissions import (
     own_tool,
     remove_roles,
     tool_class_exists,
-    tool_exists,
 )
 from trs_filer.remote_files import fetch_remote_file
 from trs_filer.utils import get_collection, get_custom_config
@@ -771,9 +770,11 @@ def _check_put(kind: str, id: str, exists: bool) -> bool:
     (`x-foca-access-control: false`), as the policies of the paths of objects
     are for their owners: stored objects may be replaced by users whom the
     policies allow the request (e.g., owners of tools, and admins); new
-    objects may be added by those, and by users whom the policies allow to
-    add objects to the collection (`POST`, e.g., any authenticated user).
-    Without authentication (`disable_auth`), the request is allowed.
+    objects may be added only by users whom the policies allow to add objects
+    to the collection (`POST`, e.g., any authenticated user), also if a rule
+    for the path of the object would allow the request (e.g., a role left on
+    the identifier). Without authentication (`disable_auth`), the request is
+    allowed.
 
     Args:
         kind: Kind of the object, for logs (e.g., `tool`).
@@ -790,10 +791,10 @@ def _check_put(kind: str, id: str, exists: bool) -> bool:
     # Only requests without authentication have no token
     if not get_current_claims():
         return True
-    if is_permitted():
-        return True
-    collection = request.path.rsplit("/", 1)[0]
-    if not exists and is_permitted_for(collection, "POST"):
+    if exists:
+        if is_permitted():
+            return True
+    elif is_permitted_for(request.path.rsplit("/", 1)[0], "POST"):
         return False
     logger.info(
         "%s '%s' not %s: '%s' may not %s it.",
@@ -820,9 +821,10 @@ def _register_tool(tool: RegisterTool) -> str:
     tool.register_metadata()
     if tool.was_created:
         try:
-            own_tool(tool.data["id"])
+            own_tool(tool.data["id"], tool.stored_id)
         except Exception:
-            get_collection("tools").delete_one({"id": tool.data["id"]})
+            # only the tool added here, not one registered again meanwhile
+            get_collection("tools").delete_one({"_id": tool.stored_id})
             remove_roles(tool.data["id"])
             raise
     return str(tool.data["id"])
@@ -923,10 +925,12 @@ def deleteTool(
         NotFound: No tool with the given identifier exists.
     """
     db_coll_tools = get_collection("tools")
-    if not tool_exists(id):
+    stored = db_coll_tools.find_one({"id": id}, {"_id": True})
+    if stored is None:
         raise NotFound
     remove_roles(id)
-    del_obj_tools = db_coll_tools.delete_one({"id": id})
+    # only the tool checked, not one registered again with the identifier
+    del_obj_tools = db_coll_tools.delete_one({"_id": stored["_id"]})
     remove_roles(id)
 
     if del_obj_tools.deleted_count:
@@ -1091,10 +1095,14 @@ def putToolClass(
             object could not be stored.
     """
     exists = tool_class_exists(id)
+    allow_replace = _check_put("tool class", id, exists)
     tool_class = RegisterToolClass(
         data=request.json,
         id=id,
-        allow_replace=_check_put("tool class", id, exists),
+        allow_replace=allow_replace,
+        # replacing was checked for the stored tool class: if it was deleted
+        # meanwhile, it isn't added again
+        replace_only=allow_replace and exists,
     )
     tool_class.register_metadata()
     return tool_class.data["id"]

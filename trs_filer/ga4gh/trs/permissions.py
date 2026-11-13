@@ -110,18 +110,20 @@ def _exists(id: str) -> Callable[[], bool]:
     return lambda: tool_exists(id)
 
 
-def own_tool(id: str) -> None:
+def own_tool(id: str, stored_id: Any) -> None:
     """Make the subject of the current request owner of a new tool.
 
     Roles left on the identifier (e.g., if revoking those of a deleted tool
     failed) are revoked first, as they don't apply to the new tool. Nothing
     is granted to requests without a subject, which only happen when
     authentication is disabled (see "Running without authentication" in
-    `docs/development.md`). If the tool was deleted meanwhile, the role
-    granted here is revoked again.
+    `docs/development.md`). If the tool was deleted meanwhile (and maybe
+    registered again with the identifier), the role granted here is revoked
+    again.
 
     Args:
         id: Tool identifier.
+        stored_id: MongoDB identifier (`_id`) of the new tool.
 
     Raises:
         ValueError: The role can't be stored, e.g., for identifiers with
@@ -133,7 +135,7 @@ def own_tool(id: str) -> None:
     path = tool_path(id)
     remove_resource(path)
     add_owner(path)
-    if not tool_exists(id):
+    if not get_collection("tools").count_documents({"_id": stored_id}, limit=1):
         remove_resource_role(subject=subject, role="owner", resource=path)
 
 

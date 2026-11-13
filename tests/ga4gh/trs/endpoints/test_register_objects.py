@@ -225,7 +225,7 @@ class TestRegisterTool:
         """Test for creating a tool; duplicate key error occurs."""
         app = make_app(CUSTOM_CONFIG)
         mock_unset_collections(app)
-        mock_resp = MagicMock(side_effect=[DuplicateKeyError(""), None])
+        mock_resp = MagicMock(side_effect=[DuplicateKeyError(""), MagicMock()])
         set_client(app, "tools", MagicMock(insert_one=mock_resp))
         set_client(app, "toolclasses", MagicMock())
 

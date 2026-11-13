@@ -264,7 +264,12 @@ explicitly until `controlled` is supported, remove the rule
 `add-tool-classes` in a config overlay (`security.access_control.policies`,
 `add-tool-classes: null`): `POST /toolClasses` and `PUT /toolClasses/{id}`
 are then for admins only, but registering tools with new tool classes still
-adds them, unless `custom.toolclass.validation` is true.
+adds them, unless `custom.toolclass.validation` is true. Without the rule
+for adding to a collection (`register-tools` for tools, `add-tool-classes`
+for tool classes), `PUT` with a new identifier is refused (`403`) also for
+users whom other rules allow to replace objects (e.g., editors, see
+[Admins](access-control.md#admins)): such rules let them replace stored
+objects, not add new ones.
 
 For example, in a config overlay:
 

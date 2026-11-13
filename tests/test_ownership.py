@@ -5,6 +5,8 @@ provider is mocked (see `tests/conftest.py`).
 """
 
 from copy import deepcopy
+from datetime import UTC, datetime, timedelta
+from itertools import count
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
@@ -26,7 +28,7 @@ from tests.conftest import (
 from tests.mock_data import BASE_PATH, MOCK_TOOL, MOCK_VERSION_NO_ID
 from tests.test_access_control import _doc_example, _overlay
 from trs_filer.app import create_app
-from trs_filer.ga4gh.trs import permissions
+from trs_filer.ga4gh.trs import permissions, server
 from trs_filer.ga4gh.trs.endpoints import register_objects
 from trs_filer.ga4gh.trs.endpoints.register_objects import (
     CREATED_AT,
@@ -270,20 +272,42 @@ def test_put_tool_unusable_id(
     assert tools.count_documents({}) == 0
 
 
+@pytest.mark.parametrize("again", [False, True], ids=["deleted", "registered again"])
 def test_tool_deleted_while_owned(
-    client: FlaskClient, monkeypatch: pytest.MonkeyPatch
+    client: FlaskClient,
+    tools: Collection[dict[str, Any]],
+    monkeypatch: pytest.MonkeyPatch,
+    again: bool,
 ) -> None:
     """The owner role of a tool deleted while it is granted is revoked again.
 
+    Also if a tool is registered again with the identifier meanwhile: the
+    role isn't granted on that one.
+
     Args:
         client: Test client.
-        monkeypatch: Patch of the existence check of tools.
+        tools: Collection `tools`.
+        monkeypatch: Patch of the grant of the owner role.
+        again: Whether the tool is registered again after it is deleted.
     """
-    exists = permissions.tool_exists
-    monkeypatch.setattr(permissions, "tool_exists", lambda id: False)
-    tool_id = _register(client)
-    monkeypatch.setattr(permissions, "tool_exists", exists)
-    assert _roles(client, tool_id).get_json() == []
+    add_owner = permissions.add_owner
+
+    def delete_first(path: str) -> None:
+        tools.delete_one({"id": "NEWTOOL"})
+        if again:
+            tools.insert_one({**MOCK_TOOL, "id": "NEWTOOL", "name": "other"})
+        add_owner(path)
+
+    monkeypatch.setattr(permissions, "add_owner", delete_first)
+    response = client.put(
+        f"{TOOLS}/NEWTOOL", json=MOCK_TOOL, headers=make_headers(USER)
+    )
+    assert response.status_code == 200
+    monkeypatch.setattr(permissions, "add_owner", add_owner)
+    if not again:
+        # to list the roles left on the identifier
+        tools.insert_one({**MOCK_TOOL, "id": "NEWTOOL"})
+    assert _roles(client, "NEWTOOL").get_json() == []
 
 
 def test_owner_role_fails(
@@ -447,7 +471,9 @@ def test_tools_without_owners(
 
 
 def test_internal_fields(
-    client: FlaskClient, tools: Collection[dict[str, Any]]
+    client: FlaskClient,
+    tools: Collection[dict[str, Any]],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Who registered a tool and when is stored, but not served.
 
@@ -457,7 +483,16 @@ def test_internal_fields(
     Args:
         client: Test client.
         tools: Collection `tools`.
+        monkeypatch: Patch of the clock, which advances a second per call.
     """
+    start = datetime(2026, 1, 1, tzinfo=UTC)
+    seconds = count()
+
+    def clock() -> datetime:
+        return start + timedelta(seconds=next(seconds))
+
+    monkeypatch.setattr(register_objects, "now", clock)
+    monkeypatch.setattr(server, "now", clock)
     tool_id = _register(client)
     stored = tools.find_one({"id": tool_id})
     assert stored is not None
@@ -467,7 +502,8 @@ def test_internal_fields(
         client.get(f"{TOOLS}/{tool_id}"),
         client.get(TOOLS),
     ):
-        assert CREATED_BY not in response.get_data(as_text=True)
+        for field in (CREATED_BY, CREATED_AT, UPDATED_AT):
+            assert field not in response.get_data(as_text=True)
     updated = stored[UPDATED_AT]
     tool = deepcopy(MOCK_TOOL)
     tool["name"] = "renamed"
@@ -484,7 +520,7 @@ def test_internal_fields(
         assert changed is not None
         assert changed[CREATED_BY] == USER
         assert changed[CREATED_AT] == stored[CREATED_AT]
-        assert changed[UPDATED_AT] >= updated
+        assert changed[UPDATED_AT] > updated
         updated = changed[UPDATED_AT]
     version_id = _version_id(client, tool_id)
     version_changes: list[tuple[str, dict[str, Any] | None]] = [
@@ -501,7 +537,7 @@ def test_internal_fields(
         assert response.status_code == 200
         changed = tools.find_one({"id": tool_id})
         assert changed is not None
-        assert changed[UPDATED_AT] >= updated
+        assert changed[UPDATED_AT] > updated
         updated = changed[UPDATED_AT]
 
 
@@ -553,19 +589,36 @@ def test_editors_no_roles(
     assert response.status_code == 200
 
 
+@pytest.mark.parametrize("again", [False, True], ids=["deleted", "registered again"])
 def test_delete_tool_concurrently(
-    client: FlaskClient, monkeypatch: pytest.MonkeyPatch
+    client: FlaskClient,
+    tools: Collection[dict[str, Any]],
+    monkeypatch: pytest.MonkeyPatch,
+    again: bool,
 ) -> None:
     """A tool deleted meanwhile is not found.
 
+    A tool registered again with the identifier meanwhile isn't deleted.
+
     Args:
         client: Test client.
-        monkeypatch: Patch of the existence check of tools.
+        tools: Collection `tools`.
+        monkeypatch: Patch of the revocation of roles, called between the
+            check and the deletion.
+        again: Whether the tool is registered again after it is deleted.
     """
-    # As if the tool still existed when the request checked it
-    monkeypatch.setattr("trs_filer.ga4gh.trs.server.tool_exists", lambda id: True)
-    response = client.delete(f"{TOOLS}/NOTOOL", headers=make_headers(ADMIN))
+    tool_id = _register(client)
+    remove_roles = server.remove_roles
+
+    def delete_first(id: str) -> None:
+        if tools.delete_one({"id": id}).deleted_count and again:
+            tools.insert_one({**MOCK_TOOL, "id": id, "name": "other"})
+        remove_roles(id)
+
+    monkeypatch.setattr(server, "remove_roles", delete_first)
+    response = client.delete(f"{TOOLS}/{tool_id}", headers=make_headers(ADMIN))
     assert response.status_code == 404
+    assert tools.count_documents({"id": tool_id}) == int(again)
 
 
 def test_restricted_adding(
@@ -603,6 +656,67 @@ def test_restricted_adding(
                 path, method=method, json=body, headers=make_headers(user)
             )
             assert response.status_code == expected, (user, method, path)
+
+
+def test_replace_rules_dont_add(
+    mongo_client: MongoClient[dict[str, Any]], overlay: Path
+) -> None:
+    """Rules for the paths of objects let users replace them, not add them.
+
+    Adding with `PUT` needs the rule for adding to the collection (`POST`),
+    e.g., also for editors, or users with a role left on the identifier.
+
+    Args:
+        mongo_client: MongoDB client.
+        overlay: Config overlay.
+    """
+    editors = _doc_example("editors.yaml")
+    editors["security"]["access_control"]["policies"].update(
+        {
+            "add-tool-classes": None,
+            "register-tools": None,
+            "editors-replace-tool-classes": [
+                "p",
+                "editor",
+                "/ga4gh/trs/v2/toolClasses/:id",
+                "PUT",
+            ],
+        }
+    )
+    _overlay(overlay, editors)
+    client = create_app().app.test_client()
+    tool_class = {"name": "Workflow", "description": "A workflow."}
+    writes = [
+        (f"{TOOLS}/NEWTOOL", MOCK_TOOL),
+        (f"{BASE_PATH}/toolClasses/new", tool_class),
+    ]
+    for path, body in writes:
+        response = client.put(path, json=body, headers=make_headers(EDITOR))
+        assert response.status_code == 403, path
+        response = client.put(path, json=body, headers=make_headers(ADMIN))
+        assert response.status_code == 200, path
+        response = client.put(path, json=body, headers=make_headers(EDITOR))
+        assert response.status_code == 200, path
+
+
+def test_put_tool_class_deleted_meanwhile(
+    client: FlaskClient,
+    toolclasses: Collection[dict[str, Any]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A tool class deleted after the check for replacing isn't added again.
+
+    Args:
+        client: Test client.
+        toolclasses: Collection `toolclasses`.
+        monkeypatch: Patch of the existence check of tool classes.
+    """
+    path = f"{BASE_PATH}/toolClasses/new"
+    tool_class = {"name": "Workflow", "description": "A workflow."}
+    monkeypatch.setattr(server, "tool_class_exists", lambda id: True)
+    response = client.put(path, json=tool_class, headers=make_headers(ADMIN))
+    assert response.status_code == 409
+    assert toolclasses.count_documents({"id": "new"}) == 0
 
 
 @pytest.mark.parametrize("again", [False, True], ids=["deleted", "registered again"])

@@ -132,6 +132,8 @@ class RegisterTool:
             created_by: Identifier of the user registering the tool.
             was_created: Whether the tool was created (not replaced), once
                 it is registered.
+            stored_id: `stored_id`; for created tools, the MongoDB identifier
+                (`_id`) of the new one, once it is registered.
             id_charset: Allowed characters for generating object
                 identifiers.
             id_length: Length of generated object identifiers.
@@ -286,7 +288,7 @@ class RegisterTool:
 
             # insert tool into database (a copy, as `insert_one()` adds `_id`)
             try:
-                self.db_coll_tools.insert_one(
+                inserted = self.db_coll_tools.insert_one(
                     document={
                         **self.data,
                         CREATED_BY: self.created_by,
@@ -303,6 +305,7 @@ class RegisterTool:
                     raise Forbidden from None
                 continue
             self.was_created = True
+            self.stored_id = inserted.inserted_id
             logger.info("Added tool with id '%s'.", self.data["id"])
             break
         else:

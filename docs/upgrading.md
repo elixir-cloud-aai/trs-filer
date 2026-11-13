@@ -160,7 +160,11 @@ existing data needs no changes. Check clients and custom configs:
     4. Nothing to do for the new internal fields of tools (`_createdBy`,
        `_createdAt` and `_updatedAt`, not served): tools stored before get
        `_updatedAt` on their next change, but neither who registered them
-       nor when.
+       nor when. During a rolling update (the chart's default strategy),
+       instances of the old version serve these fields of tools that the
+       new version writes, i.e., who registered them: to avoid that, scale
+       the old version down before the new one takes writes (e.g., `kubectl
+       scale deployment <name> --replicas=0`, then upgrade).
 
 ## From 0.4.0
 
