@@ -204,6 +204,13 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+        '409':
+          description: The tool was deleted, or deleted and registered
+            again, while the request was processed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '500':
           description: An unexpected error occurred.
           content:
@@ -313,6 +320,13 @@ paths:
                 $ref: '#/components/schemas/Error'
         '403':
           description: The requester is not authorized to perform this action.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: The tool was deleted, or deleted and registered
+            again, while the version was processed.
           content:
             application/json:
               schema:
@@ -441,6 +455,13 @@ paths:
                 $ref: '#/components/schemas/Error'
         '403':
           description: The requester is not authorized to perform this action.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: The tool was deleted, or deleted and registered
+            again, while the version was processed.
           content:
             application/json:
               schema:

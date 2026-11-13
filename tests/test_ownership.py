@@ -27,11 +27,13 @@ from tests.mock_data import BASE_PATH, MOCK_TOOL, MOCK_VERSION_NO_ID
 from tests.test_access_control import _doc_example, _overlay
 from trs_filer.app import create_app
 from trs_filer.ga4gh.trs import permissions
+from trs_filer.ga4gh.trs.endpoints import register_objects
 from trs_filer.ga4gh.trs.endpoints.register_objects import (
     CREATED_AT,
     CREATED_BY,
     UPDATED_AT,
     RegisterTool,
+    RegisterToolVersion,
 )
 
 TOOLS = f"{BASE_PATH}/tools"
@@ -639,5 +641,83 @@ def test_put_tool_replaced_concurrently(
     if again:
         assert stored is not None
         assert stored["name"] == "other"
+    else:
+        assert stored is None
+
+
+def test_put_tool_deleted_while_replaced(
+    client: FlaskClient,
+    tools: Collection[dict[str, Any]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A tool deleted after it was read for replacing isn't added again.
+
+    Args:
+        client: Test client.
+        tools: Collection `tools`.
+        monkeypatch: Patch of the meta versions, called between reading and
+            replacing the tool.
+    """
+    path = f"{TOOLS}/NEWTOOL"
+    response = client.put(path, json=MOCK_TOOL, headers=make_headers(USER))
+    assert response.status_code == 200
+    next_meta_version = register_objects.next_meta_version
+
+    def delete_first(*args: Any, **kwargs: Any) -> str:
+        tools.delete_one({"id": "NEWTOOL"})
+        return next_meta_version(*args, **kwargs)
+
+    monkeypatch.setattr(register_objects, "next_meta_version", delete_first)
+    response = client.put(path, json=MOCK_TOOL, headers=make_headers(USER))
+    assert response.status_code == 409
+    assert tools.find_one({"id": "NEWTOOL"}) is None
+
+
+@pytest.mark.parametrize("again", [False, True], ids=["deleted", "registered again"])
+@pytest.mark.parametrize("method", ["POST", "PUT"])
+def test_version_of_tool_deleted_meanwhile(
+    client: FlaskClient,
+    tools: Collection[dict[str, Any]],
+    monkeypatch: pytest.MonkeyPatch,
+    method: str,
+    again: bool,
+) -> None:
+    """Versions go only to the tool checked, not to one registered again.
+
+    Args:
+        client: Test client.
+        tools: Collection `tools`.
+        monkeypatch: Patch of the processing of versions.
+        method: Whether the version is added or replaced.
+        again: Whether the tool is registered again after it is deleted.
+    """
+    response = client.put(
+        f"{TOOLS}/NEWTOOL", json=MOCK_TOOL, headers=make_headers(USER)
+    )
+    assert response.status_code == 200
+    stored = tools.find_one({"id": "NEWTOOL"})
+    assert stored is not None
+    version_id = stored["versions"][0]["id"]
+    process = RegisterToolVersion.process_metadata
+
+    def delete_first(version: RegisterToolVersion) -> None:
+        # the tool is deleted (and registered again) while files are fetched
+        tools.delete_one({"id": "NEWTOOL"})
+        if again:
+            tools.insert_one({"id": "NEWTOOL", "name": "other", "versions": []})
+        process(version)
+
+    monkeypatch.setattr(RegisterToolVersion, "process_metadata", delete_first)
+    path = f"{TOOLS}/NEWTOOL/versions"
+    if method == "PUT":
+        path = f"{path}/{version_id}"
+    response = client.open(
+        path, method=method, json=MOCK_VERSION_NO_ID, headers=make_headers(USER)
+    )
+    assert response.status_code == 409
+    stored = tools.find_one({"id": "NEWTOOL"})
+    if again:
+        assert stored is not None
+        assert stored["versions"] == []
     else:
         assert stored is None

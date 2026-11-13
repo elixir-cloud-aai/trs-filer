@@ -406,6 +406,13 @@ class RegisterTool:
             filter={"id": self.data["id"], "_id": stored["_id"]},
             replacement={**self.data, **kept, UPDATED_AT: timestamp},
         )
+        if not result.matched_count and self.stored_id is not None:
+            # deleted after it was read: not added again
+            logger.info(
+                "Tool '%s' not replaced: deleted meanwhile.",
+                escape_log_value(self.data["id"]),
+            )
+            raise Conflict
         return bool(result.matched_count)
 
 
@@ -650,6 +657,8 @@ class RegisterToolVersion:
             InvalidRequest: The files of the version are invalid.
             InternalServerError: No unique identifier could be generated, or the
                 object could not be stored.
+            Conflict: The tool was deleted, or deleted and registered again,
+                while the version was processed.
             NotFound: The tool does not exist.
             trs_filer.errors.exceptions.RemoteFileError: The content of a file
                 could not be retrieved from its URL.
@@ -658,6 +667,9 @@ class RegisterToolVersion:
         obj = self.db_coll_tools.find_one(filter={"id": self.id})
         if obj is None:
             raise NotFound
+        # writes go only to this tool, not to one registered again with the
+        # identifier while the files are fetched (with other owners)
+        self.tool_oid = obj["_id"]
 
         generate_ids = self.data["id"] is None
         self.process_metadata()
@@ -685,6 +697,7 @@ class RegisterToolVersion:
             result_tools = self.db_coll_tools.update_one(
                 filter={
                     "id": self.id,
+                    "_id": self.tool_oid,
                     "versions.id": {"$ne": self.data["id"]},
                 },
                 update=update,
@@ -698,12 +711,27 @@ class RegisterToolVersion:
                     self.id,
                 )
                 break
+            self._check_stored()
         else:
             raise InternalServerError
         logger.debug(
             "Entry in 'tools' collection: %s",
             self.db_coll_tools.find_one({"id": self.id}),
         )
+
+    def _check_stored(self) -> None:
+        """Check that the tool read first is still stored.
+
+        Raises:
+            Conflict: The tool was deleted meanwhile (and maybe registered
+                again with its identifier).
+        """
+        if self.db_coll_tools.find_one({"_id": self.tool_oid}) is None:
+            logger.info(
+                "Version not registered: tool '%s' deleted meanwhile.",
+                escape_log_value(self.id),
+            )
+            raise Conflict
 
     def _replace(self) -> bool:
         """Replace the stored version of the tool with the same identifier.
@@ -715,7 +743,11 @@ class RegisterToolVersion:
             Whether a stored version was replaced.
         """
         stored = self.db_coll_tools.find_one(
-            filter={"id": self.id, "versions.id": self.data["id"]},
+            filter={
+                "id": self.id,
+                "_id": self.tool_oid,
+                "versions.id": self.data["id"],
+            },
             projection={"versions": {"$elemMatch": {"id": self.data["id"]}}},
         )
         if stored is None:
@@ -728,6 +760,7 @@ class RegisterToolVersion:
         result = self.db_coll_tools.update_one(
             filter={
                 "id": self.id,
+                "_id": self.tool_oid,
                 "versions.id": self.data["id"],
             },
             update={

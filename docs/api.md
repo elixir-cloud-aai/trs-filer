@@ -260,6 +260,11 @@ challenge (`WWW-Authenticate`), before their body is validated, and
 writes of users who may not write `403 Forbidden`, after it (see [Access
 control](access-control.md#authentication)).
 
+Replacing a tool (`PUT /tools/{id}`) and adding or replacing a version get
+`409 Conflict` if the tool is deleted, or deleted and registered again,
+while the request is processed: the request was checked against the
+roles on the tool that is gone. Read the tool again before retrying.
+
 Requests that don't match the API specification (e.g., an unknown
 descriptor type, or a body without required properties) get `400 Bad
 Request` with the reason of the validation as `detail` (see the setting
