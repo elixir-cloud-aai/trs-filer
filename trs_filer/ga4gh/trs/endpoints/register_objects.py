@@ -11,6 +11,7 @@ from pymongo.collection import Collection
 from pymongo.errors import DuplicateKeyError
 
 from trs_filer.errors.exceptions import (
+    Conflict,
     Forbidden,
     InternalServerError,
     InvalidRequest,
@@ -107,6 +108,7 @@ class RegisterTool:
         id: str | None = None,
         created_by: str | None = None,
         allow_replace: bool = True,
+        stored_id: Any = None,
     ) -> None:
         """Initialize tool data.
 
@@ -117,6 +119,10 @@ class RegisterTool:
                 with new tools (`_createdBy`); `None` if unknown.
             allow_replace: With `id`, whether a stored tool with the
                 identifier may be replaced; if not, the tool is only created.
+            stored_id: MongoDB identifier (`_id`) of the stored tool that may
+                be replaced, as checked by the caller; if given, no other is
+                replaced (e.g., a tool registered again with the identifier
+                meanwhile).
 
         Attributes:
             data: Tool metadata.
@@ -159,6 +165,7 @@ class RegisterTool:
         self.data = data
         self.data["id"] = None if id is None else id
         self.replace = allow_replace
+        self.stored_id = stored_id
         self.created_by = created_by
         self.was_created = False
         self.id_charset: str = conf.tool.id.charset
@@ -192,6 +199,8 @@ class RegisterTool:
         and store when they were replaced.
 
         Raises:
+            Conflict: The stored tool isn't the one that may be replaced
+                (`stored_id`): it was deleted or registered again meanwhile.
             Forbidden: A tool with the given identifier is stored, but may not
                 be replaced (`allow_replace`): it was registered meanwhile.
             InvalidRequest: Version identifiers are duplicated, the files of a
@@ -357,8 +366,20 @@ class RegisterTool:
 
         Returns:
             Whether a stored tool was replaced.
+
+        Raises:
+            Conflict: The stored tool isn't the one that may be replaced
+                (`stored_id`), or there is none.
         """
         stored = self.db_coll_tools.find_one(filter={"id": self.data["id"]})
+        if self.stored_id is not None and (
+            stored is None or stored["_id"] != self.stored_id
+        ):
+            logger.info(
+                "Tool '%s' not replaced: deleted or registered again meanwhile.",
+                escape_log_value(self.data["id"]),
+            )
+            raise Conflict
         if stored is None:
             return False
         self.data["meta_version"] = next_meta_version(
@@ -382,7 +403,7 @@ class RegisterTool:
             if field in stored
         }
         result = self.db_coll_tools.replace_one(
-            filter={"id": self.data["id"]},
+            filter={"id": self.data["id"], "_id": stored["_id"]},
             replacement={**self.data, **kept, UPDATED_AT: timestamp},
         )
         return bool(result.matched_count)

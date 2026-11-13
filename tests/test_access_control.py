@@ -561,6 +561,9 @@ def test_noauth_overlay(
     assert client.delete(f"{BASE_PATH}/tools/{tool_id}").status_code == 200
     response = client.put(f"{BASE_PATH}/tools/NEWTOOL", json=MOCK_TOOL)
     assert response.status_code == 200, response.get_json()
+    # roles can't be managed without users
+    response = client.get(f"{BASE_PATH}/tools/NEWTOOL/permissions")
+    assert response.status_code == 403
     assert any("Authentication is disabled" in m for m in records.messages)
 
 

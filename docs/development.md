@@ -91,8 +91,7 @@ suppress a false positive, add a comment with the reason to the line:
 ## Running without authentication
 
 Writes need an access token (see [Access control](access-control.md)),
-also with Docker Compose, whose development
-overlay (`config.dev.yaml`) trusts a fictitious identity provider. To set
+also with Docker Compose, whose development overlay (`config.dev.yaml`) trusts a fictitious identity provider. To set
 your own, see [Local overrides](configuration.md#local-overrides). To try
 writes locally without an identity provider, disable authentication with the
 overlay
@@ -108,6 +107,8 @@ TRS_FILER_CONFIG_OVERLAY=/etc/trs-filer/config.dev.yaml:/etc/trs-filer/config.no
 
 All operations are then public, writes too, and FOCA warns on startup that
 authentication is disabled (`Authentication is disabled for spec 'trs'`).
+Tools then get no owners, and the roles on tools can't be managed
+(`/tools/{id}/permissions` answers `403 Forbidden`).
 Run `docker compose up --wait` without the variable to enable it again.
 Only use this on your machine (Docker Compose publishes the app on the
 loopback interface only), never for deployments.

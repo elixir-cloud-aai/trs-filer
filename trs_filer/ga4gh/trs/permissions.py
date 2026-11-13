@@ -21,6 +21,7 @@ from typing import Any
 
 from foca.security.access_control import (
     add_owner,
+    get_current_claims,
     get_current_subject,
     ownership_server,
     remove_resource,
@@ -32,6 +33,7 @@ from foca.security.access_control.foca_casbin_adapter.casbin_rule import (
 from foca.utils.logging import escape_log_value
 from foca.utils.urls import get_resource_path
 
+from trs_filer.errors.exceptions import Forbidden
 from trs_filer.utils import get_collection
 
 logger = logging.getLogger(__name__)
@@ -82,6 +84,18 @@ def tool_exists(id: str) -> bool:
         Whether the tool is stored.
     """
     return get_collection("tools").count_documents({"id": id}, limit=1) > 0
+
+
+def tool_class_exists(id: str) -> bool:
+    """Check whether a tool class exists.
+
+    Args:
+        id: Tool class identifier.
+
+    Returns:
+        Whether the tool class is stored.
+    """
+    return get_collection("toolclasses").count_documents({"id": id}, limit=1) > 0
 
 
 def _exists(id: str) -> Callable[[], bool]:
@@ -148,7 +162,16 @@ def _call(controller: Callable[..., Any], id: str, **kwargs: Any) -> Any:
 
     Returns:
         Response of the controller.
+
+    Raises:
+        Forbidden: Authentication is disabled (`disable_auth`): roles can't be
+            managed without users, and FOCA's controllers refuse requests on
+            which policies aren't enforced.
     """
+    # Only requests without authentication have no token
+    if not get_current_claims():
+        logger.info("Roles on tools not managed: authentication is disabled.")
+        raise Forbidden
     return controller(exists=_exists(id), **kwargs)
 
 

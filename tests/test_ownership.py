@@ -5,10 +5,9 @@ provider is mocked (see `tests/conftest.py`).
 """
 
 from copy import deepcopy
+from pathlib import Path
 from typing import Any
 from urllib.parse import quote
-
-from pathlib import Path
 
 from flask.testing import FlaskClient
 from pymongo import MongoClient
@@ -32,6 +31,7 @@ from trs_filer.ga4gh.trs.endpoints.register_objects import (
     CREATED_AT,
     CREATED_BY,
     UPDATED_AT,
+    RegisterTool,
 )
 
 TOOLS = f"{BASE_PATH}/tools"
@@ -268,27 +268,6 @@ def test_put_tool_unusable_id(
     assert tools.count_documents({}) == 0
 
 
-def test_put_tool_concurrently(
-    client: FlaskClient, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """A tool that another user registers meanwhile is not replaced.
-
-    Args:
-        client: Test client.
-        monkeypatch: Patch of the existence check of tools.
-    """
-    path = f"{TOOLS}/NEWTOOL"
-    response = client.put(path, json=MOCK_TOOL, headers=make_headers(USER))
-    assert response.status_code == 200
-    # As if the tool didn't exist yet when the request checked it
-    monkeypatch.setattr("trs_filer.ga4gh.trs.server.tool_exists", lambda id: False)
-    response = client.put(path, json=MOCK_TOOL, headers=make_headers(STRANGER))
-    assert response.status_code == 403
-    assert _roles(client, "NEWTOOL").get_json() == [
-        {"subject_type": "user", "subject": USER, "role": "owner"}
-    ]
-
-
 def test_tool_deleted_while_owned(
     client: FlaskClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -465,7 +444,9 @@ def test_tools_without_owners(
     )
 
 
-def test_internal_fields(client: FlaskClient, tools: Collection[dict[str, Any]]) -> None:
+def test_internal_fields(
+    client: FlaskClient, tools: Collection[dict[str, Any]]
+) -> None:
     """Who registered a tool and when is stored, but not served.
 
     Replacing the tool keeps them; changes of the tool and of its versions
@@ -493,7 +474,9 @@ def test_internal_fields(client: FlaskClient, tools: Collection[dict[str, Any]])
         ("POST", f"{TOOLS}/{tool_id}/versions", MOCK_VERSION_NO_ID, USER),
     ]
     for method, path, body, user in changes:
-        response = client.open(path, method=method, json=body, headers=make_headers(user))
+        response = client.open(
+            path, method=method, json=body, headers=make_headers(user)
+        )
         assert response.status_code == 200
         changed = tools.find_one({"id": tool_id})
         assert changed is not None
@@ -618,3 +601,43 @@ def test_restricted_adding(
                 path, method=method, json=body, headers=make_headers(user)
             )
             assert response.status_code == expected, (user, method, path)
+
+
+@pytest.mark.parametrize("again", [False, True], ids=["deleted", "registered again"])
+def test_put_tool_replaced_concurrently(
+    client: FlaskClient,
+    tools: Collection[dict[str, Any]],
+    monkeypatch: pytest.MonkeyPatch,
+    again: bool,
+) -> None:
+    """Only the tool checked is replaced, not one registered again meanwhile.
+
+    Nor is a tool deleted meanwhile added again.
+
+    Args:
+        client: Test client.
+        tools: Collection `tools`.
+        monkeypatch: Patch of the registration of tools.
+        again: Whether the tool is registered again after it is deleted.
+    """
+    path = f"{TOOLS}/NEWTOOL"
+    response = client.put(path, json=MOCK_TOOL, headers=make_headers(USER))
+    assert response.status_code == 200
+    register = RegisterTool.register_metadata
+
+    def delete_first(tool: RegisterTool) -> None:
+        # the tool is deleted (and registered again) after the check
+        tools.delete_one({"id": "NEWTOOL"})
+        if again:
+            tools.insert_one({**MOCK_TOOL, "id": "NEWTOOL", "name": "other"})
+        register(tool)
+
+    monkeypatch.setattr(RegisterTool, "register_metadata", delete_first)
+    response = client.put(path, json=MOCK_TOOL, headers=make_headers(USER))
+    assert response.status_code == 409
+    stored = tools.find_one({"id": "NEWTOOL"})
+    if again:
+        assert stored is not None
+        assert stored["name"] == "other"
+    else:
+        assert stored is None

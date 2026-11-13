@@ -140,7 +140,14 @@ existing data needs no changes. Check clients and custom configs:
        the roles on tools: replace them as in [Requiring login for
        reads](access-control.md#requiring-login-for-reads) and the editors
        example of [Admins](access-control.md#admins).
-    3. Nothing to do for the new internal fields of tools (`_createdBy`,
+    3. Config overlays that give `security.access_control.policies` as a
+       list replace the new rules of the base config (`register-tools`,
+       `owners-*`, `maintainers-*`, `add-tool-classes`), so users can't
+       register or change tools: switch to named rules, or add these rules
+       to the list. Don't override `security.access_control.resource_roles`
+       or unset `keep_group_subjects` (the values of the group claim are now
+       also subjects, for roles of groups).
+    4. Nothing to do for the new internal fields of tools (`_createdBy`,
        `_createdAt` and `_updatedAt`, not served): tools stored before get
        `_updatedAt` on their next change, but neither who registered them
        nor when.

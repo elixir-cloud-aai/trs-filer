@@ -37,6 +37,7 @@ from tests.mock_data import (
 from trs_filer.custom_config import RemoteFilesConfig
 from trs_filer.errors.exceptions import (
     BadRequest,
+    Forbidden,
     InternalServerError,
     NotFound,
     RemoteFileError,
@@ -480,3 +481,23 @@ class TestRegisterToolVersion:
         with app.app_context(), pytest.raises(NotFound):
             version = RegisterToolVersion(data=data, id=MOCK_ID)
             version.register_metadata()
+
+
+def test_register_metadata_not_replaced() -> None:
+    """Tools that may not be replaced are only created.
+
+    If one with the identifier is stored (e.g., registered meanwhile by
+    another user), it is kept, and registering is forbidden.
+    """
+    app = make_app(CUSTOM_CONFIG)
+    mock_unset_collections(app)
+    collection = mock_collection(app, "tools")
+    stored = {**deepcopy(MOCK_TOOL_VERSION_ID), "id": MOCK_ID}
+    collection.insert_one(deepcopy(stored))
+
+    data = {**deepcopy(MOCK_TOOL_VERSION_ID), "name": "other"}
+    with app.app_context():
+        tool = RegisterTool(data=data, id=MOCK_ID, allow_replace=False)
+        with pytest.raises(Forbidden):
+            tool.register_metadata()
+    assert collection.find_one({"id": MOCK_ID}, {"_id": False}) == stored

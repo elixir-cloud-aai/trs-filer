@@ -36,6 +36,7 @@ from trs_filer.ga4gh.trs.permissions import (
     is_usable_id,
     own_tool,
     remove_roles,
+    tool_class_exists,
     tool_exists,
 )
 from trs_filer.remote_files import fetch_remote_file
@@ -798,6 +799,7 @@ def putTool(
         Identifier of created/updated tool.
 
     Raises:
+        Conflict: The tool checked was deleted or registered again meanwhile.
         Forbidden: The user may not replace the tool, or may not add it.
         InvalidRequest: The tool is invalid, e.g., its version identifiers are
             duplicated or the files of a version are invalid, or its tool
@@ -809,19 +811,24 @@ def putTool(
         RemoteFileError: The content of a file could not be retrieved from its
             URL.
     """
-    exists = tool_exists(id)
+    stored = get_collection("tools").find_one({"id": id}, {"_id": True})
+    exists = stored is not None
     allow_replace = _check_put("tool", id, exists)
     if not exists and not is_usable_id(id):
         logger.info("Tool '%s' not added: unusable identifier.", escape_log_value(id))
         raise InvalidRequest(
-            "The identifier can't be used for tools; it must not contain commas "
-            "or line breaks."
+            "The identifier can't be used for tools: it must not contain commas "
+            "or line breaks, be `*`, `.` or `..`, start with `:` or `#`, or be "
+            "too long."
         )
+    # only the tool checked may be replaced, not one registered again with
+    # the identifier meanwhile
     tool = RegisterTool(
         data=request.json,
         id=id,
         created_by=get_current_subject(),
         allow_replace=allow_replace,
+        stored_id=stored["_id"] if stored is not None else None,
     )
     return _register_tool(tool)
 
@@ -1014,7 +1021,7 @@ def putToolClass(
         InternalServerError: No unique identifier could be generated, or the
             object could not be stored.
     """
-    exists = get_collection("toolclasses").count_documents({"id": id}, limit=1) > 0
+    exists = tool_class_exists(id)
     tool_class = RegisterToolClass(
         data=request.json,
         id=id,
