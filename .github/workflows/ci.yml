@@ -544,6 +544,9 @@ jobs:
             echo "::error::PLAIN_CWL descriptor: ${plain}"
             exit 1
           fi
+          # Plain types aren't served as JSON (`check` accepts only JSON)
+          check GET "/tools/${id}/versions/${version}/PLAIN_CWL/descriptor" 406 \
+            '.status == 406'
           check GET /tools 200 "map(.id) == [\"${id}\"]"
           check GET /toolClasses 200 'map(.id) == ["smoke"]'
           check DELETE "/tools/${id}" 200 ". == \"${id}\""

@@ -51,6 +51,9 @@ where `null` removes a key of the vendored files (FOCA's
   `{type}/descriptor/{relative_path}` have no schema (instead of `type:
   string`), so that plain descriptors are sent as is, also ones that are
   JSON documents (see [Descriptor types](#descriptor-types)).
+- `{type}/descriptor`, `{type}/descriptor/{relative_path}` and
+  `{type}/tests` document `406 Not Acceptable` (see [Media
+  types](#media-types)).
 
 ## GA4GH TRS endpoints
 
@@ -96,10 +99,43 @@ files rather than the files wrapped with metadata. So:
   URL can't be retrieved, are not found (`404 Not Found`, as JSON). Plain
   responses tell browsers not to guess another media type
   (`X-Content-Type-Options: nosniff`).
-- Test files are not served for `PLAIN_` types: `{type}/tests` with the
-  `PLAIN_` form of a type finds no files (`404 Not Found`).
+- Tests are served as plain text for `PLAIN_` types: `{type}/tests` with,
+  e.g., `PLAIN_CWL` returns the test files of type `CWL` with media type
+  `text/plain`, as the specification defines the plain response of this
+  path: the same array of file wrappers as the JSON response (the same
+  content; spacing may differ), i.e., a JSON document labelled
+  `text/plain`. Without test files of the type, it gives
+  `404 Not Found` (as JSON).
 - `{type}/files` doesn't take `PLAIN_` types (`400 Bad Request`), as in the
   specification.
+
+### Media types
+
+The specification offers both `application/json` and `text/plain` for
+`{type}/descriptor`, `{type}/descriptor/{relative_path}` and
+`{type}/tests`, and lets the type choose: descriptor types (e.g., `CWL`)
+return the files wrapped with metadata, as `application/json`, and their
+`PLAIN_` forms the bare files, as `text/plain`. So `Accept` doesn't
+change the media type of these paths, but has to allow it:
+
+- Requests without `Accept` (or with an empty one) accept any media type,
+  as do `*/*` and `Accept` values that list both media types or wildcards
+  that match them (e.g., `text/*`, `application/*`).
+- Parameters of media ranges other than the quality are ignored (e.g.,
+  `Accept: application/json; charset=utf-8` accepts JSON), and a quality
+  of 0 refuses a media type, also if a wildcard matches it (e.g.,
+  `application/json;q=0, */*` refuses JSON).
+- Requests that don't accept the media type of the type (e.g., `Accept:
+  text/plain` with `CWL`, or `Accept: application/json` with `PLAIN_CWL`)
+  get `406 Not Acceptable` (as JSON). To get plain text, use the `PLAIN_`
+  form of the type.
+- Invalid types are refused first (`400 Bad Request`), then `Accept` is
+  checked, before the tool version is looked up (`404 Not Found`).
+- Responses of these paths, including errors after the type is validated,
+  say that they depend on `Accept` (`Vary: Accept`), for caches.
+
+The other endpoints have one media type per request (e.g., `{type}/files`
+sends JSON, or a ZIP archive with `format=zip`) and ignore `Accept`.
 
 ## Relative paths
 
@@ -259,6 +295,9 @@ Writes without a valid access token get `401 Unauthorized`, with a Bearer
 challenge (`WWW-Authenticate`), before their body is validated, and
 writes of users who may not write `403 Forbidden`, after it (see [Access
 control](access-control.md#authentication)).
+
+Requests for descriptors or tests that don't accept the media type of the
+type get `406 Not Acceptable` (see [Media types](#media-types)).
 
 Replacing a tool (`PUT /tools/{id}`) and adding or replacing a version get
 `409 Conflict` if the tool is deleted, or deleted and registered again,

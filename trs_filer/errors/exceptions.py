@@ -13,6 +13,7 @@ from foca.errors.exceptions import problem_response
 from werkzeug.exceptions import (
     BadRequest,
     InternalServerError,
+    NotAcceptable,
     NotFound,
     RequestEntityTooLarge,
 )
@@ -23,6 +24,7 @@ __all__ = [
     "Forbidden",
     "InternalServerError",
     "InvalidRequest",
+    "NotAcceptable",
     "NotFound",
     "RemoteFileError",
     "describe_invalid_request",
@@ -126,6 +128,17 @@ exceptions = {
         "title": "Not found",
         "detail": "The requested resource wasn't found.",
         "status": 404,
+    },
+    # Only paths that the specification offers as JSON and plain text check
+    # `Accept`
+    NotAcceptable: {
+        "title": "Not acceptable",
+        "detail": (
+            "The resource can't be served as any of the accepted media types; "
+            "descriptor types are served as application/json, their PLAIN_ "
+            "forms as text/plain."
+        ),
+        "status": 406,
     },
     # e.g., FOCA's `LastOwner`: the last owner of a tool can't be removed or
     # downgraded
