@@ -297,6 +297,9 @@ custom:
     # like other files. With `validation`, they are checked on registration
     # against the vendored meta-schema of the GA4GH I/O Profile 0.3.0
     # (`trs_filer/io_schema/`) and rejected with `400 Bad Request` if invalid
-    # (see `docs/io-schema.md`)
+    # (see `docs/io-schema.md`). Validation takes time that grows steeply
+    # with the nesting of schemas, so it runs in a process of its own;
+    # files not checked within `timeout` seconds are rejected, too
     io_schema:
         validation: False
+        timeout: 10

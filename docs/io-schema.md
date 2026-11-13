@@ -91,6 +91,8 @@ invalid ones with `400 Bad Request`:
 custom:
     io_schema:
         validation: true
+        # Time limit of checking a file, in seconds
+        timeout: 10
 ```
 
 I/O Schema files are files of type `OTHER` named `ga4gh-io.schema.json`, in
@@ -106,7 +108,8 @@ any directory; other files aren't checked. A file is invalid if it:
 
 The `detail` of the response says why, and, for schemas that don't validate,
 where (as a JSON path) and which keyword of the meta-schema they break, but
-not their values, e.g.:
+not their values (names that could be values, e.g., with `:`, `/` or `@`,
+are replaced by `*`), e.g.:
 
 ```json
 {
@@ -120,12 +123,28 @@ The [validator of the
 profile](https://github.com/uniqueg/ga4gh-io-schema/blob/v0.3/docs/tools/validator.md)
 reports all errors with their values; check schemas with it before
 registering them. Files retrieved from their URLs are checked once
-retrieved.
+retrieved; the check applies to every registration of tools and versions
+(`POST` and `PUT`).
+
+Validating against the meta-schema takes time that grows steeply with the
+nesting of schemas, as `unevaluatedProperties` is checked at every level:
+the example takes well below a second, while about a hundred inputs in ten
+groups take a few seconds. So the validation runs in a process of its own,
+which is stopped after `custom.io_schema.timeout` seconds (default: `10`,
+including up to about a second to start the process and load the
+meta-schema); files not checked within it are rejected, too (`400 Bad
+Request`). Raise the limit for larger schemas, keeping in mind that
+registrations take as long.
 
 The meta-schema of profile version 0.3.0 and its vocabularies are vendored
 unchanged in
 [`trs_filer/io_schema/`](https://github.com/elixir-cloud-aai/trs-filer/tree/dev/trs_filer/io_schema),
-from commit `573f65e` of the profile's `v0.3` branch; nothing is fetched.
+from commit `573f65e` of the profile's `v0.3` branch (Apache License 2.0);
+nothing is fetched. To vendor another version, replace the directory (named
+after the date and commit of the source) and update `PROFILE_VERSION` and
+`META_SCHEMA_DIR` in `trs_filer/io_schema/__init__.py`, the checksums in
+`tests/test_io_schema.py`, the example (`docs/examples/io-schema/`, whose
+`tool.json` holds the other two files) and this page.
 TRS-Filer doesn't check the identifiers and the checksum of
 `x-ga4gh-workflow` against the tool version (identifiers may be generated
 on registration). Tool versions stored before the check was enabled are not

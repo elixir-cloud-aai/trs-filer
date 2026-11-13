@@ -455,16 +455,44 @@ class IoSchemaConfig(FOCABaseConfig):
             against the vendored meta-schema of the GA4GH I/O Profile 0.3.0;
             invalid ones are rejected with `400 Bad Request`. Defaults to
             `False`.
+        timeout: Time limit of checking an I/O Schema file, in seconds
+            (validation takes time that grows steeply with the nesting of
+            schemas); files not checked within it are rejected. Defaults
+            to `10`.
 
     Attributes:
         validation: Whether I/O Schema files are checked on registration.
+        timeout: Time limit of checking an I/O Schema file, in seconds.
+
+    Raises:
+        pydantic.ValidationError: The time limit is not positive, or not
+            finite.
 
     Example:
         >>> IoSchemaConfig(validation=True)
-        IoSchemaConfig(validation=True)
+        IoSchemaConfig(validation=True, timeout=10.0)
     """
 
     validation: bool = False
+    timeout: float = Field(default=10.0, gt=0)
+
+    @field_validator("timeout")
+    @classmethod
+    def check_timeout(cls, value: float) -> float:
+        """Check that the time limit is finite.
+
+        Args:
+            value: Time limit, in seconds.
+
+        Returns:
+            Time limit, in seconds.
+
+        Raises:
+            ValueError: The time limit is not finite.
+        """
+        if not math.isfinite(value):
+            raise ValueError("Timeouts must be finite")
+        return value
 
 
 class CustomConfig(FOCABaseConfig):

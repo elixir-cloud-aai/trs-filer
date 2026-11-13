@@ -63,6 +63,11 @@ existing data needs no changes. Check clients and custom configs:
 - Versions take the versions of their languages (`descriptor_type_version`
   of `ToolVersionRegister`, by descriptor type), which they return;
   registrations with it failed with `400 Bad Request` before.
+- GA4GH I/O Schemas of workflows (experimental) are documented: files of
+  type `OTHER` named `ga4gh-io.schema.json`, stored and served as before.
+  The new option `custom.io_schema.validation` (`false` by default, so
+  nothing changes) checks them on registration (see [Checking I/O
+  Schemas](io-schema.md#checking-io-schemas)).
 - **Tokens for writes (breaking):** registering, changing and deleting tools,
   versions and tool classes (`POST`, `PUT` and `DELETE`, see [Registering
   tools](api.md#registering-tools)) need an access token (RFC 9068,

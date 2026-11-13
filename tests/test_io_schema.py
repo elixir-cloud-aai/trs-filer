@@ -4,18 +4,27 @@ from copy import deepcopy
 import hashlib
 import json
 from pathlib import Path
-from typing import Any
+import subprocess
+import sys
+from typing import Any, NoReturn
 
 import pytest
 
-from trs_filer.errors.exceptions import InvalidRequest
+from trs_filer import io_schema
+from trs_filer.errors.exceptions import InternalServerError, InvalidRequest
 from trs_filer.io_schema import (
     IO_SCHEMA_FILE_NAME,
     META_SCHEMA_DIR,
     META_SCHEMA_ID,
-    check_io_schema,
+    find_problem,
     is_io_schema_file,
+    main,
 )
+from trs_filer.io_schema import check as check_module
+from trs_filer.io_schema.check import check_io_schema
+
+# Time limit of the checks of the tests, in seconds
+TIMEOUT = 60
 
 ROOT = Path(__file__).resolve().parents[1]
 # The example of `docs/io-schema.md`: a WDL workflow, its I/O Schema and the
@@ -72,7 +81,7 @@ def _detail(content: str, descriptor_type: str = "WDL") -> str:
         The description of the exception, as sent to clients.
     """
     with pytest.raises(InvalidRequest) as exc_info:
-        check_io_schema(content, descriptor_type)
+        check_io_schema(content, descriptor_type, timeout=TIMEOUT)
     assert exc_info.value.description is not None
     return exc_info.value.description
 
@@ -127,14 +136,16 @@ def test_is_io_schema_file(tool_file: dict[str, str], expected: bool) -> None:
 
 def test_check_io_schema_valid() -> None:
     """The I/O Schema of the example is valid."""
-    check_io_schema((EXAMPLE / IO_SCHEMA_FILE_NAME).read_text(encoding="utf-8"), "WDL")
+    content = (EXAMPLE / IO_SCHEMA_FILE_NAME).read_text(encoding="utf-8")
+    check_io_schema(content, "WDL", timeout=TIMEOUT)
+    assert find_problem(json.loads(content)) is None
 
 
 def test_check_io_schema_without_workflow() -> None:
     """I/O Schemas without `x-ga4gh-workflow` are valid for any descriptor type."""
     schema = _schema()
     del schema["x-ga4gh-workflow"]
-    check_io_schema(json.dumps(schema), "CWL")
+    check_io_schema(json.dumps(schema), "CWL", timeout=TIMEOUT)
 
 
 @pytest.mark.parametrize("content", ["", "{", "not JSON", "[1,"])
@@ -223,12 +234,37 @@ def test_check_io_schema_other_meta_schema(value: str | None) -> None:
         # `$id` must be absolute
         (
             lambda s: s.update({"$id": "hello/1.0.0"}),
-            "at $['$id'] (keyword 'pattern')",
+            "at $['$id'] (keyword 'format')",
         ),
         # other fields of `x-ga4gh-workflow` are rejected (without names)
         (
             lambda s: s["x-ga4gh-workflow"].update({"version": "1.0.0"}),
             "at $['x-ga4gh-workflow'] (keyword 'additionalProperties')",
+        ),
+        # formats are checked
+        (
+            lambda s: s.update({"$id": "https://exa mple.org/hello"}),
+            "at $['$id'] (keyword 'format')",
+        ),
+        # names that could be values are not repeated
+        (
+            lambda s: s["properties"]["inputs"]["properties"].update(
+                {"https://user:pass@example.org/": {"type": "text"}}
+            ),
+            "at $.properties.inputs.properties[*].type (keyword 'anyOf')",
+        ),
+        (
+            lambda s: s["properties"]["inputs"].update({"x-ga4gh-" + "a" * 100: True}),
+            "at $.properties.inputs (keyword 'unevaluatedProperties')",
+        ),
+        (
+            lambda s: s["properties"]["inputs"].update({"x-ga4gh-Pass:word": True}),
+            "at $.properties.inputs (keyword 'unevaluatedProperties')",
+        ),
+        # array items are named by index
+        (
+            lambda s: s["properties"]["inputs"].update({"required": ["name", 1]}),
+            "at $.properties.inputs.required[1] (keyword 'type')",
         ),
         # nested schemas must be valid JSON Schema
         (
@@ -250,10 +286,12 @@ def test_check_io_schema_invalid(change: Any, expected: str) -> None:
     """
     schema = _schema()
     change(schema)
-    assert _detail(json.dumps(schema)) == (
+    detail = (
         "The I/O Schema file (ga4gh-io.schema.json) doesn't validate against "
         "the meta-schema of the GA4GH I/O Profile 0.3.0 " + expected + "."
     )
+    assert find_problem(schema) == detail
+    assert _detail(json.dumps(schema)) == detail
 
 
 def test_check_io_schema_invalid_no_values() -> None:
@@ -314,4 +352,116 @@ def test_check_io_schema_repeated() -> None:
     invalid = deepcopy(_schema())
     invalid["properties"].pop("inputs")
     _detail(json.dumps(invalid))
-    check_io_schema(content, "WDL")
+    check_io_schema(content, "WDL", timeout=TIMEOUT)
+
+
+def test_find_problem_nested_too_deeply(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Schemas nested too deeply for the validator are rejected.
+
+    Args:
+        monkeypatch: Patches of the validator.
+    """
+
+    class _Validator:
+        """Validator that recurses too deeply."""
+
+        def iter_errors(self, schema: object) -> NoReturn:
+            """Fail like the validator for schemas nested too deeply.
+
+            Args:
+                schema: Schema.
+
+            Raises:
+                RecursionError: Always.
+            """
+            raise RecursionError
+
+    monkeypatch.setattr(io_schema, "_validator", _Validator)
+    assert find_problem(_schema()) == (
+        "The I/O Schema file (ga4gh-io.schema.json) is nested too deeply to be checked."
+    )
+
+
+def test_main(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The validator reads a schema from standard input and writes the result.
+
+    Args:
+        monkeypatch: Patches of standard input.
+        capsys: Captured standard output.
+    """
+    invalid = _schema()
+    invalid["properties"].pop("inputs")
+    for schema, problem in ((_schema(), None), (invalid, find_problem(invalid))):
+        monkeypatch.setattr(sys, "stdin", __import__("io").StringIO(json.dumps(schema)))
+        main()
+        assert json.loads(capsys.readouterr().out) == {"problem": problem}
+
+
+def test_main_module() -> None:
+    """The validator runs as a module (`python -m trs_filer.io_schema`)."""
+    import trs_filer.io_schema.__main__  # noqa: F401, PLC0415
+
+    result = subprocess.run(
+        [sys.executable, "-I", "-m", "trs_filer.io_schema"],
+        input=json.dumps(_schema()),
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert json.loads(result.stdout) == {"problem": None}
+
+
+def test_check_io_schema_timeout() -> None:
+    """Schemas not checked within the time limit are rejected."""
+    content = json.dumps(_schema())
+    with pytest.raises(InvalidRequest) as exc_info:
+        check_io_schema(content, "WDL", timeout=0.001)
+    assert exc_info.value.description == (
+        "The I/O Schema file (ga4gh-io.schema.json) could not be checked within "
+        "the time limit of 0.001 s; simplify it (e.g., nest its schemas less "
+        "deeply)."
+    )
+
+
+@pytest.mark.parametrize(
+    "result",
+    [
+        subprocess.CalledProcessError(1, "python"),
+        subprocess.CompletedProcess("python", 0, stdout="not JSON"),
+        subprocess.CompletedProcess("python", 0, stdout="{}"),
+        subprocess.CompletedProcess("python", 0, stdout="[]"),
+        subprocess.CompletedProcess("python", 0, stdout='{"problem": 1}'),
+    ],
+)
+def test_check_io_schema_validation_fails(
+    monkeypatch: pytest.MonkeyPatch, result: object
+) -> None:
+    """Failures of the validation are internal server errors.
+
+    Args:
+        monkeypatch: Patches of the process of the validation.
+        result: Result (or exception) of the process.
+    """
+
+    def run(*args: Any, **kwargs: Any) -> object:
+        """Return the result of the process, or raise it.
+
+        Args:
+            args: Positional arguments of `subprocess.run()`.
+            kwargs: Keyword arguments of `subprocess.run()`.
+
+        Returns:
+            The result.
+
+        Raises:
+            subprocess.CalledProcessError: The process failed.
+        """
+        if isinstance(result, subprocess.CalledProcessError):
+            raise result
+        return result
+
+    monkeypatch.setattr(check_module.subprocess, "run", run)
+    with pytest.raises(InternalServerError):
+        check_io_schema(json.dumps(_schema()), "WDL", timeout=TIMEOUT)

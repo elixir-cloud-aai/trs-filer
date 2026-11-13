@@ -114,8 +114,10 @@ dependencies = [
     "gunicorn>=26.2.0,<27",
     # Checks of GA4GH I/O Schema files against the vendored meta-schema
     # (`trs_filer/io_schema/`), JSON Schema Draft 2020-12 with
-    # `$dynamicRef`; references resolved with `referencing`
-    "jsonschema>=4.26,<5",
+    # `$dynamicRef`; references resolved with `referencing`. With the
+    # format checks of the profile's validator (`format-nongpl`, e.g., `uri`;
+    # not `format`, which pulls in GPL-licensed packages)
+    "jsonschema[format-nongpl]>=4.26,<5",
     "referencing>=0.37",
     # Remote files are retrieved with connection classes of urllib3 2.x
     # (`trs_filer/remote_files.py`)

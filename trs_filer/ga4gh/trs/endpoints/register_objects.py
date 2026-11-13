@@ -13,7 +13,8 @@ from trs_filer.errors.exceptions import (
     InvalidRequest,
     NotFound,
 )
-from trs_filer.io_schema import check_io_schema, is_io_schema_file
+from trs_filer.io_schema import is_io_schema_file
+from trs_filer.io_schema.check import check_io_schema
 from trs_filer.remote_files import fetch_remote_file
 from trs_filer.utils import get_collection, get_custom_config
 
@@ -437,7 +438,7 @@ class RegisterToolVersion:
 
         With `custom.io_schema.validation`, GA4GH I/O Schema files are
         checked against the meta-schema of the profile (see
-        `trs_filer.io_schema.check_io_schema()`).
+        `trs_filer.io_schema.check.check_io_schema()`).
 
         Raises:
             InvalidRequest: The files of the version are invalid, or, with
@@ -559,12 +560,12 @@ class RegisterToolVersion:
 
             # check GA4GH I/O Schemas (experimental), once their content is
             # retrieved and their descriptor type is valid
-            if get_custom_config().io_schema.validation and is_io_schema_file(
-                _file["tool_file"]
-            ):
+            io_schema_conf = get_custom_config().io_schema
+            if io_schema_conf.validation and is_io_schema_file(_file["tool_file"]):
                 check_io_schema(
                     content=_file["file_wrapper"]["content"],
                     descriptor_type=_file["type"],
+                    timeout=io_schema_conf.timeout,
                 )
 
     def register_metadata(self) -> None:

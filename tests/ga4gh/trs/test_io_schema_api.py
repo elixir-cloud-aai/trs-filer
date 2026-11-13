@@ -54,18 +54,21 @@ def _schema_file(tool: dict[str, Any]) -> dict[str, Any]:
     return file
 
 
-def _client(overlay: Path, validation: bool) -> FlaskClient:
-    """Get a test client of an app with the I/O Schema option set.
+def _client(overlay: Path, validation: bool, timeout: float = 60) -> FlaskClient:
+    """Get a test client of an app with the I/O Schema options set.
 
     Args:
         overlay: Config overlay.
         validation: Value of `custom.io_schema.validation`.
+        timeout: Value of `custom.io_schema.timeout`.
 
     Returns:
         Test client, whose requests carry an access token of an admin.
     """
     overlay.write_text(
-        f"custom:\n  io_schema:\n    validation: {str(validation).lower()}\n"
+        "custom:\n  io_schema:\n"
+        f"    validation: {str(validation).lower()}\n"
+        f"    timeout: {timeout}\n"
     )
     client = admin_client(create_app())
     assert get_custom_config().io_schema.validation is validation
@@ -78,7 +81,25 @@ def test_io_schema_config_default(client: FlaskClient) -> None:
     Args:
         client: Test client (of an app with the default config).
     """
-    assert get_custom_config().io_schema == IoSchemaConfig(validation=False)
+    assert get_custom_config().io_schema == IoSchemaConfig(validation=False, timeout=10)
+
+
+def test_io_schema_timeout(
+    mongo_client: MongoClient[dict[str, Any]], overlay: Path
+) -> None:
+    """I/O Schemas not checked within the time limit are rejected.
+
+    Args:
+        mongo_client: MongoDB client.
+        overlay: Config overlay.
+    """
+    client = _client(overlay, validation=True, timeout=0.001)
+    response = client.put(TOOL_PATH, json=_example())
+    assert response.status_code == 400
+    assert response.get_json()["detail"].startswith(
+        "The I/O Schema file (ga4gh-io.schema.json) could not be checked within "
+        "the time limit of 0.001 s"
+    )
 
 
 @pytest.mark.parametrize("validation", [False, True])

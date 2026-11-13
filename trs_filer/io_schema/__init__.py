@@ -1,34 +1,38 @@
-"""Checks of GA4GH I/O Schema files (experimental).
+"""Validation of GA4GH I/O Schema files (experimental).
 
 The [GA4GH I/O Schema](https://github.com/uniqueg/ga4gh-io-schema) describes
 the inputs and outputs of a workflow. It is published in TRS as a file of
 type `OTHER` named `ga4gh-io.schema.json`, next to the primary descriptor; it
 needs no change of the TRS specification. With `custom.io_schema.validation`,
 such files are checked on registration against a vendored copy of the
-meta-schema of the profile (see `docs/io-schema.md`).
+meta-schema of the profile (`trs_filer.io_schema.check`, see
+`docs/io-schema.md`).
 
 The meta-schema and its vocabularies are vendored unchanged from
 `schemas/` of uniqueg/ga4gh-io-schema at commit 573f65e (2026-11-12, branch
 `v0.3`, profile version 0.3.0), licensed under the Apache License 2.0, in
 the directory named after the date and commit (`META_SCHEMA_DIR`). Their
 references are resolved from these copies; nothing is fetched.
+
+Validating against the meta-schema takes time that grows steeply with the
+nesting of a schema (its `unevaluatedProperties` are checked at every
+level), so it runs in a process of its own, with a time limit
+(`python -m trs_filer.io_schema`, see `main()`). This module imports only
+the validator's packages, so that the process starts quickly.
 """
 
 import copy
 from functools import cache
 import json
-import logging
 from pathlib import Path, PurePosixPath
+import re
+import sys
 from typing import Any
 
 from jsonschema import Draft202012Validator
 from jsonschema.exceptions import ValidationError, relevance
 from referencing import Registry, Resource
 from referencing.jsonschema import DRAFT202012
-
-from trs_filer.errors.exceptions import InvalidRequest
-
-logger = logging.getLogger(__name__)
 
 #: File name of I/O Schema files (`ToolFile.path`, in any directory).
 IO_SCHEMA_FILE_NAME = "ga4gh-io.schema.json"
@@ -43,7 +47,13 @@ META_SCHEMA_ID = (
     "https://raw.githubusercontent.com/uniqueg/ga4gh-io-schema/"
     f"v{PROFILE_VERSION}/schemas/ga4gh-io-profile.schema.json"
 )
-_PREFIX = f"The I/O Schema file ({IO_SCHEMA_FILE_NAME})"
+#: Beginning of the reasons for rejecting an I/O Schema file.
+PREFIX = f"The I/O Schema file ({IO_SCHEMA_FILE_NAME})"
+# Names of properties that reasons may contain: short, without characters of
+# URLs with credentials (e.g., `:`, `/`, `@`); others are replaced by `*`
+_IDENTIFIER = re.compile(r"[A-Za-z_][A-Za-z0-9_]{0,63}")
+_NAME = re.compile(r"[A-Za-z0-9_$.-]{1,64}")
+_KEYWORD = re.compile(r"x-ga4gh-[a-z0-9-]{1,56}")
 
 
 def is_io_schema_file(tool_file: dict[str, Any]) -> bool:
@@ -68,9 +78,9 @@ def _validator() -> Draft202012Validator:
 
     Created once; validators are not changed by validation. References
     between the vendored files are resolved by their `$id`s; others (e.g.,
-    remote ones) are not resolvable. `format` keywords are asserted, except
-    `regex`, as Python can't parse all ECMA-262 patterns (as the validator of
-    the profile does).
+    remote ones) are not resolvable. `format` keywords are asserted (with
+    the checks of `jsonschema[format-nongpl]`, as by the validator of the
+    profile), except `regex`, as Python can't parse all ECMA-262 patterns.
 
     Returns:
         The validator.
@@ -88,7 +98,8 @@ def _validator() -> Draft202012Validator:
         if contents["$id"] == META_SCHEMA_ID:
             profile = contents
     Draft202012Validator.check_schema(profile)
-    # a copy of the draft's own checker, without `regex`
+    # A copy of the draft's own checker, without `regex`; its `checkers`
+    # (format name to check) is the documented way to restrict it
     format_checker = copy.copy(Draft202012Validator.FORMAT_CHECKER)
     format_checker.checkers = {
         name: check
@@ -118,12 +129,36 @@ def _most_specific(errors: list[ValidationError]) -> ValidationError:
     return max(specific or errors, key=relevance)
 
 
+def _path(error: ValidationError) -> str:
+    """Get the location of an error in the I/O Schema, as a JSON path.
+
+    Names that could be values (e.g., URLs) are replaced by `*`.
+
+    Args:
+        error: Error of the I/O Schema.
+
+    Returns:
+        The JSON path (e.g., `$.properties.inputs.properties.name`).
+    """
+    path = "$"
+    for part in error.absolute_path:
+        if isinstance(part, int):
+            path += f"[{part}]"
+        elif _IDENTIFIER.fullmatch(part):
+            path += f".{part}"
+        elif _NAME.fullmatch(part):
+            path += f"['{part}']"
+        else:
+            path += "[*]"
+    return path
+
+
 def _names(error: ValidationError) -> list[str]:
     """Get the names of the properties that an error is about.
 
     Only names that are not values of the I/O Schema: required properties
-    (names of the meta-schema) and unexpected `x-ga4gh-*` keywords (all
-    other keywords are allowed).
+    (names of the meta-schema) and unexpected `x-ga4gh-*` keywords of the
+    form of the profile's keywords (all other keywords are allowed).
 
     Args:
         error: Error of the I/O Schema.
@@ -142,73 +177,55 @@ def _names(error: ValidationError) -> list[str]:
             if isinstance(name, str) and name not in error.instance
         ]
     if error.validator == "unevaluatedProperties":
+        # jsonschema names the unexpected properties in its message only
         return [
             name
             for name in error.instance
             if isinstance(name, str)
-            and name.startswith("x-ga4gh-")
+            and _KEYWORD.fullmatch(name)
             and repr(name) in error.message
         ]
     return []
 
 
-def check_io_schema(content: str, descriptor_type: str) -> None:
-    """Check an I/O Schema file against the meta-schema of the profile.
+def find_problem(schema: dict[str, Any]) -> str | None:
+    """Validate an I/O Schema against the meta-schema of the profile.
 
-    The reasons for rejecting a file say where the file breaks a rule of the
-    meta-schema (as a JSON path, and the keyword of the meta-schema), but
-    don't contain its values (see `InvalidRequest`).
+    The reason says where the schema breaks a rule of the meta-schema (as a
+    JSON path, and the keyword of the meta-schema), but doesn't contain its
+    values (cf. `trs_filer.errors.exceptions.InvalidRequest`).
 
     Args:
-        content: Content of the file.
-        descriptor_type: Descriptor type that the file is registered for.
+        schema: The I/O Schema, which names the meta-schema in `$schema`.
 
-    Raises:
-        InvalidRequest: The file is not JSON, not a JSON object, doesn't name
-            the meta-schema of the supported version of the profile in
-            `$schema`, doesn't validate against it, or names another
-            descriptor type in `x-ga4gh-workflow.descriptor_type`.
+    Returns:
+        Why the schema is invalid, or `None` if it is valid.
     """
     try:
-        schema = json.loads(content)
-    except (ValueError, RecursionError) as exc:
-        logger.error("I/O Schema file is not valid JSON.")
-        raise InvalidRequest(f"{_PREFIX} is not valid JSON.") from exc
-    if not isinstance(schema, dict):
-        logger.error("I/O Schema file is not a JSON object.")
-        raise InvalidRequest(f"{_PREFIX} must be a JSON object.")
-    if schema.get("$schema") != META_SCHEMA_ID:
-        logger.error("I/O Schema file names another meta-schema.")
-        raise InvalidRequest(
-            f"{_PREFIX} must name the meta-schema of the GA4GH I/O Profile that "
-            f"TRS-Filer supports in '$schema': '{META_SCHEMA_ID}'."
-        )
-    errors = list(_validator().iter_errors(schema))
-    if errors:
+        errors = list(_validator().iter_errors(schema))
+        if not errors:
+            return None
         error = _most_specific(errors)
-        location = f"at {error.json_path} (keyword '{error.validator}'"
+        location = f"at {_path(error)} (keyword '{error.validator}'"
         names = _names(error)
-        if names:
-            location += f": {', '.join(repr(name) for name in names)}"
-        location += ")"
-        logger.error(
-            "I/O Schema file is invalid %s, against the meta-schema at '%s'.",
-            location,
-            "/".join(str(part) for part in error.absolute_schema_path),
-        )
-        raise InvalidRequest(
-            f"{_PREFIX} doesn't validate against the meta-schema of the GA4GH "
-            f"I/O Profile {PROFILE_VERSION} {location}."
-        )
-    workflow = schema.get("x-ga4gh-workflow")
-    if isinstance(workflow, dict) and workflow.get("descriptor_type") != (
-        descriptor_type
-    ):
-        logger.error(
-            "I/O Schema file of descriptor type '%s' names another one.",
-            descriptor_type,
-        )
-        raise InvalidRequest(
-            f"{_PREFIX} of descriptor type {descriptor_type} names another "
-            "descriptor type in 'x-ga4gh-workflow.descriptor_type'."
-        )
+    except RecursionError:
+        # e.g., deeply nested arrays, which the validator compares
+        return f"{PREFIX} is nested too deeply to be checked."
+    if names:
+        location += f": {', '.join(repr(name) for name in names)}"
+    return (
+        f"{PREFIX} doesn't validate against the meta-schema of the GA4GH I/O "
+        f"Profile {PROFILE_VERSION} {location})."
+    )
+
+
+def main() -> None:
+    """Validate an I/O Schema from standard input.
+
+    Writes the result to standard output, as a JSON object with the reason
+    why the schema is invalid (`problem`, cf. `find_problem()`), or `null`
+    if it is valid. Run with `python -m trs_filer.io_schema` by
+    `trs_filer.io_schema.check.check_io_schema()`.
+    """
+    schema = json.loads(sys.stdin.read())
+    json.dump({"problem": find_problem(schema)}, sys.stdout)
