@@ -42,6 +42,12 @@ from trs_filer.ga4gh.trs.permissions import (
     tool_class_exists,
 )
 from trs_filer.remote_files import fetch_remote_file
+from trs_filer.storage import (
+    file_content,
+    plain_redirect,
+    releases_objects,
+    served_wrapper,
+)
 from trs_filer.utils import get_collection, get_custom_config
 
 logger = logging.getLogger(__name__)
@@ -348,10 +354,10 @@ def toolsIdVersionsVersionIdTypeDescriptorGet(
             _d["tool_file"]["file_type"] == "PRIMARY_DESCRIPTOR"
             and _d["type"] == file_type
         ):
-            ret = _d["file_wrapper"]
+            ret = _d
     if not ret:
         raise NotFound
-    return _plain_response(ret) if plain else ret
+    return _plain_response(ret) if plain else served_wrapper(ret)
 
 
 @log_traffic
@@ -414,13 +420,13 @@ def toolsIdVersionsVersionIdTypeDescriptorRelativePathGet(
                 and _d["tool_file"]["file_type"] in file_types
                 and _d["type"] == file_type
             ):
-                ret = _d["file_wrapper"]
+                ret = _d
         if ret:
             logger.debug("Relative path found: '%s'", escape_log_value(path))
             break
     if not ret:
         raise NotFound
-    return _plain_response(ret) if plain else ret
+    return _plain_response(ret) if plain else served_wrapper(ret)
 
 
 def _split_plain(type: str) -> tuple[str, bool]:
@@ -521,19 +527,25 @@ def _version_files(id: str, version_id: str) -> list[dict[str, Any]]:
     return files
 
 
-def _file_content(wrapper: dict[str, Any]) -> bytes:
+def _file_content(entry: dict[str, Any]) -> bytes:
     """Get the content of a file, retrieving it from its URL if not stored.
 
     Args:
-        wrapper: File wrapper of the file.
+        entry: File of a stored version.
 
     Returns:
         Content of the file; text is encoded as UTF-8.
 
     Raises:
+        InternalServerError: The content could not be read from object
+            storage (see `trs_filer.storage.file_content()`).
         NotFound: The file has neither content nor URL, or the file can't be
             retrieved from its URL.
     """
+    stored = file_content(entry)
+    if stored is not None:
+        return stored
+    wrapper: dict[str, Any] = entry.get("file_wrapper", {})
     content = wrapper.get("content")
     if content is not None:
         if isinstance(content, bytes):
@@ -551,17 +563,22 @@ def _file_content(wrapper: dict[str, Any]) -> bytes:
     raise NotFound
 
 
-def _plain_response(wrapper: dict[str, Any]) -> Response:
+def _plain_response(entry: dict[str, Any]) -> Response:
     """Get the response with the bare content of a file, for plain types.
 
     Args:
-        wrapper: File wrapper of the file.
+        entry: File of a stored version.
 
     Returns:
         Response with the content of the file, as `text/plain` (see
-        `_text_response()`).
+        `_text_response()`), or, for files in object storage with presigned
+        URLs, a redirect to the presigned URL of the file's object (see
+        `trs_filer.storage.plain_redirect()`).
     """
-    return _text_response(_file_content(wrapper))
+    redirect = plain_redirect(entry)
+    if redirect is not None:
+        return redirect
+    return _text_response(_file_content(entry))
 
 
 def _text_response(body: bytes | str) -> Response:
@@ -615,7 +632,7 @@ def toolsIdVersionsVersionIdTypeTestsGet(
     file_type, plain = _negotiate_type(type)
     files = _version_files(id=id, version_id=version_id)
     ret = [
-        _d["file_wrapper"]
+        served_wrapper(_d)
         for _d in files
         if _d["tool_file"]["file_type"] == "TEST_FILE" and _d["type"] == file_type
     ]
@@ -687,7 +704,7 @@ def toolsIdVersionsVersionIdTypeFilesGet(
             with ZipFile(mem_zip, mode="w", compression=ZIP_DEFLATED) as zf:
                 for file_entry in selected_files:
                     path_in_zip = file_entry["tool_file"]["path"]
-                    content = _file_content(file_entry.get("file_wrapper", {}))
+                    content = _file_content(file_entry)
                     zf.writestr(path_in_zip, content)
             mem_zip.seek(0)
             download_name = f"{id}_{version_id}_{type}.zip"
@@ -736,7 +753,7 @@ def toolsIdVersionsVersionIdContainerfileGet(
     try:
         version = data["versions"][0]
         ret = [
-            d["file_wrapper"]
+            served_wrapper(d)
             for d in version["files"]
             if d["tool_file"]["file_type"] == "CONTAINERFILE"
         ]
@@ -831,6 +848,7 @@ def _register_tool(tool: RegisterTool) -> str:
 
 
 @log_traffic
+@releases_objects
 def postTool() -> str:
     """Add tool with an auto-generated ID.
 
@@ -853,6 +871,7 @@ def postTool() -> str:
 
 
 @log_traffic
+@releases_objects
 def putTool(
     id: str,
 ) -> str:
@@ -905,6 +924,7 @@ def putTool(
 
 
 @log_traffic
+@releases_objects
 def deleteTool(
     id: str,
 ) -> str:
@@ -940,6 +960,7 @@ def deleteTool(
 
 
 @log_traffic
+@releases_objects
 def postToolVersion(
     id: str,
 ) -> str:
@@ -968,6 +989,7 @@ def postToolVersion(
 
 
 @log_traffic
+@releases_objects
 def putToolVersion(
     id: str,
     version_id: str,
@@ -999,6 +1021,7 @@ def putToolVersion(
 
 
 @log_traffic
+@releases_objects
 def deleteToolVersion(
     id: str,
     version_id: str,
