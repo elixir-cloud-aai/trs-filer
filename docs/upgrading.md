@@ -28,9 +28,19 @@ existing data needs no changes. Check clients and custom configs:
   types](api.md#descriptor-types)).
 - Descriptors are served as plain text (`text/plain`) for the `PLAIN_`
   types (`{type}/descriptor` and `{type}/descriptor/{relative_path}`, e.g.,
-  `PLAIN_CWL`), instead of `404 Not Found`; tests are still not served for
-  them (see [Descriptor types](api.md#descriptor-types)). The `text/plain`
-  responses of these endpoints have no schema in the served specification.
+  `PLAIN_CWL`), instead of `404 Not Found`, and so are tests
+  (`{type}/tests`: the array of file wrappers, as `text/plain`) (see
+  [Descriptor types](api.md#descriptor-types)). The `text/plain` responses
+  of the descriptor endpoints have no schema in the served specification.
+- **Media types (breaking for some clients):** `{type}/descriptor`,
+  `{type}/descriptor/{relative_path}` and `{type}/tests` check `Accept`,
+  which they ignored before: clients that don't accept the media type of
+  the type (`application/json` for descriptor types, `text/plain` for
+  their `PLAIN_` forms) get `406 Not Acceptable` instead of a response
+  they didn't ask for (e.g., `Accept: text/plain` with `CWL`; use
+  `PLAIN_CWL` instead). Clients that send no `Accept`, `*/*`, or the media
+  type of the type are not affected. Their responses carry `Vary: Accept`
+  (see [Media types](api.md#media-types)).
 - `{type}/descriptor/{relative_path}` finds files in subdirectories by
   encoded paths (`tools%2Fecho.cwl`, as in the specification) and by plain
   ones (`tools/echo.cwl`), instead of `404 Not Found`; paths encoded twice
