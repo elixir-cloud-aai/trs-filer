@@ -194,6 +194,14 @@ jobs:
         run: |
           uv sync --locked --extra dev --python "$(which python)"
           echo "${PWD}/.venv/bin" >> "$GITHUB_PATH"
+      # The chart tests (run if Helm is installed, as on GitHub's runners)
+      # need the library chart, the version locked in `Chart.lock`
+      - name: Build chart dependencies
+        run: |
+          # The library chart is then checked as when it was pinned: OCI
+          # tags can be pushed again
+          helm dependency build deployment
+          (cd deployment && sha256sum -c charts.sha256)
       - name: Calculate unit test coverage
         if: ${{ matrix.uri == '' }}
         run: |
@@ -217,12 +225,11 @@ jobs:
         if: ${{ matrix.uri != '' }}
         run: pytest -W ignore::DeprecationWarning
 
-  # The Helm chart (`deployment/`), which the release workflow packages:
-  # lints it as `release.yml` does, renders it (`tests/test_chart.py`) and
-  # runs the script of its config Job against a stub of the Kubernetes API
-  # server (`tests/test_update_config_map.py`; TEMPORARY, with the Job, until
-  # the chart uses the FOCA library chart: #135). `test` runs these tests
-  # too, with the runner's Helm; this job with the Helm of the release
+  # The Helm chart (`deployment/`), which the release workflow packages, with
+  # FOCA's library chart: checks the library chart against its digest, lints
+  # the chart as `release.yml` does and renders it (`tests/test_chart.py`).
+  # `test` runs these tests too, with the runner's Helm; this job with the
+  # Helm of the release
   chart:
     name: Chart
     runs-on: ubuntu-latest
@@ -241,8 +248,7 @@ jobs:
         uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           version-file: uv.lock
-      # The versions of `uv.lock`, as in `lint`; with the Python `yq` of the
-      # image, which the script uses
+      # The versions of `uv.lock`, as in `lint`
       - name: Install dependencies
         run: |
           uv sync --locked --extra dev --python "$(which python)"
@@ -253,34 +259,37 @@ jobs:
         uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
         with:
           version: v3.22.1
+      # The library chart foca-common, the version locked in `Chart.lock`
+      - name: Build chart dependencies
+        run: |
+          # The library chart is then checked as when it was pinned: OCI
+          # tags can be pushed again
+          helm dependency build deployment
+          (cd deployment && sha256sum -c charts.sha256)
       # As `prepare` of `release.yml` lints it (with the values that users
       # must pass, e.g., the Secret of MongoDB's credentials, so that the
-      # templates render as installed; lint only reports missing required
-      # values), and without authentication and a host name
+      # templates render as installed), and without authentication
       - name: Lint chart
         run: |
           helm lint deployment --strict -f deployment/ci/test-values.yaml
           helm lint deployment --strict -f deployment/ci/test-values.yaml \
-            --set mongodb.auth.enabled=false --set mongodb.auth.existingSecret= \
-            --set host_name=
-      # The tests fail instead of skipping if Helm, jq or yq is missing (`CI`)
+            --set mongodb.auth.enabled=false --set mongodb.auth.existingSecret=
+      # The tests fail instead of skipping if Helm is missing (`CI`)
       - name: Test chart
         run: |
           helm version
-          jq --version
-          yq --version
-          pytest -W ignore::DeprecationWarning tests/test_chart.py tests/test_update_config_map.py
+          pytest -W ignore::DeprecationWarning tests/test_chart.py
 
   # The chart as deployed in a cluster: installs it on kind (the defaults,
-  # with the values of `deployment/ci/test-values.yaml`: a host name and the
-  # Secret of MongoDB's credentials, created here with random passwords),
-  # with the image built from the commit, loaded into the cluster's node
-  # (pushed nowhere, so the job needs no secrets and runs for pull requests
-  # from forks), waits for the config Job, and checks the API through a
-  # port forward (the Ingress has no controller on kind): the service info,
-  # and the registration and retrieval of a tool, whose URL has the host
-  # name that the config Job writes to the app's config. See "Helm chart" in
-  # `docs/development.md` for running it locally
+  # with the values of `deployment/ci/test-values.yaml`: a host name, an
+  # identity provider and the Secret of MongoDB's credentials, created here
+  # with random passwords), with the image built from the commit, loaded into
+  # the cluster's node (pushed nowhere, so the job needs no secrets and runs
+  # for pull requests from forks), waits until the app is ready, and checks
+  # the API through a port forward (the Ingress has no controller on kind):
+  # the service info, and the registration and retrieval of a tool, whose URL
+  # has the host name that the chart renders into the app's config overlay.
+  # See "Helm chart" in `docs/development.md` for running it locally
   chart-install:
     name: Chart install
     runs-on: ubuntu-latest
@@ -291,6 +300,8 @@ jobs:
       # A local name, which no registry serves: the chart uses the image
       # loaded into the node (`imagePullPolicy: Never`)
       IMAGE: trs-filer:ci
+      # The app's pods of the release `trs-filer`
+      APP_PODS: app.kubernetes.io/instance=trs-filer,app.kubernetes.io/component=app
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -302,6 +313,11 @@ jobs:
         uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
         with:
           version: v3.22.1
+      # The library chart foca-common, as in `chart`
+      - name: Build chart dependencies
+        run: |
+          helm dependency build deployment
+          (cd deployment && sha256sum -c charts.sha256)
       # Dependabot updates the action, but not the kind version: bump it by
       # hand (see "Versioning and releases" in `docs/development.md`)
       - name: Create kind cluster
@@ -315,8 +331,8 @@ jobs:
           docker build --build-arg SETUPTOOLS_SCM_PRETEND_VERSION=0.0.0+kind \
             --tag "${IMAGE}" .
           kind load docker-image "${IMAGE}" --name "${CLUSTER}"
-      # The Secret named in `deployment/ci/test-values.yaml`; `--wait-for-jobs`
-      # waits for the config Job, which restarts the app with its config
+      # The Secret named in `deployment/ci/test-values.yaml`; `--wait` waits
+      # until the app and MongoDB are ready (readiness probes)
       - name: Install chart
         run: |
           kubectl create namespace "${NAMESPACE}"
@@ -328,13 +344,13 @@ jobs:
             --from-literal=password="$(openssl rand -hex 24)"
           helm install trs-filer deployment -n "${NAMESPACE}" \
             -f deployment/ci/test-values.yaml \
-            --set trs_filer.image="${IMAGE}" \
-            --set trs_filer.imagePullPolicy=Never \
-            --wait --wait-for-jobs --timeout 600s
+            --set trsFiler.image="${IMAGE}" \
+            --set trsFiler.imagePullPolicy=Never \
+            --wait --timeout 600s
       - name: Check API
         env:
           API: http://localhost:8080/ga4gh/trs/v2
-          # `host_name` of `deployment/ci/test-values.yaml`
+          # `hostName` of `deployment/ci/test-values.yaml`
           HOST: trs.example.org
         run: |
           body="${RUNNER_TEMP}/body.json"
@@ -347,22 +363,20 @@ jobs:
               kill "${pid}" 2> /dev/null || true
               pid=""
             fi
-            # The config Job deletes the app's pods to restart the app with
-            # its config, and completes without waiting for them to go: wait
-            # until they are gone, so that the port forward (which picks a pod
+            kubectl rollout status deployment/trs-filer -n "${NAMESPACE}" \
+              --timeout=300s
+            # Upgrades replace the app's pods (rolling update): wait until the
+            # old ones are gone, so that the port forward (which picks a pod
             # of the Service once) doesn't reach a terminating pod with the
             # old config
             for _ in $(seq 60); do
-              if ! kubectl get pods -n "${NAMESPACE}" -l app=trs-filer -o json \
+              if ! kubectl get pods -n "${NAMESPACE}" -l "${APP_PODS}" -o json \
                   | jq -e 'any(.items[]; .metadata.deletionTimestamp)' > /dev/null; then
                 break
               fi
               sleep 2
             done
-            kubectl rollout status deployment/trs-filer -n "${NAMESPACE}" \
-              --timeout=300s
-            # The app has no readiness probe, so it may still be starting; a
-            # port forward ends on a refused connection, so it is restarted
+            # A port forward ends on a refused connection, so it is restarted
             # until the app answers
             for _ in $(seq 60); do
               if [[ -z "${pid}" ]] || ! kill -0 "${pid}" 2> /dev/null; then
@@ -420,14 +434,13 @@ jobs:
           check GET /service-info 200 '.type.artifact == "trs"'
           check GET /tools 200 '. == []'
           check POST /tools 401 '.status == 401' "${tool}"
-          # Writes without authentication (`config` value of the chart,
-          # merged after the config Job's overlay; for this test only, see
-          # "Running without authentication" in `docs/development.md`), to
-          # check the public URL that the config Job sets; the changed value
-          # restarts the app (checksum of its overlay)
+          # Writes without authentication (`config` value of the chart; for
+          # this test only, see "Running without authentication" in
+          # `docs/development.md`), to check the public URL that the chart
+          # sets; the changed value restarts the app (checksum of its overlay)
           helm upgrade trs-filer deployment -n "${NAMESPACE}" --reuse-values \
-            --set trs_filer.config.api.specs.trs.disable_auth=true \
-            --wait --wait-for-jobs --timeout 600s
+            --set config.api.specs.trs.disable_auth=true \
+            --wait --timeout 600s
           connect
           check POST /tools 200 'type == "string"' "${tool}"
           id="$(jq -r . "${body}")"
@@ -439,15 +452,11 @@ jobs:
       - name: Show cluster state
         if: failure()
         run: |
-          kubectl get all,jobs,pvc,networkpolicies -n "${NAMESPACE}" || true
+          kubectl get all,configmaps,pvc,networkpolicies -n "${NAMESPACE}" || true
           kubectl describe pods -n "${NAMESPACE}" || true
+          # The pods of the app and of MongoDB
           kubectl logs -n "${NAMESPACE}" --all-containers --prefix \
-            -l app=trs-filer --tail=100 || true
-          # The pods of all jobs (the config Job's) and of MongoDB
-          kubectl logs -n "${NAMESPACE}" --all-containers --prefix \
-            -l job-name --tail=100 || true
-          kubectl logs -n "${NAMESPACE}" --all-containers --prefix \
-            -l app=mongodb-trs-filer --tail=100 || true
+            -l app.kubernetes.io/instance=trs-filer --tail=100 || true
       - name: Tear down cluster
         if: always()
         run: kind delete cluster --name "${CLUSTER}"
@@ -566,12 +575,6 @@ jobs:
               find / -xdev -name "pip-*.dist-info" | grep .; then
               exit 1
             fi'
-      # The tools of the Helm chart's config Job (temporary, #135); `yq` is
-      # installed from the lock (dependency group `config-job`)
-      - name: Check tools of config Job
-        run: |
-          docker compose exec -T trs-filer sh -c \
-            'curl --version && jq --version && yq --version'
       - name: Check license text in image
         run: |
           docker compose exec -T trs-filer python -c \
