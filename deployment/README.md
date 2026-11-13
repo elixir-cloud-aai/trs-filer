@@ -97,6 +97,9 @@ config:
       environment: prod
 ```
 
+Other settings go into `config` too, e.g., `custom.remote_files` or the
+experimental check of GA4GH I/O Schemas, `custom.io_schema.validation` (see
+[Configuration](https://trs-filer.readthedocs.io/en/latest/configuration/)).
 Without `service_info`, deployments serve the **placeholder service info**
 of the base config (`id: org.example.trs-filer`, organization `Example
 Organization`), and FOCA warns of it on startup. Pods are restarted when the

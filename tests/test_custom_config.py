@@ -7,6 +7,7 @@ from trs_filer.custom_config import (
     AccessControlConfig,
     CustomConfig,
     IdConfig,
+    IoSchemaConfig,
     ServiceConfig,
 )
 
@@ -52,3 +53,14 @@ def test_access_control_config_invalid_mode(mode: object) -> None:
         match="Input should be 'open', 'controlled' or 'moderated'",
     ):
         AccessControlConfig(tool_classes=mode)  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize("timeout", [0, -1, float("inf"), float("nan")])
+def test_io_schema_config_invalid_timeout(timeout: float) -> None:
+    """Time limits of checking I/O Schemas must be positive and finite.
+
+    Args:
+        timeout: Invalid time limit.
+    """
+    with pytest.raises(pydantic.ValidationError):
+        IoSchemaConfig(timeout=timeout)

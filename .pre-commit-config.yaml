@@ -13,11 +13,12 @@ repos:
         # Helm templates are not valid YAML before rendering; `mkdocs.yml`
         # uses MkDocs' `!ENV` tag (the docs build checks it)
         exclude: ^(deployment/templates/|mkdocs\.yml$)
-      # Vendored GA4GH specifications are kept as published
+      # Vendored GA4GH specifications and the meta-schema of the GA4GH I/O
+      # Profile are kept as published
       - id: end-of-file-fixer
-        exclude: ^trs_filer/api/[0-9]{8}\.
+        exclude: ^trs_filer/(api|io_schema)/[0-9]{8}\.
       - id: trailing-whitespace
-        exclude: ^trs_filer/api/[0-9]{8}\.
+        exclude: ^trs_filer/(api|io_schema)/[0-9]{8}\.
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: c0f278f1254ccc8fb09676bcdb8d847e7db493e5  # frozen: v0.17.4
     hooks:

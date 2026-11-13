@@ -1,0 +1,134 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/uniqueg/ga4gh-io-schema/v0.3.0/schemas/vocabularies/file.schema.json",
+  "$dynamicAnchor": "meta",
+  "title": "GA4GH IO Profile File Keywords",
+  "description": "Keywords that describe file parameters: file references and the structure of tabular files.",
+  "properties": {
+    "x-ga4gh-file": {
+      "$ref": "#/$defs/fileReference"
+    },
+    "x-ga4gh-tabular-schema": {
+      "$dynamicRef": "#meta",
+      "description": "Experimental. A nested JSON schema describing the rows of a tabular file (e.g., a sample sheet), as a hint for clients (e.g., to offer a spreadsheet editor). Not a validation rule: validation of tabular files is deferred. Checked by the same rules as every other schema of the IO schema."
+    }
+  },
+  "dependentSchemas": {
+    "x-ga4gh-file": {
+      "$comment": "A file reference is a flat string schema. The profile defines its value syntax, not `format` (e.g., `uri` rejects compact DRS identifiers); `contentMediaType`, `contentEncoding` and `contentSchema` describe the string itself, not the referenced file. In-place applicators are not allowed on the annotated schema, so that it stays flat for converters and clients. This checks only the annotated schema: schemas that apply at the same location (e.g., a sibling in a parent allOf) can't be checked here; the specification forbids them to add these keywords.",
+      "required": [
+        "type"
+      ],
+      "properties": {
+        "type": {
+          "const": "string"
+        },
+        "format": false,
+        "contentMediaType": false,
+        "contentEncoding": false,
+        "contentSchema": false,
+        "allOf": false,
+        "anyOf": false,
+        "oneOf": false,
+        "not": false,
+        "if": false,
+        "then": false,
+        "else": false,
+        "$ref": false,
+        "$dynamicRef": false
+      }
+    }
+  },
+  "$defs": {
+    "fileReference": {
+      "type": "object",
+      "description": "Marks a string as a reference to a file or directory and describes what it refers to.",
+      "required": [
+        "kind"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "file",
+            "directory"
+          ],
+          "description": "Whether the string refers to a file or to a directory."
+        },
+        "mediaType": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9!#$&^_.+-]{0,126}/[A-Za-z0-9][A-Za-z0-9!#$&^_.+-]{0,126}$",
+          "description": "Media type of the referenced file (RFC 6838, e.g., text/csv), without parameters."
+        },
+        "ontology": {
+          "type": "string",
+          "format": "uri",
+          "description": "HTTP(S) IRI of an ontology term for the format of the referenced file or directory (e.g., an EDAM format term), with namespace prefixes expanded.",
+          "pattern": "^https?://"
+        },
+        "compression": {
+          "enum": [
+            "gzip",
+            "bgzip",
+            "bzip2",
+            "xz",
+            "zstd"
+          ],
+          "description": "Compression of the referenced file. bgzip is block-compressed gzip: gzip tools read it, and index tools (e.g., tabix) need it."
+        },
+        "secondaryFiles": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "description": "Files that must exist next to the referenced file (e.g., indexes), as suffix patterns in the style of CWL with at least one character other than a dot: the suffix is appended to the name of the referenced file, after each leading ^ has removed one extension (e.g., .bai for sample.bam.bai, ^.bai for sample.bai).",
+          "items": {
+            "type": "string",
+            "pattern": "^\\^*[.]*[A-Za-z0-9_+-][A-Za-z0-9_.+-]*$"
+          }
+        },
+        "schemes": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "description": "URI schemes that values may use (e.g., drs, https, s3), in lowercase. If given, values must be absolute URIs with one of them; paths are not allowed. The schemes javascript, vbscript, livescript, data, blob, filesystem, file, jar, view-source and about are rejected; for all others, the deployment's allow-list is the control.",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9+.-]*$",
+            "not": {
+              "enum": [
+                "javascript",
+                "vbscript",
+                "livescript",
+                "data",
+                "blob",
+                "filesystem",
+                "file",
+                "jar",
+                "view-source",
+                "about"
+              ]
+            }
+          }
+        }
+      },
+      "if": {
+        "required": [
+          "kind"
+        ],
+        "properties": {
+          "kind": {
+            "const": "directory"
+          }
+        }
+      },
+      "then": {
+        "$comment": "Media types, compression and secondary files apply to files only.",
+        "properties": {
+          "mediaType": false,
+          "compression": false,
+          "secondaryFiles": false
+        }
+      }
+    }
+  }
+}

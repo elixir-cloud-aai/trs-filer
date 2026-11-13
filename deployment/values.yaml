@@ -58,6 +58,13 @@ config: {}
 #         url: "https://organization.example.org"
 #       contactUrl: "mailto:trs@example.org"
 #       environment: "prod"
+#   # Check GA4GH I/O Schemas on registration (experimental, see
+#   # docs/io-schema.md)
+#   custom:
+#     io_schema:
+#       validation: true
+#       # Time limit of checking a file, in seconds
+#       timeout: 10
 
 trsFiler:
   # Image repository; may include a tag or digest instead of setting `tag`

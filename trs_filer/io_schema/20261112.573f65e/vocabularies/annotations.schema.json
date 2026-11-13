@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/uniqueg/ga4gh-io-schema/v0.3.0/schemas/vocabularies/annotations.schema.json",
+  "title": "GA4GH IO Profile Annotations",
+  "description": "Keywords that annotate a parameter for clients: UI hints, error message, description format and ontology term.",
+  "properties": {
+    "x-ga4gh-ontology": {
+      "type": "string",
+      "format": "uri",
+      "description": "URI to an ontology term (e.g., an EDAM data term) semantically describing the data of the parameter. The format of a file goes into ontology of x-ga4gh-file."
+    },
+    "x-ga4gh-ui-widget": {
+      "$ref": "https://raw.githubusercontent.com/uniqueg/ga4gh-io-schema/v0.3.0/schemas/vocabularies/ui-widgets.schema.json",
+      "description": "Hint for UI clients on how to render this input/output. References an external standardized vocabulary."
+    },
+    "x-ga4gh-description-format": {
+      "type": "string",
+      "enum": [
+        "plain_text",
+        "markdown"
+      ],
+      "default": "plain_text",
+      "description": "Hint for UI/CLI clients on how to parse and render the standard JSON Schema 'description' field, avoiding redundant text properties."
+    },
+    "x-ga4gh-hidden": {
+      "type": "boolean",
+      "description": "Inspired by nf-core. If true, UI generators should hide this parameter from default user views."
+    },
+    "x-ga4gh-error-message": {
+      "type": "string",
+      "description": "Inspired by nf-core. Custom, human-readable error message to display if WES payload validation fails."
+    }
+  }
+}
