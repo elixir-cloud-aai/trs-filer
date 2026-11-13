@@ -1560,7 +1560,10 @@ def test_type_accept_logged(
     # Servers refuse line breaks in headers; other control characters pass
     accept = "text/html\x1b[31m, " + "x" * 300
     with caplog.at_level("INFO", logger=server.logger.name):
-        client.get(f"{VERSION_PATH}/CWL/descriptor", headers={"Accept": accept})
+        response = client.get(
+            f"{VERSION_PATH}/CWL/descriptor", headers={"Accept": accept}
+        )
+    assert response.status_code == 406
     (record,) = [
         record
         for record in caplog.records
