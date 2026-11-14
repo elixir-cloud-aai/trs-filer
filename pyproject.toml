@@ -114,7 +114,7 @@ dependencies = [
     # (`merge_null_removes`, FOCA 0.23); replace with `foca>=0.23.0,<0.24`
     # once released, before the next release of TRS-Filer
     "foca @ git+https://github.com/elixir-cloud-aai/foca@93e9721711f7d6412abc69a10f0047c9e95ce490",
-    "gunicorn>=26.2.0,<27",
+    "gunicorn>=26.2.0,<28",
     # Checks of GA4GH I/O Schema files against the vendored meta-schema
     # (`trs_filer/io_schema/`), JSON Schema Draft 2020-12 with
     # `$dynamicRef`; references resolved with `referencing`, and the format
@@ -165,7 +165,7 @@ docs = [
     # 1.0.6 and earlier fail with pymdown-extensions 12
     "mkdocstrings>=1.0.8,<2",
     "mkdocstrings-python>=2.0.10,<3",
-    "pymdown-extensions>=12.3,<13",
+    "pymdown-extensions>=12.3,<14",
 ]
 
 [dependency-groups]
