@@ -6,9 +6,9 @@ mocked (see `tests/conftest.py`).
 """
 
 from copy import deepcopy
-from types import SimpleNamespace
 import os
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 from urllib.parse import quote
 
@@ -409,8 +409,7 @@ def test_indexes(mongo_client: MongoClient[dict[str, Any]], overlay: Path) -> No
     assert any(index["key"] == [("toolclass.id", 1)] for index in tools)
     classes = mongo_client[DB]["toolclasses"].index_information().values()
     assert any(
-        index["key"] == [("_createdBy", 1)] and index.get("sparse")
-        for index in classes
+        index["key"] == [("_createdBy", 1)] and index.get("sparse") for index in classes
     )
 
 
@@ -720,7 +719,9 @@ def test_approval_of_tool_class_added_meanwhile(
     monkeypatch.setattr(
         server,
         "get_collection",
-        lambda name: AddedMeanwhile() if name == "toolclasses" else get_collection(name),
+        lambda name: (
+            AddedMeanwhile() if name == "toolclasses" else get_collection(name)
+        ),
     )
     assert client.put(f"{TOOL_CLASSES}/late/approval").status_code == 404
     assert _doc(toolclasses, "late")[PENDING] is True

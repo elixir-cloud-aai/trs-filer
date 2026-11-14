@@ -80,10 +80,10 @@ def describe_invalid_request(
 ) -> Response:
     """Answer an invalid request with its reason as `detail`.
 
-    Error handler of the app for `InvalidRequest`, and for
-    `UnusedToolClassesLimit` (`409 Conflict`), whose description says what
-    to do (registered in
-    `trs_filer.app.create_app()`): FOCA's error handler sends the fixed
+    Error handler of the app for `InvalidRequest` and
+    `UnusedToolClassesLimit` (`409 Conflict`; registered in
+    `trs_filer.app.create_app()`), whose descriptions say what to do:
+    FOCA's error handler sends the fixed
     problem details of `exceptions` for all other exceptions, including
     other bad requests (e.g., `RemoteFileError`, whose description is not
     for clients). Like FOCA's, its responses are not validated against the

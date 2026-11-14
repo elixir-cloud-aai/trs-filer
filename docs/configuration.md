@@ -296,6 +296,9 @@ then only register tools with stored tool classes, as in mode
 count for nobody. Concurrent requests of a user can exceed the limit by
 their number. Without authentication, there are no users, and no limit.
 
+`GET /toolClasses` is not paginated: the TRS specification defines no
+paging for it, and the limit bounds how fast users can grow the list.
+
 **Policy rules.** Keep the rule `add-tool-classes`
 (`security.access_control.policies`) and set the mode instead of removing
 the rule: without it, `POST /toolClasses` and `PUT /toolClasses/{id}` are
@@ -306,9 +309,6 @@ classes), `PUT` with a new identifier is refused (`403`) also for users
 whom other rules allow to replace objects (e.g., editors, see
 [Admins](access-control.md#admins)): such rules let them replace stored
 objects, not add new ones.
-
-`GET /toolClasses` is not paginated: the TRS specification defines no
-paging for it, and the limit bounds how fast users can grow the list.
 
 For example, in a config overlay:
 
