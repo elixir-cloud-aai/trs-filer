@@ -276,11 +276,30 @@ corrects it on startup. Without authentication (see [Running without
 authentication](development.md#running-without-authentication)), there are
 no admins: nothing is pending, and all tools are served.
 
-TRS-Filer does not limit the number of tool classes that no tool has per
-user, as Cloud Registry does for service types: in modes `open` and
-`moderated`, any authenticated user can add tool classes without bound;
-admins delete unwanted ones with `DELETE /toolClasses/{id}` (see [Access
-control](access-control.md#admins)). Keep the rule `add-tool-classes`
+**Unused tool classes per user.** Users other than admins may only have
+added `custom.access_control.max_unused_tool_classes` tool classes that no
+tool has (default: 10; `null` for no limit), as for the service types of
+Cloud Registry (`max_unused_service_types`), in modes `open` and
+`moderated` (in mode `controlled`, they can't add tool classes at all):
+further tool classes are refused with `409 Conflict` (`"You have added 10
+tool classes that no tool has, as many as allowed; ..."`), whether added
+explicitly or by registering a tool with a new tool class, until tools have
+them or admins delete them (`DELETE /toolClasses/{id}`, see [Access
+control](access-control.md#admins)); pending and approved tool classes both
+count. Tool classes become unused when their tools are deleted or change
+their tool class, so the limit bounds how many tool classes each user can
+add without tools (users can still leave more unused by registering tools
+with new tool classes and deleting them, one registration per tool class).
+Set `0` to let only admins add tool classes: users other than admins can
+then only register tools with stored tool classes, as in mode
+`controlled`. Tool classes stored before TRS-Filer recorded who added them
+count for nobody. Concurrent requests of a user can exceed the limit by
+their number. Without authentication, there are no users, and no limit.
+
+`GET /toolClasses` is not paginated: the TRS specification defines no
+paging for it, and the limit bounds how fast users can grow the list.
+
+**Policy rules.** Keep the rule `add-tool-classes`
 (`security.access_control.policies`) and set the mode instead of removing
 the rule: without it, `POST /toolClasses` and `PUT /toolClasses/{id}` are
 for admins only, but registering tools with new tool classes still adds
@@ -297,6 +316,7 @@ For example, in a config overlay:
 custom:
     access_control:
         tool_classes: moderated
+        max_unused_tool_classes: 5
 ```
 
 **Deprecated: `custom.toolclass.validation`.** `custom.toolclass.validation:

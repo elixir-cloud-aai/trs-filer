@@ -27,6 +27,7 @@ __all__ = [
     "NotAcceptable",
     "NotFound",
     "RemoteFileError",
+    "UnusedToolClassesLimit",
     "describe_invalid_request",
     "exceptions",
 ]
@@ -44,6 +45,27 @@ class InvalidRequest(BadRequest):
     """
 
 
+class UnusedToolClassesLimit(Conflict):
+    """A user other than an admin has added too many unused tool classes.
+
+    Cf. `custom.access_control.max_unused_tool_classes`; the description
+    says what to do and is sent to clients as `detail` (cf.
+    `describe_invalid_request()`, which serves it).
+    """
+
+    def __init__(self, limit: int) -> None:
+        """Create the exception, with a description of what to do.
+
+        Args:
+            limit: How many unused tool classes a user may have added.
+        """
+        super().__init__(
+            f"You have added {limit} tool classes that no tool has, as many "
+            "as allowed; use them for tools, or ask an admin to delete them, "
+            "before adding others."
+        )
+
+
 class RemoteFileError(BadRequest):
     """The content of a file could not be retrieved from its URL.
 
@@ -53,11 +75,15 @@ class RemoteFileError(BadRequest):
     """
 
 
-def describe_invalid_request(exc: InvalidRequest) -> Response:
+def describe_invalid_request(
+    exc: InvalidRequest | UnusedToolClassesLimit,
+) -> Response:
     """Answer an invalid request with its reason as `detail`.
 
-    Error handler of the app for `InvalidRequest` (registered in
-    `trs_filer.app.create_app()`): FOCA's error handler sends the fixed
+    Error handler of the app for `InvalidRequest` and
+    `UnusedToolClassesLimit` (`409 Conflict`; registered in
+    `trs_filer.app.create_app()`), whose descriptions say what to do:
+    FOCA's error handler sends the fixed
     problem details of `exceptions` for all other exceptions, including
     other bad requests (e.g., `RemoteFileError`, whose description is not
     for clients). Like FOCA's, its responses are not validated against the
@@ -65,11 +91,12 @@ def describe_invalid_request(exc: InvalidRequest) -> Response:
     cloud-registry's controllers return.
 
     Args:
-        exc: Invalid request.
+        exc: Invalid request, or a request over the limit of unused tool
+            classes.
 
     Returns:
-        `400 Bad Request` problem details response with the description of
-        the exception as `detail`.
+        Problem details response with the status of the exception (`400`
+        or `409`) and its description as `detail`.
     """
     return problem_response(exc)
 

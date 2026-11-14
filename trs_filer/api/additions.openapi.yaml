@@ -176,6 +176,13 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+        '409':
+          description: The user has added as many tool classes that no tool
+            has as allowed (`custom.access_control.max_unused_tool_classes`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '500':
           description: An unexpected error occurred.
           content:
@@ -245,7 +252,9 @@ paths:
                 $ref: '#/components/schemas/Error'
         '409':
           description: The tool was deleted, or deleted and registered
-            again, while the request was processed.
+            again, while the request was processed; or the user has added as
+            many tool classes that no tool has as allowed
+            (`custom.access_control.max_unused_tool_classes`).
           content:
             application/json:
               schema:
@@ -557,6 +566,13 @@ paths:
                 $ref: '#/components/schemas/Error'
         '403':
           description: The requester is not authorized to perform this action.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: The user has added as many tool classes that no tool
+            has as allowed (`custom.access_control.max_unused_tool_classes`).
           content:
             application/json:
               schema:
@@ -1163,6 +1179,13 @@ paths:
                 $ref: '#/components/schemas/Error'
         '403':
           description: The requester is not authorized to perform this action.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: The user has added as many tool classes that no tool
+            has as allowed (`custom.access_control.max_unused_tool_classes`).
           content:
             application/json:
               schema:

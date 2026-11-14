@@ -27,6 +27,7 @@ def test_id_config_charset(charset: object) -> None:
 def test_access_control_config_default() -> None:
     """Tool classes are added in mode `open` by default."""
     assert AccessControlConfig().tool_classes == "open"
+    assert AccessControlConfig().max_unused_tool_classes == 10
     custom = CustomConfig(service=ServiceConfig())
     assert custom.access_control == AccessControlConfig()
 
@@ -97,3 +98,25 @@ def test_io_schema_config_invalid_timeout(timeout: float) -> None:
     """
     with pytest.raises(pydantic.ValidationError):
         IoSchemaConfig(timeout=timeout)
+
+
+@pytest.mark.parametrize("limit", [0, 1, None])
+def test_max_unused_tool_classes(limit: int | None) -> None:
+    """The limit of unused tool classes may be any count, or `None`.
+
+    Args:
+        limit: Limit of unused tool classes per user.
+    """
+    config = AccessControlConfig(max_unused_tool_classes=limit)
+    assert config.max_unused_tool_classes == limit
+
+
+@pytest.mark.parametrize("limit", [-1, 1.5, "many"])
+def test_max_unused_tool_classes_invalid(limit: object) -> None:
+    """Negative and non-integer limits of unused tool classes are rejected.
+
+    Args:
+        limit: Invalid limit of unused tool classes per user.
+    """
+    with pytest.raises(pydantic.ValidationError):
+        AccessControlConfig(max_unused_tool_classes=limit)  # type: ignore[arg-type]

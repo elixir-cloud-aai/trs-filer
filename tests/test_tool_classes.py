@@ -44,6 +44,13 @@ UNREGISTERED = (
     "or ask an admin to add it."
 )
 NEW_CLASS = {"name": "New", "description": "A new tool class."}
+# The detail of `UnusedToolClassesLimit`, as clients get it (and the docs
+# quote it)
+UNUSED_LIMIT = (
+    "You have added {limit} tool classes that no tool has, as many as "
+    "allowed; use them for tools, or ask an admin to delete them, before "
+    "adding others."
+)
 # Another user, without a role on the tools of the tests and in no group
 STRANGER = "mallory@example.org"
 
@@ -63,17 +70,22 @@ def _doc(collection: Collection[dict[str, Any]], id: str) -> dict[str, Any]:
     return doc
 
 
-def _app(overlay: Path, mode: str) -> App:
+def _app(overlay: Path, mode: str, limit: str = "10") -> App:
     """Create the app with a mode of adding tool classes.
 
     Args:
         overlay: Config overlay.
         mode: Mode (`custom.access_control.tool_classes`).
+        limit: Limit of unused tool classes per user, as YAML
+            (`custom.access_control.max_unused_tool_classes`).
 
     Returns:
         FOCA app.
     """
-    overlay.write_text(f"custom:\n  access_control:\n    tool_classes: {mode}\n")
+    overlay.write_text(
+        "custom:\n  access_control:\n"
+        f"    tool_classes: {mode}\n    max_unused_tool_classes: {limit}\n"
+    )
     return create_app()
 
 
@@ -383,6 +395,24 @@ def test_open_mode_keeps_pending(
     assert _doc(mongo_client[DB]["toolclasses"], "other")["_createdBy"] == COLLEAGUE
 
 
+def test_indexes(mongo_client: MongoClient[dict[str, Any]], overlay: Path) -> None:
+    """Tools are indexed by tool class, and tool classes by who added them.
+
+    For the count of unused tool classes per user, and the pending flags.
+
+    Args:
+        mongo_client: MongoDB client.
+        overlay: Config overlay.
+    """
+    _app(overlay, "open")
+    tools = mongo_client[DB]["tools"].index_information().values()
+    assert any(index["key"] == [("toolclass.id", 1)] for index in tools)
+    classes = mongo_client[DB]["toolclasses"].index_information().values()
+    assert any(
+        index["key"] == [("_createdBy", 1)] and index.get("sparse") for index in classes
+    )
+
+
 def test_startup_sync(mongo_client: MongoClient[dict[str, Any]], overlay: Path) -> None:
     """The app corrects the pending flags of tools on startup.
 
@@ -508,6 +538,129 @@ def test_noauth_not_moderated(
     assert client.get(f"{TOOLS}/{quote(tool_id)}").status_code == 200
     response = client.get(APPROVALS)
     assert [tool["id"] for tool in response.get_json()["tools"]] == [tool_id]
+
+
+def _post_class(client: FlaskClient, user: str = USER) -> int:
+    """Add a tool class with `POST /toolClasses`.
+
+    Args:
+        client: Test client.
+        user: User adding the tool class.
+
+    Returns:
+        Status code of the response.
+    """
+    response = client.post(TOOL_CLASSES, json=NEW_CLASS, headers=make_headers(user))
+    return response.status_code
+
+
+@pytest.mark.parametrize("mode", ["open", "moderated"])
+def test_unused_limit(
+    mongo_client: MongoClient[dict[str, Any]],
+    overlay: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    mode: str,
+) -> None:
+    """Users other than admins may only have added a few unused tool classes.
+
+    Further tool classes are refused, whether added explicitly or by
+    registering tools, until tools have them; pending ones count too, and
+    admins have no limit.
+
+    Args:
+        mongo_client: MongoDB client.
+        overlay: Config overlay.
+        monkeypatch: Patches of the batch size of counting.
+        mode: Mode of adding tool classes.
+    """
+    # several batches per count
+    monkeypatch.setattr(tool_classes, "UNUSED_BATCH", 1)
+    client = admin_client(_app(overlay, mode, "2"))
+    user = make_headers(USER)
+    # a tool class the user added that a tool has doesn't count
+    _register(client, "used")
+    assert _post_class(client) == 200
+    response = client.put(f"{TOOL_CLASSES}/mine", json=NEW_CLASS, headers=user)
+    assert response.status_code == 200
+    toolclasses = mongo_client[DB]["toolclasses"]
+    count = toolclasses.count_documents({})
+    # explicitly, and by registering tools with new tool classes
+    response = client.post(TOOL_CLASSES, json=NEW_CLASS, headers=user)
+    assert response.status_code == 409
+    assert response.get_json() == {
+        "title": "Conflict",
+        "status": 409,
+        "detail": UNUSED_LIMIT.format(limit=2),
+    }
+    response = client.put(f"{TOOL_CLASSES}/more", json=NEW_CLASS, headers=user)
+    assert response.status_code == 409
+    response = client.post(TOOLS, json=_tool("more"), headers=user)
+    assert response.status_code == 409
+    assert response.get_json()["detail"] == UNUSED_LIMIT.format(limit=2)
+    assert toolclasses.count_documents({}) == count
+    assert mongo_client[DB]["tools"].count_documents({}) == 1
+    # stored tool classes can still be used, and other users and admins add
+    # their own
+    _register(client, "used")
+    assert _post_class(client, COLLEAGUE) == 200
+    assert _post_class(client, ADMIN) == 200
+    for _ in range(3):
+        assert client.post(TOOL_CLASSES, json=NEW_CLASS).status_code == 200
+    # a tool with one of the unused tool classes frees a place
+    _register(client, "mine")
+    assert _post_class(client) == 200
+    assert _post_class(client) == 409
+
+
+@pytest.mark.parametrize(("limit", "added"), [("0", 409), ("null", 200)])
+def test_unused_limit_zero_or_none(
+    mongo_client: MongoClient[dict[str, Any]], overlay: Path, limit: str, added: int
+) -> None:
+    """A limit of `0` lets only admins add tool classes; `null`, anybody.
+
+    Args:
+        mongo_client: MongoDB client.
+        overlay: Config overlay.
+        limit: Limit of unused tool classes per user, as YAML.
+        added: Status code of adding further tool classes for users.
+    """
+    client = admin_client(_app(overlay, "open", limit))
+    for _ in range(12):
+        assert _post_class(client, ADMIN) == 200
+    for _ in range(11):
+        assert _post_class(client) == added
+    response = client.post(TOOLS, json=_tool("new"), headers=make_headers(USER))
+    assert response.status_code == added
+    assert client.put(f"{TOOL_CLASSES}/byadmin", json=NEW_CLASS).status_code == 200
+    _register(client, "byadmin")
+
+
+def test_unused_limit_noauth(
+    mongo_client: MongoClient[dict[str, Any]],
+    overlay: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Without authentication, there are no users, and no limit.
+
+    Args:
+        mongo_client: MongoDB client.
+        overlay: Config overlay.
+        monkeypatch: Patches of `FOCA_CONFIG_OVERLAY`.
+    """
+    overlay.write_text("custom:\n  access_control:\n    max_unused_tool_classes: 0\n")
+    monkeypatch.setenv(
+        "FOCA_CONFIG_OVERLAY",
+        os.pathsep.join(
+            [
+                str(ROOT / "config.dev.yaml"),
+                str(ROOT / "config.noauth.yaml"),
+                str(overlay),
+            ]
+        ),
+    )
+    client = create_app().app.test_client()
+    for _ in range(2):
+        assert client.post(TOOL_CLASSES, json=NEW_CLASS).status_code == 200
 
 
 @pytest.mark.parametrize(

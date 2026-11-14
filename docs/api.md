@@ -69,7 +69,7 @@ where `null` removes a key of the vendored files (FOCA's
 | `GET /tools/{id}/versions/{version_id}/{type}/tests` | List the test files of a version. |
 | `GET /tools/{id}/versions/{version_id}/{type}/files` | List the files of a version for descriptor type `type` (descriptors, test files and other files, not container recipe files), or, with `format=zip`, get them as a ZIP archive. |
 | `GET /tools/{id}/versions/{version_id}/containerfile` | List the container recipe files (e.g., Dockerfiles) of a version. |
-| `GET /toolClasses` | List the tool classes. |
+| `GET /toolClasses` | List the tool classes (not paginated, as TRS defines no paging for it). |
 
 The reads are public; they also accept a token (`Authorization: Bearer
 <token>`), so that users see the pending tools and tool classes they may
@@ -275,10 +275,13 @@ can register tools (`POST /tools`, and `PUT /tools/{id}` with the identifier
 of no tool) and becomes their owner, and can add tool classes (`POST
 /toolClasses`, and `PUT /toolClasses/{id}` with the identifier of no tool
 class), unless only admins may (mode `controlled`, see [Adding tool
-classes](configuration.md#adding-tool-classes)). Changing tools, their
-versions and their roles needs a role on the tool, and replacing, approving
-and deleting tool classes needs an admin; other users get `403 Forbidden`
-(see [Access control](access-control.md)).
+classes](configuration.md#adding-tool-classes)). Users other than admins
+may only have added a limited number of tool classes that no tool has;
+further ones get `409 Conflict` (see [Adding tool
+classes](configuration.md#adding-tool-classes)). Changing tools,
+their versions and their roles needs a role on the tool, and replacing,
+approving and deleting tool classes needs an admin; other users get `403
+Forbidden` (see [Access control](access-control.md)).
 
 ### Approving tool classes
 
