@@ -354,6 +354,11 @@ def test_login_for_reads(
         assert anonymous.get(f"{BASE_PATH}{path}").status_code == 200, path
 
 
+# Security requirements of the public reads of TRS: anonymous, or with a
+# token, for what its user may see (cf. `trs_filer.ga4gh.trs.tool_classes`)
+OPTIONAL_TOKEN: list[dict[str, list[str]]] = [{"BEARER": []}, {}]
+
+
 def test_login_for_reads_patch_covers_reads() -> None:
     """The shipped patch covers each read operation of TRS, and only these.
 
@@ -369,7 +374,7 @@ def test_login_for_reads_patch_covers_reads() -> None:
     public = {
         path
         for path, item in additions["paths"].items()
-        if item.get("get", {}).get("security") == [] and path != "/service-info"
+        if item.get("get", {}).get("security") == OPTIONAL_TOKEN
     }
     assert set(patch["paths"]) == public
     for item in patch["paths"].values():
@@ -658,7 +663,7 @@ def test_readers_example(
 
 
 def test_reads_ignore_tokens(anonymous_client: FlaskClient) -> None:
-    """Public reads ignore tokens, also invalid ones.
+    """Public reads ignore invalid tokens: they are read as anonymous.
 
     Args:
         anonymous_client: Test client without token.
@@ -711,6 +716,7 @@ def test_permissions_api(anonymous_client: FlaskClient) -> None:
         ("maintainer", f"{tool}/versions", "POST"),
         ("maintainer", version, "PUT"),
         ("*", f"{BASE_PATH}/toolClasses", "POST"),
+        ("*", f"{BASE_PATH}/approvals", "GET|HEAD"),
         ("*", f"{BASE_PATH}/tools", "GET|HEAD"),
         ("*", tool, "GET|HEAD"),
         ("*", f"{tool}/versions", "GET|HEAD"),

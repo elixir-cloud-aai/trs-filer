@@ -2,7 +2,7 @@
 
 import ipaddress
 import math
-from typing import Annotated, Literal
+from typing import Annotated, Literal, Self
 
 from foca.models.config import FOCABaseConfig
 from foca.utils.misc import generate_id
@@ -201,14 +201,15 @@ class ToolClassConfig(FOCABaseConfig):
     Args:
         id: Unique identifier definition for tool classes.
         meta_version: Version control config params.
-        validation: Boolean to check if the class validations are enabled.
-            Defaults to `False`.
+        validation: Deprecated: whether tools must have a stored tool
+            class; `True` sets `custom.access_control.tool_classes` to
+            `controlled` (cf. `CustomConfig`), with a warning on startup.
+            Removed in the next breaking release. Defaults to `False`.
 
     Attributes:
         id: Unique identifier definition for tool classes.
         meta_version: Version control config params.
-        validation: Boolean to check if the class validations are enabled.
-            Defaults to `False`.
+        validation: Deprecated: whether tools must have a stored tool class.
 
     Example:
         >>> ToolClassConfig(
@@ -399,47 +400,25 @@ class AccessControlConfig(FOCABaseConfig):
         tool_classes: Who may add tool classes: `open` (the default), any
             authenticated user, explicitly (`POST /toolClasses`, `PUT
             /toolClasses/{id}` with new identifiers) or by registering a tool
-            with a new tool class (unless `custom.toolclass.validation` is
-            set). `controlled` (only admins add tool classes) and `moderated`
-            (tool classes of users other than admins are pending until an
-            admin approves them) are not supported yet.
+            with a new tool class; `controlled`, only admins, and tools of
+            other users must have a stored tool class; `moderated`, any
+            authenticated user, but tool classes of users other than admins
+            are pending until an admin approves them, and so are the tools
+            that have them (see `trs_filer.ga4gh.trs.tool_classes`).
 
     Attributes:
         tool_classes: Who may add tool classes.
 
     Raises:
         pydantic.ValidationError: `tool_classes` is not `open`, `controlled`
-            or `moderated`, or is a mode that is not supported yet.
+            or `moderated`.
 
     Example:
-        >>> AccessControlConfig(tool_classes='open')
-        AccessControlConfig(tool_classes='open')
+        >>> AccessControlConfig(tool_classes='moderated')
+        AccessControlConfig(tool_classes='moderated')
     """
 
     tool_classes: ToolClassesMode = "open"
-
-    @field_validator("tool_classes")
-    @classmethod
-    def check_tool_classes(cls, value: ToolClassesMode) -> ToolClassesMode:
-        """Check that the mode of adding tool classes is supported.
-
-        The message doesn't name the mode, so that FOCA shows it on startup
-        (FOCA leaves out messages that quote the invalid value).
-
-        Args:
-            value: Mode of adding tool classes.
-
-        Returns:
-            The mode of adding tool classes.
-
-        Raises:
-            ValueError: The mode is not supported yet.
-        """
-        if value != "open":
-            raise ValueError(
-                "only the mode 'open' of adding tool classes is supported yet"
-            )
-        return value
 
 
 class IoSchemaConfig(FOCABaseConfig):
@@ -601,7 +580,9 @@ class CustomConfig(FOCABaseConfig):
     """Model for custom configuration parameters.
 
     The service info is configured in FOCA's `service_info` section, no longer
-    in `custom.service_info`, which is rejected.
+    in `custom.service_info`, which is rejected. The deprecated
+    `toolclass.validation: true` sets `access_control.tool_classes` to
+    `controlled` (cf. `apply_tool_class_validation()`).
 
     Args:
         service: Service config parameters.
@@ -632,3 +613,33 @@ class CustomConfig(FOCABaseConfig):
     access_control: AccessControlConfig = Field(default_factory=AccessControlConfig)
     io_schema: IoSchemaConfig = Field(default_factory=IoSchemaConfig)
     storage: StorageConfig = Field(default_factory=StorageConfig)
+
+    @model_validator(mode="after")
+    def apply_tool_class_validation(self) -> Self:
+        """Map the deprecated `toolclass.validation` to the mode `controlled`.
+
+        `toolclass.validation: true` required stored tool classes for tools,
+        as the mode `controlled` does (cf. `AccessControlConfig`), which
+        replaces it: it sets the mode `open` to `controlled`; the app warns
+        of it on startup (cf. `trs_filer.app.create_app()`). The message
+        doesn't name the values, so that FOCA shows it on startup (FOCA
+        leaves out messages that quote invalid values).
+
+        Returns:
+            The config, with mode `controlled` if `toolclass.validation` is
+            true.
+
+        Raises:
+            ValueError: `toolclass.validation` is true with mode `moderated`,
+                which would contradict each other.
+        """
+        if not self.toolclass.validation:
+            return self
+        if self.access_control.tool_classes == "moderated":
+            raise ValueError(
+                "the deprecated 'toolclass.validation' can't be combined with "
+                "the mode 'moderated' of 'access_control.tool_classes'; remove "
+                "'toolclass.validation'"
+            )
+        self.access_control.tool_classes = "controlled"
+        return self

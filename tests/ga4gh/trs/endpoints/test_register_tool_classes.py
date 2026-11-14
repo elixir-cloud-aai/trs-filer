@@ -1,10 +1,12 @@
 """Tests for setting tool classes."""
 
 from copy import deepcopy
+from pathlib import Path
 from unittest.mock import MagicMock
 
 from pymongo.errors import DuplicateKeyError
 import pytest
+import yaml
 
 from tests.apps import (
     app_collection,
@@ -26,8 +28,24 @@ from trs_filer.errors.exceptions import (
     InternalServerError,
 )
 from trs_filer.ga4gh.trs.endpoints.register_tool_classes import (
+    FIELDS,
     RegisterToolClass,
 )
+
+SPEC = (
+    Path(__file__).resolve().parents[4] / "trs_filer" / "api" / "additions.openapi.yaml"
+)
+
+
+def test_fields_match_spec() -> None:
+    """The replaced fields are those of `ToolClassRegister`.
+
+    Replacing a tool class sets and unsets these fields only, so that a new
+    field of the schema must be added to them.
+    """
+    spec = yaml.safe_load(SPEC.read_text())
+    schema = spec["components"]["schemas"]["ToolClassRegister"]
+    assert set(FIELDS) == set(schema["properties"])
 
 
 class TestRegisterToolClass:

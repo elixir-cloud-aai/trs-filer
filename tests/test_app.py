@@ -282,14 +282,15 @@ def test_no_request_body_size_limit(
             r"toolclass\.id\.length: Input should be greater than 0",
         ),
         (
-            "custom:\n  access_control:\n    tool_classes: controlled\n",
-            r"access_control\.tool_classes: Value error, only the mode 'open' "
-            r"of adding tool classes is supported yet",
+            "custom:\n  access_control:\n    tool_classes: closed\n",
+            r"access_control\.tool_classes: Input should be 'open', "
+            r"'controlled' or 'moderated'",
         ),
         (
-            "custom:\n  access_control:\n    tool_classes: moderated\n",
-            r"access_control\.tool_classes: Value error, only the mode 'open' "
-            r"of adding tool classes is supported yet",
+            "custom:\n  toolclass:\n    validation: true\n"
+            "  access_control:\n    tool_classes: moderated\n",
+            r"Value error, the deprecated 'toolclass\.validation' can't be "
+            r"combined with the mode 'moderated'",
         ),
     ],
     ids=[
@@ -297,8 +298,8 @@ def test_no_request_body_size_limit(
         "expression",
         "empty-charset",
         "zero-length",
-        "controlled",
-        "moderated",
+        "unknown-mode",
+        "validation-moderated",
     ],
 )
 def test_invalid_custom_config(
@@ -398,9 +399,8 @@ def test_tool_classes_open(app: App, client: FlaskClient) -> None:
     """In mode `open` (the default), anybody adds tool classes.
 
     Tool classes are added explicitly (`POST /toolClasses`) or by registering
-    a tool with a new tool class. The registration doesn't read the mode yet,
-    as `open` is the only one supported; extend this test when the other
-    modes are (#248).
+    a tool with a new tool class (for the other modes, see
+    `tests/test_tool_classes.py`).
 
     Args:
         app: FOCA app.
@@ -497,9 +497,10 @@ def test_operations_resolve(app: App) -> None:
     """
     controllers = _spec_operations(app)
     served = _served(app)
-    # The 19 operations of TRS and its additions, the 5 of roles on tools,
+    # The 21 operations of TRS and its additions (with the approval of tool
+    # classes and the list of approvals), the 5 of roles on tools,
     # and the service info
-    assert len(controllers) == 25
+    assert len(controllers) == 27
     assert controllers.pop(("GET", "/service-info")) is getServiceInfo
     modules = {
         key: permissions.__name__ if "/permissions" in key[1] else server.__name__
@@ -641,6 +642,9 @@ def test_spec_descriptor_changes(app: App, client: FlaskClient) -> None:
 def test_spec_security(client: FlaskClient) -> None:
     """The TRS reads and the service info are public, with a bearer scheme.
 
+    The TRS reads also accept a token (optional authentication), for what its
+    user may see.
+
     The served specification has TRS's scheme (`BEARER`) as an HTTP bearer
     scheme only (not the API key scheme of TRS 2.0.2, nor the scheme of the
     service info specification), no security requirements of its own, and
@@ -667,7 +671,7 @@ def test_spec_security(client: FlaskClient) -> None:
         "schema"
     ] == {"$ref": "#/components/schemas/Service"}
     for method, path in TRS_READS:
-        assert spec["paths"][path][method]["security"] == [], path
+        assert spec["paths"][path][method]["security"] == [{"BEARER": []}, {}], path
     public = {*TRS_READS, ("get", "/service-info")}
     for path, item in spec["paths"].items():
         for method, operation in item.items():

@@ -71,6 +71,12 @@ where `null` removes a key of the vendored files (FOCA's
 | `GET /tools/{id}/versions/{version_id}/containerfile` | List the container recipe files (e.g., Dockerfiles) of a version. |
 | `GET /toolClasses` | List the tool classes. |
 
+The reads are public; they also accept a token (`Authorization: Bearer
+<token>`), so that users see the pending tools and tool classes they may
+see (mode `moderated`, see [Approving tool
+classes](#approving-tool-classes)). Invalid tokens are read as anonymous.
+Pending tools are not found (`404 Not Found`) by others, and not listed.
+
 ## Descriptor types
 
 TRS-Filer supports all descriptor types of the specification: `CWL`,
@@ -216,6 +222,8 @@ These endpoints are TRS-Filer's own, in
 | `POST /toolClasses` | Register a tool class; returns its new identifier. |
 | `PUT /toolClasses/{id}` | Register a tool class with the given identifier, or replace the tool class with that identifier. |
 | `DELETE /toolClasses/{id}` | Delete a tool class; tool classes that tools use can't be deleted (`400 Bad Request`). |
+| `PUT /toolClasses/{id}/approval` | Approve a pending tool class, and so the tools that have it (admins only, see [Approving tool classes](#approving-tool-classes)). |
+| `GET /approvals` | List the pending tool classes and tools that the user may see. |
 | `GET /tools/{id}/permissions` | List the roles granted on a tool (see [Roles on tools](access-control.md#roles-on-tools)). |
 | `PUT /tools/{id}/permissions/users/{userId}` | Grant a user the role `owner` or `maintainer` on a tool (`{"role": "maintainer"}`), replacing any other role of the user on it. |
 | `DELETE /tools/{id}/permissions/users/{userId}` | Revoke the roles of a user on a tool. |
@@ -253,7 +261,7 @@ Registering an object with the identifier of a stored one (`PUT`) replaces
 it, also with identical content. Tools store a copy of their tool class: of
 the stored tool class, if one with the identifier of `toolclass.id` exists
 (the tool class is not changed), or else of the one sent, which is then
-created, unless tool classes are validated (see [Tool
+created, if the user may add tool classes (see [Tool
 classes](configuration.md#tool-classes)). Who may add tool classes is
 configured (see [Adding tool
 classes](configuration.md#adding-tool-classes)). Replacing tools and
@@ -266,9 +274,43 @@ without a valid token, they answer `401 Unauthorized`. Any authenticated user
 can register tools (`POST /tools`, and `PUT /tools/{id}` with the identifier
 of no tool) and becomes their owner, and can add tool classes (`POST
 /toolClasses`, and `PUT /toolClasses/{id}` with the identifier of no tool
-class). Changing tools, their versions and their roles needs a role on the
-tool, and replacing and deleting tool classes needs an admin; other users get
-`403 Forbidden` (see [Access control](access-control.md)).
+class), unless only admins may (mode `controlled`, see [Adding tool
+classes](configuration.md#adding-tool-classes)). Changing tools, their
+versions and their roles needs a role on the tool, and replacing, approving
+and deleting tool classes needs an admin; other users get `403 Forbidden`
+(see [Access control](access-control.md)).
+
+### Approving tool classes
+
+In mode `moderated` of `custom.access_control.tool_classes` (see [Adding
+tool classes](configuration.md#adding-tool-classes)), the tool classes that
+users other than admins add are pending, and so are the tools that have
+them: they are served only to admins and to the user who added the tool
+class, or who has a role on the tool. A tool with a pending tool class is
+pending also if another user registered it; its owners then see that tool
+class in their tool. Users list what they may see of them
+with `GET /approvals` (any authenticated user; tools without the files of
+their versions), e.g.:
+
+```json
+{
+  "toolClasses": [
+    {"id": "notebook", "name": "Notebook", "description": "A notebook."}
+  ],
+  "tools": [
+    {"id": "ABC123", "toolclass": {"id": "notebook", "name": "Notebook", "description": "A notebook."}, "...": "..."}
+  ]
+}
+```
+
+An admin approves a tool class with `PUT /toolClasses/{id}/approval` (no
+body; returns the identifier, also if the tool class was approved before;
+`404 Not Found` for unknown ones), which approves the tools that have it.
+To reject a tool class, delete the tools that have it (their owners or an
+admin) and then the tool class (`DELETE /toolClasses/{id}`). A tool that
+stays pending without its tool class (e.g., registered while an admin
+deleted it) is approved by adding the tool class again as an admin (`PUT
+/toolClasses/{id}`), or removed by deleting it.
 
 ## Errors
 
@@ -346,7 +388,7 @@ URLs). Only the first reason found is given:
 | Request | Reason |
 | --- | --- |
 | `GET /tools` | The `offset` is not a non-negative integer; the `limit` is below 1. |
-| `POST`, `PUT` of tools | The tool class doesn't exist while tool classes are validated (see [Tool classes](configuration.md#tool-classes)); the versions have duplicate identifiers; a version is invalid (see below). |
+| `POST`, `PUT` of tools | The tool class doesn't exist and only admins may add tool classes (mode `controlled`, see [Adding tool classes](configuration.md#adding-tool-classes)); the versions have duplicate identifiers; a version is invalid (see below). |
 | `POST`, `PUT` of versions | The paths of the files of a version are not unique per type; a descriptor type has more than one `PRIMARY_DESCRIPTOR` file, or `SECONDARY_DESCRIPTOR` files but none; a file has neither `file_wrapper.content` nor `file_wrapper.url`; a file of a production version (`is_production`) has no checksums (`file_wrapper.checksum`); the type of a descriptor, test or other file is not a supported descriptor type, or that of a containerfile not a supported image type. |
 | `DELETE /tools/{id}/versions/{version_id}` | The version is the last one of the tool (delete the tool instead). |
 | `DELETE /toolClasses/{id}` | Tools use the tool class. |

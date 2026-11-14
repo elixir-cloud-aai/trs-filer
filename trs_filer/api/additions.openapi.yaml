@@ -23,10 +23,12 @@ info:
 # for all operations; TRS declares the security requirements of its
 # operations itself (`BEARER`)
 security: null
-# Read operations of the TRS specification are public: the empty security
-# requirements set here replace theirs (`BEARER`), so that a patch can
-# require login for reads (`security: [{BEARER: []}]`) without changing the
-# vendored specification (see `api/patches/login-for-reads.yaml`). The
+# Read operations of the TRS specification are public: the security
+# requirements set here replace theirs (`BEARER`) with optional tokens
+# (anonymous, or a token, for what its user may see, e.g., pending tools;
+# invalid tokens are read as anonymous), so that a patch can require login
+# for reads (`security: [{BEARER: []}]`) without changing the vendored
+# specification (see `api/patches/login-for-reads.yaml`). The
 # registration endpoints below (writes) and the permissions of tools require
 # a bearer token (`BEARER`); who may call them is decided by the policies of
 # `config.yaml` (see `docs/access-control.md`)
@@ -49,7 +51,9 @@ paths:
   # plain text, by type, and check `Accept`: `406` if it refuses that one
   "/tools/{id}/versions/{version_id}/{type}/descriptor":
     get:
-      security: []
+      security:
+        - BEARER: []
+        - {}
       responses:
         "200":
           content:
@@ -64,7 +68,9 @@ paths:
                 $ref: "#/components/schemas/Error"
   "/tools/{id}/versions/{version_id}/{type}/descriptor/{relative_path}":
     get:
-      security: []
+      security:
+        - BEARER: []
+        - {}
       responses:
         "200":
           content:
@@ -101,7 +107,9 @@ paths:
             pattern: .+
   "/tools/{id}/versions/{version_id}/{type}/tests":
     get:
-      security: []
+      security:
+        - BEARER: []
+        - {}
       responses:
         "406":
           description: The tool can't be served as a media type that the client
@@ -112,13 +120,19 @@ paths:
                 $ref: "#/components/schemas/Error"
   "/tools/{id}/versions/{version_id}/{type}/files":
     get:
-      security: []
+      security:
+        - BEARER: []
+        - {}
   "/tools/{id}/versions/{version_id}/containerfile":
     get:
-      security: []
+      security:
+        - BEARER: []
+        - {}
   /tools:
     get:
-      security: []
+      security:
+        - BEARER: []
+        - {}
     post:
       summary: Add a tool.
       description: Create a tool object with a randomly generated unique ID.
@@ -170,7 +184,9 @@ paths:
                 $ref: '#/components/schemas/Error'
   "/tools/{id}":
     get:
-      security: []
+      security:
+        - BEARER: []
+        - {}
     put:
       summary: Add or update a tool.
       description: Create a tool object with a predefined ID, or overwrite the
@@ -296,7 +312,9 @@ paths:
                 $ref: '#/components/schemas/Error'
   "/tools/{id}/versions":
     get:
-      security: []
+      security:
+        - BEARER: []
+        - {}
     post:
       summary: Add a tool version.
       description: Create a tool version object.
@@ -362,7 +380,9 @@ paths:
                 $ref: '#/components/schemas/Error'
   "/tools/{id}/versions/{version_id}":
     get:
-      security: []
+      security:
+        - BEARER: []
+        - {}
     delete:
       summary: Delete a tool version.
       description: Delete an existing tool version object.
@@ -497,7 +517,9 @@ paths:
                 $ref: '#/components/schemas/Error'
   /toolClasses:
     get:
-      security: []
+      security:
+        - BEARER: []
+        - {}
     post:
       summary: Create a tool class.
       description: Create a tool class with a randomly generated unique ID.
@@ -931,6 +953,110 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  "/toolClasses/{id}/approval":
+    put:
+      summary: Approve a pending tool class.
+      description: |
+        Approve a tool class that is pending (mode `moderated` of
+        `custom.access_control.tool_classes`), and so the tools that have
+        it. Only for admins. Approving a tool class that isn't pending
+        succeeds too. An extension of TRS-Filer.
+      operationId: putToolClassApproval
+      security:
+        - BEARER: []
+      tags:
+        - TRS-Filer
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: A unique identifier of the tool class, scoped to this
+            registry, for example `123456`.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The tool class is approved.
+          content:
+            application/json:
+              schema:
+                description: Identifier of the approved tool class.
+                type: string
+        '400':
+          description: The request is malformed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: The request is unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: The requester is not authorized to perform this action.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: The requested tool class was not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: An unexpected error occurred.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /approvals:
+    get:
+      summary: List the pending tool classes and tools.
+      description: |
+        List the pending tool classes and tools (mode `moderated` of
+        `custom.access_control.tool_classes`) that the requester may see:
+        all for admins; for other users, the tool classes they added and
+        the tools they have a role on. Tools are listed without the files
+        of their versions. An extension of TRS-Filer.
+      operationId: getApprovals
+      security:
+        - BEARER: []
+      tags:
+        - TRS-Filer
+      responses:
+        '200':
+          description: The pending tool classes and tools.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Approvals'
+        '400':
+          description: The request is malformed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: The request is unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: The requester is not authorized to perform this action.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: An unexpected error occurred.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   "/toolClasses/{id}":
     delete:
       summary: Delete a tool class.
@@ -1101,6 +1227,26 @@ components:
           type: string
         role:
           $ref: '#/components/schemas/Role'
+    # Pending tool classes and tools (`GET /approvals`), an extension of
+    # TRS-Filer
+    Approvals:
+      description: Pending tool classes and tools that the requester may see.
+      type: object
+      required:
+        - toolClasses
+        - tools
+      properties:
+        toolClasses:
+          description: Pending tool classes, sorted by identifier.
+          type: array
+          items:
+            $ref: '#/components/schemas/ToolClass'
+        tools:
+          description: Pending tools, sorted by identifier, without the files
+            of their versions.
+          type: array
+          items:
+            $ref: '#/components/schemas/Tool'
     # Extension of the TRS schema: the tags of tools, by which `GET /tools`
     # filters (`tags`)
     Tool:

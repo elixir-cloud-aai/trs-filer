@@ -9,6 +9,7 @@ from trs_filer.custom_config import (
     IdConfig,
     IoSchemaConfig,
     ServiceConfig,
+    ToolClassConfig,
 )
 
 
@@ -30,15 +31,47 @@ def test_access_control_config_default() -> None:
     assert custom.access_control == AccessControlConfig()
 
 
-@pytest.mark.parametrize("mode", ["controlled", "moderated"])
-def test_access_control_config_unsupported_mode(mode: str) -> None:
-    """Modes `controlled` and `moderated` are rejected until they are supported.
+@pytest.mark.parametrize("mode", ["open", "controlled", "moderated"])
+def test_access_control_config_modes(mode: str) -> None:
+    """The modes `open`, `controlled` and `moderated` are supported.
 
     Args:
         mode: Mode of adding tool classes.
     """
-    with pytest.raises(pydantic.ValidationError, match="only the mode 'open'"):
-        AccessControlConfig(tool_classes=mode)  # type: ignore[arg-type]
+    assert AccessControlConfig(tool_classes=mode).tool_classes == mode  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize(
+    ("mode", "applied"), [("open", "controlled"), ("controlled", "controlled")]
+)
+def test_tool_class_validation_deprecated(mode: str, applied: str) -> None:
+    """The deprecated tool class validation applies the mode `controlled`.
+
+    Args:
+        mode: Mode of adding tool classes, as configured.
+        applied: Mode applied.
+    """
+    custom = CustomConfig(
+        service=ServiceConfig(),
+        toolclass=ToolClassConfig(validation=True),
+        access_control=AccessControlConfig(tool_classes=mode),  # type: ignore[arg-type]
+    )
+    assert custom.access_control.tool_classes == applied
+    custom = CustomConfig(
+        service=ServiceConfig(),
+        access_control=AccessControlConfig(tool_classes=mode),  # type: ignore[arg-type]
+    )
+    assert custom.access_control.tool_classes == mode
+
+
+def test_tool_class_validation_moderated() -> None:
+    """The deprecated tool class validation contradicts the mode `moderated`."""
+    with pytest.raises(pydantic.ValidationError, match="can't be combined"):
+        CustomConfig(
+            service=ServiceConfig(),
+            toolclass=ToolClassConfig(validation=True),
+            access_control=AccessControlConfig(tool_classes="moderated"),
+        )
 
 
 @pytest.mark.parametrize("mode", ["Open", "closed", "", None])

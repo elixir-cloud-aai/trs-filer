@@ -9,6 +9,7 @@ from collections.abc import Callable
 from copy import deepcopy
 from io import BytesIO
 import json
+import logging
 from pathlib import Path
 import re
 from typing import Any, NoReturn
@@ -22,7 +23,13 @@ from pymongo.errors import DuplicateKeyError
 from pymongo.results import UpdateResult
 import pytest
 
-from tests.conftest import COLLECTION_CLASS, admin_client
+from tests.conftest import (
+    COLLECTION_CLASS,
+    USER,
+    Records,
+    admin_client,
+    make_headers,
+)
 from tests.mock_data import (
     BASE_PATH,
     MOCK_ID,
@@ -38,6 +45,7 @@ from trs_filer.ga4gh.trs.endpoints.register_objects import (
     TOOL_PROJECTION,
     RegisterTool,
 )
+from trs_filer.ga4gh.trs.tool_classes import TOOL_CLASS_PROJECTION
 from trs_filer.remote_files import RemoteFile
 from trs_filer.utils import DB, get_custom_config
 
@@ -76,7 +84,8 @@ FileChange = Callable[[dict[str, Any]], None]
 OFFSET_INVALID = "The offset must be a non-negative integer."
 LIMIT_INVALID = "The limit must be at least 1."
 TOOL_CLASS_UNKNOWN = (
-    "The tool class doesn't exist; register it first (tool classes are validated)."
+    "The tool class doesn't exist: use a registered one (`GET /toolClasses`), "
+    "or ask an admin to add it."
 )
 TOOL_CLASS_IN_USE = "The tool class is used by tools and can't be deleted."
 
@@ -2320,18 +2329,36 @@ def test_tool_no_is_production(
 def test_tool_class_validation(
     mongo_client: MongoClient[dict[str, Any]], overlay: Path
 ) -> None:
-    """With tool class validation, tools need existing tool classes.
+    """The deprecated tool class validation applies the mode `controlled`.
 
-    Also when they replace a tool.
+    Tools of users other than admins need existing tool classes, also when
+    they replace a tool; admins add tool classes, also by registering tools.
+    The app warns of the deprecated setting on startup (the handler is added
+    to the app's logger, as FOCA's log config replaces the handlers of the
+    root logger, and with them, pytest's).
 
     Args:
         mongo_client: MongoDB client.
         overlay: Config overlay.
     """
     overlay.write_text("custom:\n  toolclass:\n    validation: true\n")
-    client = admin_client(create_app())
+    records = Records()
+    logger = logging.getLogger("trs_filer")
+    logger.addHandler(records)
+    try:
+        app = create_app()
+    finally:
+        logger.removeHandler(records)
+    assert any(
+        "`custom.toolclass.validation` is deprecated" in message
+        for message in records.messages
+    )
+    with app.app.app_context():
+        assert get_custom_config().access_control.tool_classes == "controlled"
+    client = admin_client(app)
+    user = make_headers(USER)
     path = f"{BASE_PATH}/tools/{TOOL_ID}"
-    response = client.put(path, json=deepcopy(MOCK_TOOL_VERSION_ID))
+    response = client.put(path, json=deepcopy(MOCK_TOOL_VERSION_ID), headers=user)
     assert response.status_code == 400
     assert response.get_json() == _bad_request(TOOL_CLASS_UNKNOWN)
     response = client.put(
@@ -2340,12 +2367,11 @@ def test_tool_class_validation(
     )
     assert response.status_code == 200
     for _ in range(2):
-        assert client.put(path, json=deepcopy(MOCK_TOOL_VERSION_ID)).status_code == (
-            200
-        )
+        response = client.put(path, json=deepcopy(MOCK_TOOL_VERSION_ID), headers=user)
+        assert response.status_code == 200
     # the tool's tool class doesn't change the validated one
     toolclasses = mongo_client[DB]["toolclasses"]
-    stored = toolclasses.find_one({"id": MOCK_TOOL_CLASS["id"]}, {"_id": False})
+    stored = toolclasses.find_one({"id": MOCK_TOOL_CLASS["id"]}, TOOL_CLASS_PROJECTION)
     assert stored == {
         "id": MOCK_TOOL_CLASS["id"],
         "name": "validated",
@@ -2353,9 +2379,12 @@ def test_tool_class_validation(
     }
     data = deepcopy(MOCK_TOOL_VERSION_ID)
     data["toolclass"]["id"] = "other"
-    response = client.put(path, json=data)
+    response = client.put(path, json=data, headers=user)
     assert response.status_code == 400
     assert response.get_json() == _bad_request(TOOL_CLASS_UNKNOWN)
+    # admins add tool classes by registering tools
+    assert client.put(path, json=data).status_code == 200
+    assert toolclasses.count_documents({"id": "other"}) == 1
 
 
 # DELETE /tools/{id}
