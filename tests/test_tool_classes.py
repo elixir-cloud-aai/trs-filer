@@ -358,7 +358,8 @@ def _approvals_page(
         Identifiers of the tool classes and of the tools of the page, and the
         pagination headers of the response (those that are set).
     """
-    response = client.get(f"{APPROVALS}?{query}", headers=make_headers(user))
+    path = f"{APPROVALS}?{query}" if query else APPROVALS
+    response = client.get(path, headers=make_headers(user))
     assert response.status_code == 200, response.get_json()
     page = response.get_json()
     keys = ("next_page", "last_page", "self_link", "current_offset", "current_limit")
@@ -388,8 +389,8 @@ def test_approvals_pagination(
             f"{TOOL_CLASSES}/{class_id}", json=NEW_CLASS, headers=make_headers(USER)
         )
         assert response.status_code == 200
-    # 3 pending tool classes (`a`, `b`, and `c` of the tools), then 2 tools
-    tool_ids = sorted(_register(client, "c") for _ in range(2))
+    # 3 pending tool classes (`a`, `b`, and `c` of the tools), then 3 tools
+    tool_ids = sorted(_register(client, "c") for _ in range(3))
     url = f"http://localhost{APPROVALS}"
     # first page
     assert _approvals_page(client, "limit=2") == (
@@ -408,22 +409,30 @@ def test_approvals_pagination(
     assert (class_ids, ids) == (["c"], tool_ids[:1])
     assert headers["next_page"] == f"{url}?offset=4&limit=2"
     assert headers["last_page"] == f"{url}?offset=4&limit=2"
-    # last page
+    # last page, of tools only
     class_ids, ids, headers = _approvals_page(client, "offset=4&limit=2")
     assert (class_ids, ids) == ([], tool_ids[1:])
     assert "next_page" not in headers
     assert headers["last_page"] == f"{url}?offset=4&limit=2"
-    # from an offset within the tools
+    # from offsets within the tools
     assert _approvals_page(client, "offset=3")[:2] == ([], tool_ids)
+    class_ids, ids, headers = _approvals_page(client, "offset=3&limit=1")
+    assert (class_ids, ids) == ([], tool_ids[:1])
+    assert headers["next_page"] == f"{url}?offset=4&limit=1"
+    assert headers["last_page"] == f"{url}?offset=5&limit=1"
+    assert _approvals_page(client, "offset=4&limit=1")[:2] == ([], tool_ids[1:2])
     # beyond the last approval: empty, last page counted from 0
     class_ids, ids, headers = _approvals_page(client, "offset=7&limit=2")
     assert (class_ids, ids) == ([], [])
     assert "next_page" not in headers
     assert headers["last_page"] == f"{url}?offset=4&limit=2"
+    # offsets beyond the integers of the database
+    assert _approvals_page(client, f"offset={2**64}")[:2] == ([], [])
     # defaults: all on one page
     class_ids, ids, headers = _approvals_page(client)
     assert (class_ids, ids) == (["a", "b", "c"], tool_ids)
     assert "next_page" not in headers
+    assert headers["self_link"] == url
     assert headers["last_page"] == f"{url}?offset=0&limit=1000"
     assert headers["current_limit"] == "1000"
     # limits above the maximum are reduced to it

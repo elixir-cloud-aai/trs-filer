@@ -1314,12 +1314,12 @@ def getApprovals(
             tool classes and then the tools.
 
     Returns:
-        Pending tool classes (`toolClasses`), sorted by identifier: all for
-        admins, those the user added for other users; and pending tools
-        (`tools`, without the files of their versions), sorted by
-        identifier: all for admins, those the user has a role on for other
-        users; of the page. Then the status code and the pagination headers
-        (cf. `toolsGet()`).
+        The page, the status code and the pagination headers (cf.
+        `toolsGet()`). The page has the pending tool classes
+        (`toolClasses`) and the pending tools (`tools`, without the files of
+        their versions) of the page, each sorted by identifier: all for
+        admins; for other users, the tool classes they added and the tools
+        they have a role on.
 
     Raises:
         InvalidRequest: The offset is not a non-negative integer, or the
@@ -1344,7 +1344,8 @@ def getApprovals(
             )
         )
     tools: list[dict[str, Any]] = []
-    # the rest of the page, if any, from the tools
+    # the rest of the page, if any, from the tools; offsets beyond the last
+    # approval don't reach the database, as its skips are 64-bit integers
     tool_limit = limit - len(tool_classes)
     if tool_limit > 0 and offset_int + len(tool_classes) < total:
         tools = list(
