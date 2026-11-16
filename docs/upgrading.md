@@ -188,9 +188,11 @@ existing data needs no changes. Check clients and custom configs:
   (tool classes of other users, and their tools, are pending until an admin
   approves them, `PUT /toolClasses/{id}/approval`; `GET /approvals` lists
   them), which the app refused on startup before (see [Adding tool
-  classes](configuration.md#adding-tool-classes)). The TRS reads accept a
-  token (optional), for the pending tools and tool classes that its user
-  may see; invalid tokens are still read as anonymous. Tool classes store
+  classes](configuration.md#adding-tool-classes)). `GET /approvals` pages
+  its results as `GET /tools` does (`offset`, `limit` and the page links,
+  see [Approving tool classes](api.md#approving-tool-classes)). The TRS
+  reads accept a token (optional), for the pending tools and tool classes
+  that its user may see; invalid tokens are still read as anonymous. Tool classes store
   who added them, and pending ones and their tools a flag (internal fields
   `_createdBy` and `_pending`, not served; tool classes stored before have
   no `_createdBy`). To upgrade:

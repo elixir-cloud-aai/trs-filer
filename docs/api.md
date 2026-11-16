@@ -223,7 +223,7 @@ These endpoints are TRS-Filer's own, in
 | `PUT /toolClasses/{id}` | Register a tool class with the given identifier, or replace the tool class with that identifier. |
 | `DELETE /toolClasses/{id}` | Delete a tool class; tool classes that tools use can't be deleted (`400 Bad Request`). |
 | `PUT /toolClasses/{id}/approval` | Approve a pending tool class, and so the tools that have it (admins only, see [Approving tool classes](#approving-tool-classes)). |
-| `GET /approvals` | List the pending tool classes and tools that the user may see. |
+| `GET /approvals` | List the pending tool classes and tools that the user may see, one page at a time. |
 | `GET /tools/{id}/permissions` | List the roles granted on a tool (see [Roles on tools](access-control.md#roles-on-tools)). |
 | `PUT /tools/{id}/permissions/users/{userId}` | Grant a user the role `owner` or `maintainer` on a tool (`{"role": "maintainer"}`), replacing any other role of the user on it. |
 | `DELETE /tools/{id}/permissions/users/{userId}` | Revoke the roles of a user on a tool. |
@@ -305,6 +305,23 @@ their versions), e.g.:
   ]
 }
 ```
+
+The approvals are paged as tools are (see [Listing tools](#listing-tools)):
+the pending tool classes, sorted by identifier, and then the pending tools,
+sorted by identifier, form one sequence, in which `offset` (default 0) and
+`limit` (default 1000, at most 1000) count both. The response headers
+`self_link`, `next_page`, `last_page`, `current_offset` and `current_limit`
+link to the pages as those of `GET /tools`, and invalid values give the same
+`400 Bad Request`. A page can hold tool classes and tools: for example, with
+3 pending tool classes and 2 pending tools, `GET /approvals?offset=2&limit=2`
+returns the third tool class and the first tool, with `next_page` and
+`last_page` both at offset 4 (the second tool). Pages count only what the
+requester may see. The pages are not a snapshot: approving a tool class
+removes it and its tools from the list, and so moves the later approvals to
+lower offsets, while new pending tool classes and tools, and deletions, move
+those after them too. Following `next_page` can then skip or repeat
+approvals: after approving, list again from offset 0, and treat a traversal
+of the pages as complete only if the list didn't change meanwhile.
 
 An admin approves a tool class with `PUT /toolClasses/{id}/approval` (no
 body; returns the identifier, also if the tool class was approved before;
@@ -390,7 +407,7 @@ URLs). Only the first reason found is given:
 
 | Request | Reason |
 | --- | --- |
-| `GET /tools` | The `offset` is not a non-negative integer; the `limit` is below 1. |
+| `GET /tools`, `GET /approvals` | The `offset` is not a non-negative integer; the `limit` is below 1. |
 | `POST`, `PUT` of tools | The tool class doesn't exist and only admins may add tool classes (mode `controlled`, see [Adding tool classes](configuration.md#adding-tool-classes)); the versions have duplicate identifiers; a version is invalid (see below). |
 | `POST`, `PUT` of versions | The paths of the files of a version are not unique per type; a descriptor type has more than one `PRIMARY_DESCRIPTOR` file, or `SECONDARY_DESCRIPTOR` files but none; a file has neither `file_wrapper.content` nor `file_wrapper.url`; a file of a production version (`is_production`) has no checksums (`file_wrapper.checksum`); the type of a descriptor, test or other file is not a supported descriptor type, or that of a containerfile not a supported image type. |
 | `DELETE /tools/{id}/versions/{version_id}` | The version is the last one of the tool (delete the tool instead). |
