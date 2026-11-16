@@ -316,10 +316,12 @@ link to the pages as those of `GET /tools`, and invalid values give the same
 3 pending tool classes and 2 pending tools, `GET /approvals?offset=2&limit=2`
 returns the third tool class and the first tool, with `next_page` and
 `last_page` both at offset 4 (the second tool). Pages count only what the
-requester may see. Approving a tool class removes it and its tools from the
-list, and so moves the later approvals to lower offsets: after approving,
-list again from offset 0 instead of following `next_page`, which would skip
-approvals.
+requester may see. The pages are not a snapshot: approving a tool class
+removes it and its tools from the list, and so moves the later approvals to
+lower offsets, while new pending tool classes and tools, and deletions, move
+those after them too. Following `next_page` can then skip or repeat
+approvals: after approving, list again from offset 0, and treat a traversal
+of the pages as complete only if the list didn't change meanwhile.
 
 An admin approves a tool class with `PUT /toolClasses/{id}/approval` (no
 body; returns the identifier, also if the tool class was approved before;
