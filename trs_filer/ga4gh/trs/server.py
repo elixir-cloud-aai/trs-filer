@@ -271,19 +271,21 @@ def toolsGet(
     filt = visible_tools(filt)
     db_coll_tools = get_collection("tools")
     total = db_coll_tools.count_documents(filter=filt)
-    cursor = (
-        db_coll_tools.find(
-            filter=filt,
-            projection=TOOL_PROJECTION,
+    records: list[dict[str, Any]] = []
+    # offsets beyond the last tool don't reach the database, as its skips
+    # are 64-bit integers
+    if offset_int < total:
+        records = list(
+            db_coll_tools.find(
+                filter=filt,
+                projection=TOOL_PROJECTION,
+            )
+            # Sort by object ID: roughly the order in which tools were added
+            # (see `docs/api.md`); stable, so that pages don't overlap
+            .sort("_id", 1)
+            .skip(offset_int)
+            .limit(limit)
         )
-        # Sort by object ID: roughly the order in which tools were added
-        # (see `docs/api.md`); stable, so that pages don't overlap
-        .sort("_id", 1)
-        .skip(offset_int)
-        .limit(limit)
-    )
-
-    records = list(cursor)
     for record in records:
         if "versions" in record:
             for _version in record["versions"]:
