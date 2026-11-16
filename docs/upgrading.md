@@ -187,7 +187,8 @@ existing data needs no changes. Check clients and custom configs:
   supports `controlled` (only admins add tool classes) and `moderated`
   (tool classes of other users, and their tools, are pending until an admin
   approves them, `PUT /toolClasses/{id}/approval`; `GET /approvals` lists
-  them), which the app refused on startup before (see [Adding tool
+  them, one page at a time, as `GET /tools` lists tools, see [Approving
+  tool classes](api.md#approving-tool-classes)), which the app refused on startup before (see [Adding tool
   classes](configuration.md#adding-tool-classes)). The TRS reads accept a
   token (optional), for the pending tools and tool classes that its user
   may see; invalid tokens are still read as anonymous. Tool classes store

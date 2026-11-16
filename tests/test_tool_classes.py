@@ -344,6 +344,149 @@ def test_moderated_tools(
     assert client.get(APPROVALS).get_json() == {"toolClasses": [], "tools": []}
 
 
+def _approvals_page(
+    client: FlaskClient, query: str = "", user: str = ADMIN
+) -> tuple[list[str], list[str], dict[str, str]]:
+    """Get a page of approvals.
+
+    Args:
+        client: Test client.
+        query: Query string of the request (e.g., `offset=2&limit=2`).
+        user: User sending the request.
+
+    Returns:
+        Identifiers of the tool classes and of the tools of the page, and the
+        pagination headers of the response (those that are set).
+    """
+    response = client.get(f"{APPROVALS}?{query}", headers=make_headers(user))
+    assert response.status_code == 200, response.get_json()
+    page = response.get_json()
+    keys = ("next_page", "last_page", "self_link", "current_offset", "current_limit")
+    return (
+        [tool_class["id"] for tool_class in page["toolClasses"]],
+        [tool["id"] for tool in page["tools"]],
+        {key: response.headers[key] for key in keys if key in response.headers},
+    )
+
+
+def test_approvals_pagination(
+    mongo_client: MongoClient[dict[str, Any]], overlay: Path
+) -> None:
+    """Approvals are paged as tools are: tool classes first, then tools.
+
+    The pending tool classes and tools form one sequence (each sorted by
+    identifier), which `offset` and `limit` page; the response headers link
+    to the pages as those of `GET /tools` do.
+
+    Args:
+        mongo_client: MongoDB client.
+        overlay: Config overlay.
+    """
+    client = admin_client(_app(overlay, "moderated"))
+    for class_id in ["b", "a"]:
+        response = client.put(
+            f"{TOOL_CLASSES}/{class_id}", json=NEW_CLASS, headers=make_headers(USER)
+        )
+        assert response.status_code == 200
+    # 3 pending tool classes (`a`, `b`, and `c` of the tools), then 2 tools
+    tool_ids = sorted(_register(client, "c") for _ in range(2))
+    url = f"http://localhost{APPROVALS}"
+    # first page
+    assert _approvals_page(client, "limit=2") == (
+        ["a", "b"],
+        [],
+        {
+            "next_page": f"{url}?offset=2&limit=2",
+            "last_page": f"{url}?offset=4&limit=2",
+            "self_link": f"{url}?limit=2",
+            "current_offset": "0",
+            "current_limit": "2",
+        },
+    )
+    # middle page, across tool classes and tools
+    class_ids, ids, headers = _approvals_page(client, "offset=2&limit=2")
+    assert (class_ids, ids) == (["c"], tool_ids[:1])
+    assert headers["next_page"] == f"{url}?offset=4&limit=2"
+    assert headers["last_page"] == f"{url}?offset=4&limit=2"
+    # last page
+    class_ids, ids, headers = _approvals_page(client, "offset=4&limit=2")
+    assert (class_ids, ids) == ([], tool_ids[1:])
+    assert "next_page" not in headers
+    assert headers["last_page"] == f"{url}?offset=4&limit=2"
+    # from an offset within the tools
+    assert _approvals_page(client, "offset=3")[:2] == ([], tool_ids)
+    # beyond the last approval: empty, last page counted from 0
+    class_ids, ids, headers = _approvals_page(client, "offset=7&limit=2")
+    assert (class_ids, ids) == ([], [])
+    assert "next_page" not in headers
+    assert headers["last_page"] == f"{url}?offset=4&limit=2"
+    # defaults: all on one page
+    class_ids, ids, headers = _approvals_page(client)
+    assert (class_ids, ids) == (["a", "b", "c"], tool_ids)
+    assert "next_page" not in headers
+    assert headers["last_page"] == f"{url}?offset=0&limit=1000"
+    assert headers["current_limit"] == "1000"
+    # limits above the maximum are reduced to it
+    assert _approvals_page(client, "limit=1001")[2]["current_limit"] == "1000"
+
+
+def test_approvals_pagination_user(
+    mongo_client: MongoClient[dict[str, Any]], overlay: Path
+) -> None:
+    """Pages of approvals count only what the requester may see.
+
+    Args:
+        mongo_client: MongoDB client.
+        overlay: Config overlay.
+    """
+    client = admin_client(_app(overlay, "moderated"))
+    response = client.put(
+        f"{TOOL_CLASSES}/a", json=NEW_CLASS, headers=make_headers(USER)
+    )
+    assert response.status_code == 200
+    other_id = _register(client, "b", user=COLLEAGUE)
+    url = f"http://localhost{APPROVALS}"
+    class_ids, ids, headers = _approvals_page(client, "limit=1", user=COLLEAGUE)
+    assert (class_ids, ids) == (["b"], [])
+    assert headers["next_page"] == f"{url}?offset=1&limit=1"
+    assert headers["last_page"] == f"{url}?offset=1&limit=1"
+    class_ids, ids, headers = _approvals_page(
+        client, "offset=1&limit=1", user=COLLEAGUE
+    )
+    assert (class_ids, ids) == ([], [other_id])
+    assert "next_page" not in headers
+
+
+@pytest.mark.parametrize(
+    ("query", "detail"),
+    [
+        ("limit=-1", server.LIMIT_INVALID),
+        ("limit=0", server.LIMIT_INVALID),
+        ("offset=-1", server.OFFSET_INVALID),
+        ("offset=a", server.OFFSET_INVALID),
+        ("offset=https://user:secret@example.org", server.OFFSET_INVALID),
+        ("offset=-1&limit=0", server.OFFSET_INVALID),
+    ],
+)
+def test_approvals_pagination_invalid(
+    mongo_client: MongoClient[dict[str, Any]], overlay: Path, query: str, detail: str
+) -> None:
+    """Negative or non-integer offsets, and limits below 1, are refused.
+
+    The reason is sent as `detail`, without the submitted value.
+
+    Args:
+        mongo_client: MongoDB client.
+        overlay: Config overlay.
+        query: Query string with an invalid value.
+        detail: Expected reason.
+    """
+    client = admin_client(_app(overlay, "moderated"))
+    response = client.get(f"{APPROVALS}?{query}")
+    assert response.status_code == 400
+    assert response.get_json()["detail"] == detail
+
+
 def test_moderated_replace_tool(
     mongo_client: MongoClient[dict[str, Any]], overlay: Path
 ) -> None:

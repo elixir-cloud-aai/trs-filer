@@ -265,19 +265,7 @@ def toolsGet(
     if version_filt:
         filt["versions"] = {"$elemMatch": version_filt}
 
-    # validate pagination
-    try:
-        offset_int = 0 if offset is None else int(offset)
-    except ValueError as exc:
-        logger.error("Offset '%s' is not an integer.", escape_log_value(offset))
-        raise InvalidRequest(OFFSET_INVALID) from exc
-    if offset_int < 0:
-        logger.error("Invalid offset %s.", offset_int)
-        raise InvalidRequest(OFFSET_INVALID)
-    if limit < 1:
-        logger.error("Invalid limit %s.", limit)
-        raise InvalidRequest(LIMIT_INVALID)
-    limit = min(limit, MAX_LIMIT)
+    offset_int, limit = _page_params(offset, limit)
 
     # fetch data
     filt = visible_tools(filt)
@@ -302,9 +290,53 @@ def toolsGet(
                 if "files" in _version:
                     del _version["files"]
 
-    # links to pages, with the other query parameters of the request; the
-    # last page is the one with the last tool, in steps of `limit` from the
-    # offset (as `next_page`), or else from 0
+    return records, 200, _page_headers(offset_int, limit, total)
+
+
+def _page_params(offset: str | None, limit: int) -> tuple[int, int]:
+    """Validate the pagination parameters of a list endpoint.
+
+    Args:
+        offset: Start index of the page, as given in the request, if given.
+        limit: Number of records per page, as given in the request.
+
+    Returns:
+        Offset (0 if not given) and limit (reduced to `MAX_LIMIT`).
+
+    Raises:
+        InvalidRequest: The offset is not a non-negative integer, or the
+            limit is below 1.
+    """
+    try:
+        offset_int = 0 if offset is None else int(offset)
+    except ValueError as exc:
+        logger.error("Offset '%s' is not an integer.", escape_log_value(offset))
+        raise InvalidRequest(OFFSET_INVALID) from exc
+    if offset_int < 0:
+        logger.error("Invalid offset %s.", offset_int)
+        raise InvalidRequest(OFFSET_INVALID)
+    if limit < 1:
+        logger.error("Invalid limit %s.", limit)
+        raise InvalidRequest(LIMIT_INVALID)
+    return offset_int, min(limit, MAX_LIMIT)
+
+
+def _page_headers(offset: int, limit: int, total: int) -> dict[str, Any]:
+    """Get the pagination headers of a page of a list endpoint.
+
+    The links to pages keep the other query parameters of the request; the
+    last page is the one with the last record, in steps of `limit` from the
+    offset (as `next_page`), or else from 0.
+
+    Args:
+        offset: Start index of the page.
+        limit: Number of records per page (at most `MAX_LIMIT`).
+        total: Number of records of all pages.
+
+    Returns:
+        Headers `last_page`, `self_link`, `current_offset`, `current_limit`
+        and, if there are records after the page, `next_page`.
+    """
     query = [
         (key, value)
         for key, value in request.args.items(multi=True)
@@ -323,18 +355,17 @@ def toolsGet(
         params = urlencode([*query, ("offset", page_offset), ("limit", limit)])
         return f"{request.base_url}?{params}"
 
-    start = offset_int if offset_int < total else 0
+    start = offset if offset < total else 0
     last_offset = start + max(total - 1 - start, 0) // limit * limit
     headers: dict[str, Any] = {
         "last_page": page_link(last_offset),
         "self_link": f"{request.url}",
-        "current_offset": str(offset_int),
+        "current_offset": str(offset),
         "current_limit": limit,
     }
-    if offset_int + limit < total:
-        headers["next_page"] = page_link(offset_int + limit)
-
-    return records, 200, headers
+    if offset + limit < total:
+        headers["next_page"] = page_link(offset + limit)
+    return headers
 
 
 @log_traffic
@@ -1267,32 +1298,72 @@ def putToolClassApproval(
 
 
 @log_traffic
-def getApprovals() -> dict[str, list[dict[str, Any]]]:
+def getApprovals(
+    limit: int = MAX_LIMIT,
+    offset: str | None = None,
+) -> tuple[dict[str, list[dict[str, Any]]], int, dict[str, Any]]:
     """List the pending tool classes and tools the current user may see.
+
+    The tool classes and then the tools form one sequence, which is paged as
+    the tools of `GET /tools` (cf. `toolsGet()`).
+
+    Args:
+        limit: Number of tool classes and tools when paginating results; at
+            most `MAX_LIMIT`, larger limits are reduced to it.
+        offset: Start index when paginating results, in the sequence of the
+            tool classes and then the tools.
 
     Returns:
         Pending tool classes (`toolClasses`), sorted by identifier: all for
         admins, those the user added for other users; and pending tools
         (`tools`, without the files of their versions), sorted by
         identifier: all for admins, those the user has a role on for other
-        users.
+        users; of the page. Then the status code and the pagination headers
+        (cf. `toolsGet()`).
+
+    Raises:
+        InvalidRequest: The offset is not a non-negative integer, or the
+            limit is below 1.
     """
-    tool_classes = get_collection("toolclasses").find(
-        {"$and": [{PENDING: True}, visible_tool_classes()]},
-        TOOL_CLASS_PROJECTION,
-        sort=[("id", 1)],
-    )
-    tools = list(
-        get_collection("tools").find(
-            {"$and": [{PENDING: True}, own_tools()]},
-            TOOL_PROJECTION,
-            sort=[("id", 1)],
+    offset_int, limit = _page_params(offset, limit)
+    class_filter = {"$and": [{PENDING: True}, visible_tool_classes()]}
+    tool_filter = {"$and": [{PENDING: True}, own_tools()]}
+    db_coll_classes = get_collection("toolclasses")
+    db_coll_tools = get_collection("tools")
+    class_total = db_coll_classes.count_documents(class_filter)
+    total = class_total + db_coll_tools.count_documents(tool_filter)
+    tool_classes: list[dict[str, Any]] = []
+    if offset_int < class_total:
+        tool_classes = list(
+            db_coll_classes.find(
+                class_filter,
+                TOOL_CLASS_PROJECTION,
+                sort=[("id", 1)],
+                skip=offset_int,
+                limit=limit,
+            )
         )
-    )
+    tools: list[dict[str, Any]] = []
+    # the rest of the page, if any, from the tools
+    tool_limit = limit - len(tool_classes)
+    if tool_limit > 0 and offset_int + len(tool_classes) < total:
+        tools = list(
+            db_coll_tools.find(
+                tool_filter,
+                TOOL_PROJECTION,
+                sort=[("id", 1)],
+                skip=max(offset_int - class_total, 0),
+                limit=tool_limit,
+            )
+        )
     for tool in tools:
         for version in tool.get("versions", []):
             version.pop("files", None)
-    return {"toolClasses": list(tool_classes), "tools": tools}
+    return (
+        {"toolClasses": tool_classes, "tools": tools},
+        200,
+        _page_headers(offset_int, limit, total),
+    )
 
 
 def validate_descriptor_type(type: str) -> None:
