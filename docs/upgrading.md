@@ -85,7 +85,8 @@ existing data needs no changes. Check clients and custom configs:
   of `ToolVersionRegister`, by descriptor type), which they return;
   registrations with it failed with `400 Bad Request` before.
 - GA4GH I/O Schemas of workflows (experimental) are documented: files of
-  type `OTHER` named `ga4gh-io.schema.json`, stored and served as before.
+  type `OTHER` named `ga4gh-io.schema.json`, stored and served as before,
+  and files of the new type `IO_SCHEMA` (see below).
   The new option `custom.io_schema.validation` (`false` by default, so
   nothing changes) checks them on registration, each in a process of its
   own (about 50 to 100 MB of memory, one at a time), within

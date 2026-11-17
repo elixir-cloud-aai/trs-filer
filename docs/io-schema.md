@@ -23,9 +23,12 @@ or without the [check](#checking-io-schemas).
 
 ## The file type `IO_SCHEMA`
 
-The profile proposes a TRS file type of its own for I/O Schemas,
-`IO_SCHEMA`, which TRS 2.0.2 doesn't have; until TRS adopts it, servers
-without it take I/O Schemas as files of type `OTHER` at a fixed path.
+A TRS file type of its own for I/O Schemas, `IO_SCHEMA`, which TRS 2.0.2
+doesn't have, is proposed for the profile
+([uniqueg/ga4gh-io-schema#82](https://github.com/uniqueg/ga4gh-io-schema/issues/82)),
+but not part of a release of it yet: the profile version 0.3.0 publishes
+I/O Schemas only as files of type `OTHER` at a fixed path, and so do TRS
+servers without `IO_SCHEMA`.
 TRS-Filer accepts both (experimental): `IO_SCHEMA` is an extension of the
 TRS file types (`ToolFile.file_type`) in its API. Files of type `IO_SCHEMA`:
 
@@ -35,10 +38,13 @@ TRS file types (`ToolFile.file_type`) in its API. Files of type `IO_SCHEMA`:
   `{type}/descriptor/{relative_path}`, as files of type `OTHER` are;
 - are [checked](#checking-io-schemas) at any path.
 
-Clients of the profile look for an `IO_SCHEMA` file first, and for the file
-of type `OTHER` only if there is none. Clients that know only the file types
-of TRS 2.0.2 may reject a list of files with `IO_SCHEMA`; register the
-schema as `OTHER` for them.
+With the proposal, clients of the profile look for an `IO_SCHEMA` file
+first, and for the file of type `OTHER` only if there is none; clients of
+the profile version 0.3.0 look only for the file of type `OTHER`, and
+clients that know only the file types of TRS 2.0.2 may reject a list of
+files with `IO_SCHEMA`. For them, register the schema as `OTHER` at
+`ga4gh-io.schema.json`: a version may have both, an `IO_SCHEMA` file and
+the `OTHER` file, for the same descriptor type.
 
 ## Publishing an I/O Schema
 
@@ -97,9 +103,9 @@ by its path:
    descriptor. Take the entry of type `IO_SCHEMA`, or else the one of type
    `OTHER` with the path `ga4gh-io.schema.json` in the directory of the
    primary descriptor, comparing only `file_type` and the normalised `path`
-   (as the profile's [discovery by
-   clients](https://github.com/uniqueg/ga4gh-io-schema/blob/v0.3/docs/adoption/trs.md#discovery-by-clients)
-   describes).
+   (as the [proposal](https://github.com/uniqueg/ga4gh-io-schema/issues/82)
+   describes; clients of the profile version 0.3.0 look only for the file
+   of type `OTHER`).
 2. Fetch it: `GET
    /tools/HELLO/versions/1.0.0/WDL/descriptor/ga4gh-io.schema.json` returns
    it in a `FileWrapper`, as `content`, with its `checksum`; `PLAIN_WDL` in

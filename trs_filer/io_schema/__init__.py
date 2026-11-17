@@ -5,10 +5,9 @@ the inputs and outputs of a workflow. It is published in TRS as a file of
 type `IO_SCHEMA`, a file type that the profile proposes as an extension of
 TRS (accepted by TRS-Filer), or, for TRS servers without it, as a file of
 type `OTHER` named `ga4gh-io.schema.json`, next to the primary descriptor.
-With `custom.io_schema.validation`,
-such files are checked on registration against a vendored copy of the
-meta-schema of the profile (`trs_filer.io_schema.check`, see
-`docs/io-schema.md`).
+With `custom.io_schema.validation`, such files are checked on registration
+against a vendored copy of the meta-schema of the profile
+(`trs_filer.io_schema.check`, see `docs/io-schema.md`).
 
 The meta-schema and its vocabularies are vendored unchanged from
 `schemas/` of uniqueg/ga4gh-io-schema at commit d44e8d4 (2026-11-13, branch
@@ -63,6 +62,10 @@ META_SCHEMA_FORMATS = ["uri"]
 MAX_ERRORS = 100
 #: Beginning of the reasons for rejecting an I/O Schema file.
 PREFIX = f"The I/O Schema file ({IO_SCHEMA_FILE_NAME})"
+#: Start of the reasons for rejecting a file of type `IO_SCHEMA`, in place of
+#: `PREFIX`: such files may have any path, which isn't echoed (submitted
+#: values stay out of `detail`)
+IO_SCHEMA_PREFIX = f"The I/O Schema file ({IO_SCHEMA_FILE_TYPE})"
 # Names of properties that reasons may contain: short, without characters of
 # URLs with credentials (e.g., `:`, `/`, `@`); others are replaced by `*`
 _IDENTIFIER = re.compile(r"[A-Za-z_][A-Za-z0-9_]{0,63}")

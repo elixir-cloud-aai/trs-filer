@@ -27,7 +27,12 @@ from trs_filer.ga4gh.trs.tool_classes import (
     sync_pending_flags,
     tool_classes_pending,
 )
-from trs_filer.io_schema import IO_SCHEMA_FILE_TYPE, is_io_schema_file
+from trs_filer.io_schema import (
+    IO_SCHEMA_FILE_TYPE,
+    IO_SCHEMA_PREFIX,
+    PREFIX,
+    is_io_schema_file,
+)
 from trs_filer.io_schema.check import check_io_schema
 from trs_filer.remote_files import fetch_remote_file
 from trs_filer.storage import store_file
@@ -43,6 +48,16 @@ logger = logging.getLogger(__name__)
 # that aren't)
 CREATED_AT = "_createdAt"
 UPDATED_AT = "_updatedAt"
+# File types of the files of a descriptor type (not `CONTAINERFILE`), which
+# `{type}/files` lists and `{type}/descriptor/{relative_path}` serves;
+# `IO_SCHEMA` is an extension of TRS (experimental, see `docs/io-schema.md`)
+DESCRIPTOR_FILE_TYPES = (
+    "PRIMARY_DESCRIPTOR",
+    "SECONDARY_DESCRIPTOR",
+    "TEST_FILE",
+    "OTHER",
+    IO_SCHEMA_FILE_TYPE,
+)
 INTERNAL_FIELDS = (CREATED_BY, CREATED_AT, UPDATED_AT, PENDING)
 # Projection of tools as served: without MongoDB's `_id` and internal fields
 TOOL_PROJECTION: dict[str, bool] = {
@@ -696,14 +711,7 @@ class RegisterToolVersion:
                 ).text
 
             # validate descriptor file types
-            descriptor_set = (
-                "PRIMARY_DESCRIPTOR",
-                "SECONDARY_DESCRIPTOR",
-                "TEST_FILE",
-                "OTHER",
-                IO_SCHEMA_FILE_TYPE,
-            )
-            if _file["tool_file"]["file_type"] in descriptor_set:
+            if _file["tool_file"]["file_type"] in DESCRIPTOR_FILE_TYPES:
                 if _file["type"] not in self.descriptor_types:
                     logger.error("Invalid descriptor type.")
                     raise InvalidRequest(
@@ -727,11 +735,19 @@ class RegisterToolVersion:
             # retrieved and their descriptor type is valid
             io_schema_conf = get_custom_config().io_schema
             if io_schema_conf.validation and is_io_schema_file(_file["tool_file"]):
-                check_io_schema(
-                    content=_file["file_wrapper"]["content"],
-                    descriptor_type=_file["type"],
-                    timeout=io_schema_conf.timeout,
-                )
+                try:
+                    check_io_schema(
+                        content=_file["file_wrapper"]["content"],
+                        descriptor_type=_file["type"],
+                        timeout=io_schema_conf.timeout,
+                    )
+                except InvalidRequest as exc:
+                    if _file["tool_file"]["file_type"] != IO_SCHEMA_FILE_TYPE:
+                        raise
+                    # name the file by its type: it may have any path
+                    raise InvalidRequest(
+                        str(exc.description).replace(PREFIX, IO_SCHEMA_PREFIX, 1)
+                    ) from exc
 
         # store the contents (in object storage, with `custom.storage.backend:
         # s3`), once all files are valid

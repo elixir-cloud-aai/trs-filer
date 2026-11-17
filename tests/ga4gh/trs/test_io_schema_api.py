@@ -353,7 +353,70 @@ def test_io_schema_file_type_checked_at_any_path(
     tool = _example()
     file = _schema_file(tool)
     file["tool_file"] = {"path": "schemas/inputs.json", "file_type": "IO_SCHEMA"}
+    content = file["file_wrapper"]["content"]
     file["file_wrapper"] = {"content": "not JSON"}
+    response = client.put(TOOL_PATH, json=deepcopy(tool))
+    assert response.status_code == 400
+    # named by its type, not by its path, which isn't echoed
+    assert response.get_json()["detail"] == (
+        "The I/O Schema file (IO_SCHEMA) is not valid JSON."
+    )
+
+    # a valid one is accepted there, and served by its path
+    file["file_wrapper"] = {"content": content}
+    response = client.put(TOOL_PATH, json=tool)
+    assert response.status_code == 200, response.get_json()
+    response = client.get(f"{VERSION_PATH}/WDL/descriptor/schemas%2Finputs.json")
+    assert response.status_code == 200
+    assert response.get_json()["content"] == content
+
+
+def test_io_schema_file_type_descriptor_type_mismatch(
+    mongo_client: MongoClient[dict[str, Any]], overlay: Path
+) -> None:
+    """Files of type `IO_SCHEMA` for another descriptor type are rejected.
+
+    Args:
+        mongo_client: MongoDB client.
+        overlay: Config overlay.
+    """
+    client = _client(overlay, validation=True)
+    tool = _example()
+    tool["versions"][0]["descriptor_type"] = ["WDL", "CWL"]
+    file = deepcopy(_schema_file(tool))
+    file["tool_file"] = {"path": "cwl/inputs.json", "file_type": "IO_SCHEMA"}
+    file["type"] = "CWL"
+    tool["versions"][0]["files"].append(file)
+    response = client.put(TOOL_PATH, json=tool)
+    assert response.status_code == 400
+    assert response.get_json()["detail"] == (
+        "The I/O Schema file (IO_SCHEMA) of descriptor type CWL "
+        "names another descriptor type in 'x-ga4gh-workflow.descriptor_type'."
+    )
+
+
+def test_io_schema_file_type_next_to_other(
+    mongo_client: MongoClient[dict[str, Any]], overlay: Path
+) -> None:
+    """A version may have an `IO_SCHEMA` file and the `OTHER` file, both checked.
+
+    Args:
+        mongo_client: MongoDB client.
+        overlay: Config overlay.
+    """
+    client = _client(overlay, validation=True)
+    tool = _example()
+    file = deepcopy(_schema_file(tool))
+    file["tool_file"] = {"path": "io/inputs.json", "file_type": "IO_SCHEMA"}
+    tool["versions"][0]["files"].append(file)
+    response = client.put(TOOL_PATH, json=deepcopy(tool))
+    assert response.status_code == 200, response.get_json()
+    listed = client.get(f"{VERSION_PATH}/WDL/files").get_json()
+    assert {"path": SCHEMA_PATH, "file_type": "OTHER"} in listed
+    assert {"path": "io/inputs.json", "file_type": "IO_SCHEMA"} in listed
+
+    # the `OTHER` file is still checked
+    _schema_file(tool)["file_wrapper"] = {"content": "not JSON"}
     response = client.put(TOOL_PATH, json=tool)
     assert response.status_code == 400
     assert response.get_json()["detail"] == (
@@ -382,6 +445,8 @@ def test_io_schema_file_type_once_per_descriptor_type(
     assert response.get_json()["detail"] == (
         "Each descriptor type of a version must have at most one IO_SCHEMA file."
     )
+    # nothing is stored
+    assert client.get(TOOL_PATH).status_code == 404
 
     # one per descriptor type
     tool["versions"][0]["descriptor_type"] = ["WDL", "CWL"]

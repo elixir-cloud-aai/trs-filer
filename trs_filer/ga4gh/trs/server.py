@@ -27,6 +27,7 @@ from trs_filer.errors.exceptions import (
     RemoteFileError,
 )
 from trs_filer.ga4gh.trs.endpoints.register_objects import (
+    DESCRIPTOR_FILE_TYPES,
     TOOL_PROJECTION,
     UPDATED_AT,
     RegisterTool,
@@ -72,16 +73,6 @@ MAX_LIMIT = 1000
 # Reasons of `400 Bad Request` for invalid offsets and limits of `GET /tools`
 OFFSET_INVALID = "The offset must be a non-negative integer."
 LIMIT_INVALID = "The limit must be at least 1."
-# File types of the files of a descriptor type, which `{type}/files` lists
-# and `{type}/descriptor/{relative_path}` serves (not `CONTAINERFILE`);
-# `IO_SCHEMA` is an extension of TRS (experimental, see `docs/io-schema.md`)
-DESCRIPTOR_FILE_TYPES = (
-    "OTHER",
-    "TEST_FILE",
-    "PRIMARY_DESCRIPTOR",
-    "SECONDARY_DESCRIPTOR",
-    "IO_SCHEMA",
-)
 # Media types of the paths that the specification offers as JSON and plain
 # text (`{type}/descriptor`, `{type}/descriptor/{relative_path}`,
 # `{type}/tests`): JSON for the descriptor types, plain text for their

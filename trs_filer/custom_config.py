@@ -433,9 +433,10 @@ class AccessControlConfig(FOCABaseConfig):
 class IoSchemaConfig(FOCABaseConfig):
     """Model for GA4GH I/O Schema files (experimental).
 
-    I/O Schemas are files of type `OTHER` named `ga4gh-io.schema.json` (see
-    `trs_filer.io_schema` and `docs/io-schema.md`); they are stored and
-    served like other files with either setting.
+    I/O Schemas are files of type `IO_SCHEMA` (at any path), and files of
+    type `OTHER` named `ga4gh-io.schema.json` (see `trs_filer.io_schema` and
+    `docs/io-schema.md`); they are stored and served like other files with
+    either setting.
 
     Args:
         validation: Whether I/O Schema files are checked on registration,
