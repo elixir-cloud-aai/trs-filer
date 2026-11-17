@@ -58,8 +58,10 @@ def _key(name: str) -> re.Pattern[str]:
     return re.compile(
         rf"^{re.escape(name)}:[ \t]*(?P<quote>[\"']?)(?P<value>[0-9A-Za-z._+-]+)"
         # Not continued on a later line (as YAML continues plain scalars,
-        # also after blank lines)
-        r"(?P=quote)(?:[ \t]+#.*)?[ \t]*$(?!(?:\n[ \t]*)*\n[ \t]+[^ \t#\n])",
+        # also after blank and comment lines); `$` and the value exclude
+        # `\r`, so text with CR line endings never matches
+        r"(?P=quote)(?:[ \t]+#.*)?[ \t]*$"
+        r"(?!(?:\n[ \t]*(?:#.*)?)*\n[ \t]+[^ \t#\n])",
         re.MULTILINE,
     )
 
