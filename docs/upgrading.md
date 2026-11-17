@@ -96,7 +96,11 @@ existing data needs no changes. Check clients and custom configs:
   type of a version, see [The file type
   `IO_SCHEMA`](io-schema.md#the-file-type-io_schema)); `{type}/files` lists
   them, so clients that accept only the file types of TRS 2.0.2 may reject
-  the lists of versions that have one.
+  the lists of versions that have one. Register `IO_SCHEMA` files only once
+  all replicas run this version: during a rolling upgrade, replicas of the
+  previous version reject such registrations with `400 Bad Request`, and
+  leave files of that type out of `{type}/files` and answer `404` for them.
+  On a downgrade, they are kept in the database but hidden the same way.
 - **Tokens for writes (breaking):** registering, changing and deleting tools,
   versions and tool classes (`POST`, `PUT` and `DELETE`, see [Registering
   tools](api.md#registering-tools)) need an access token (RFC 9068,
