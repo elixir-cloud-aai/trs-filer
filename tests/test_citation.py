@@ -140,6 +140,11 @@ def test_set_release_duplicate_key(extra: str) -> None:
         # CR line endings are rejected, so CRLF text can't hide continuations
         "version: 0.1.0\r\n\r\n  rc1",
         "version: 0.1.0\r\n",
+        # Inline comments don't swallow the CR of a CRLF line ending
+        "version: 0.1.0  # comment\r\n",
+        "version: 0.1.0  # comment\r\n\r\n  rc1",
+        # Stray CRs on blank lines don't hide continuations
+        "version: 0.1.0\n\r\n  rc1",
         "version: \"0.1.0'",
         'version: "0.1#0"',
         "version: 0.1.0#x",
