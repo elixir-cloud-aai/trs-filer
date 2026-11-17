@@ -40,6 +40,9 @@ def test_repository_file() -> None:
     [
         (TEXT, "0.1.0"),
         ("version: 1.2.3rc1  # comment\n", "1.2.3rc1"),
+        # Indented comments after blank lines are no continuation
+        ("version: 1.0.0\n\n  # comment\nx: 1\n", "1.0.0"),
+        ("version: 1.0.0\n\n  # comment\n", "1.0.0"),
         ("cff-version: 1.2.0\n", None),
         # Nested keys are not the release version
         ("references:\n  - version: 1.0.0\n", None),
@@ -128,6 +131,24 @@ def test_set_release_duplicate_key(extra: str) -> None:
         "version: >-\n  0.1.0",
         "version:\n  0.1.0",
         "version: 0.1.0\n  rc1",
+        # Plain scalars continue after blank lines, too
+        "version: 0.1.0\n\n  rc1",
+        "version: 0.1.0\n \n\t\n  rc1",
+        # Comment lines don't end the lookahead
+        "version: 0.1.0\n\n  # comment\n  rc1",
+        "version: 0.1.0\n  # comment\n\n  rc1",
+        # CR line endings are rejected, so CRLF text can't hide continuations
+        "version: 0.1.0\r\n\r\n  rc1",
+        "version: 0.1.0\r\n",
+        # Inline comments don't swallow the CR of a CRLF line ending
+        "version: 0.1.0  # comment\r\n",
+        "version: 0.1.0  # comment\r\n\r\n  rc1",
+        # Stray CRs on blank lines don't hide continuations
+        "version: 0.1.0\n\r\n  rc1",
+        # Bare CRs are line breaks too, also after blank and comment lines
+        "version: 0.1.0\n\r  rc1",
+        "version: 0.1.0\n# comment\r  rc1",
+        "version: 0.1.0\n\n\r  rc1",
         "version: \"0.1.0'",
         'version: "0.1#0"',
         "version: 0.1.0#x",
