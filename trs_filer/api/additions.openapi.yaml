@@ -1036,15 +1036,47 @@ paths:
         `custom.access_control.tool_classes`) that the requester may see:
         all for admins; for other users, the tool classes they added and
         the tools they have a role on. Tools are listed without the files
-        of their versions. An extension of TRS-Filer.
+        of their versions. The tool classes and then the tools, each sorted
+        by identifier, are paged as one sequence, as `GET /tools` pages
+        tools: `offset` and `limit` count both, and the response headers
+        link to the pages. An extension of TRS-Filer.
       operationId: getApprovals
       security:
         - BEARER: []
       tags:
         - TRS-Filer
+      parameters:
+        - $ref: '#/components/parameters/offset'
+        - $ref: '#/components/parameters/limit'
       responses:
         '200':
-          description: The pending tool classes and tools.
+          description: The pending tool classes and tools of the page.
+          headers:
+            next_page:
+              description: A URL that can be used to reach the next page
+                based on the current offset and page record limit.
+              schema:
+                type: string
+            last_page:
+              description: A URL that can be used to reach the last page
+                based on the current page record limit.
+              schema:
+                type: string
+            self_link:
+              description: A URL that can be used to return to the current
+                page later.
+              schema:
+                type: string
+            current_offset:
+              description: The current start index of the paging used for
+                this result.
+              schema:
+                type: string
+            current_limit:
+              description: The current page record limit used for this
+                result.
+              schema:
+                type: integer
           content:
             application/json:
               schema:
@@ -1253,7 +1285,8 @@ components:
     # Pending tool classes and tools (`GET /approvals`), an extension of
     # TRS-Filer
     Approvals:
-      description: Pending tool classes and tools that the requester may see.
+      description: Pending tool classes and tools that the requester may see,
+        of one page of the sequence of the tool classes and then the tools.
       type: object
       required:
         - toolClasses
@@ -1280,6 +1313,22 @@ components:
             type: string
           description: Registry-specific tags of the tool, by which tools are
             filtered (`tags` of `GET /tools`). An extension of TRS-Filer.
+    # Extension of the TRS schema (experimental): the file type `IO_SCHEMA`,
+    # proposed by the GA4GH I/O Schema for the I/O Schema of a descriptor type
+    # (see `docs/io-schema.md`); the list replaces the vendored one
+    ToolFile:
+      properties:
+        file_type:
+          enum:
+            - TEST_FILE
+            - PRIMARY_DESCRIPTOR
+            - SECONDARY_DESCRIPTOR
+            - CONTAINERFILE
+            - OTHER
+            - IO_SCHEMA
+          description: Type of the file. `IO_SCHEMA` (experimental, an
+            extension of TRS-Filer) is the GA4GH I/O Schema of the inputs and
+            outputs of the descriptor type, at most one per descriptor type.
     ChecksumRegister:
       type: object
       required:
@@ -1303,8 +1352,9 @@ components:
     TypeRegister:
       type: string
       description: Type of file. For descriptor files (`PRIMARY_DESCRIPTOR`
-        and `SECONDARY_DESCRIPTOR`), test files (`TEST_FILE`) and other files
-        (`OTHER`), the allowed file types are enumerated in the
+        and `SECONDARY_DESCRIPTOR`), test files (`TEST_FILE`), I/O Schema
+        files (`IO_SCHEMA`) and other files (`OTHER`), the allowed file types
+        are enumerated in the
         `DescriptorType` schema. For container recipe files (`CONTAINERFILE`),
         the allowed file types are enumerated in the
         `ImageType` schema.

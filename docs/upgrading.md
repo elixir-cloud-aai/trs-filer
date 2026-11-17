@@ -85,12 +85,22 @@ existing data needs no changes. Check clients and custom configs:
   of `ToolVersionRegister`, by descriptor type), which they return;
   registrations with it failed with `400 Bad Request` before.
 - GA4GH I/O Schemas of workflows (experimental) are documented: files of
-  type `OTHER` named `ga4gh-io.schema.json`, stored and served as before.
+  type `OTHER` named `ga4gh-io.schema.json`, stored and served as before,
+  and files of the new type `IO_SCHEMA` (see below).
   The new option `custom.io_schema.validation` (`false` by default, so
   nothing changes) checks them on registration, each in a process of its
   own (about 50 to 100 MB of memory, one at a time), within
   `custom.io_schema.timeout` seconds (see [Checking I/O
-  Schemas](io-schema.md#checking-io-schemas)).
+  Schemas](io-schema.md#checking-io-schemas)). Files may also have the new
+  file type `IO_SCHEMA` (an extension of TRS, at most one per descriptor
+  type of a version, see [The file type
+  `IO_SCHEMA`](io-schema.md#the-file-type-io_schema)); `{type}/files` lists
+  them, so clients that accept only the file types of TRS 2.0.2 may reject
+  the lists of versions that have one. Register `IO_SCHEMA` files only once
+  all replicas run this version: during a rolling upgrade, replicas of the
+  previous version reject such registrations with `400 Bad Request`, and
+  leave files of that type out of `{type}/files` and answer `404` for them.
+  On a downgrade, they are kept in the database but hidden the same way.
 - **Tokens for writes (breaking):** registering, changing and deleting tools,
   versions and tool classes (`POST`, `PUT` and `DELETE`, see [Registering
   tools](api.md#registering-tools)) need an access token (RFC 9068,
@@ -188,9 +198,11 @@ existing data needs no changes. Check clients and custom configs:
   (tool classes of other users, and their tools, are pending until an admin
   approves them, `PUT /toolClasses/{id}/approval`; `GET /approvals` lists
   them), which the app refused on startup before (see [Adding tool
-  classes](configuration.md#adding-tool-classes)). The TRS reads accept a
-  token (optional), for the pending tools and tool classes that its user
-  may see; invalid tokens are still read as anonymous. Tool classes store
+  classes](configuration.md#adding-tool-classes)). `GET /approvals` pages
+  its results as `GET /tools` does (`offset`, `limit` and the page links,
+  see [Approving tool classes](api.md#approving-tool-classes)). The TRS
+  reads accept a token (optional), for the pending tools and tool classes
+  that its user may see; invalid tokens are still read as anonymous. Tool classes store
   who added them, and pending ones and their tools a flag (internal fields
   `_createdBy` and `_pending`, not served; tool classes stored before have
   no `_createdBy`). To upgrade:

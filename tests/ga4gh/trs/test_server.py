@@ -315,6 +315,23 @@ def test_toolsGet_pagination_empty(client: FlaskClient) -> None:
     )
 
 
+def test_toolsGet_pagination_huge_offset(
+    client: FlaskClient, tool: dict[str, Any]
+) -> None:
+    """Offsets beyond the 64-bit integers of MongoDB give an empty page.
+
+    They don't reach the database, which would refuse them (only with
+    `MONGODB_TEST_URI`, as in CI; mongomock accepts them).
+
+    Args:
+        client: Test client.
+        tool: Registered tool.
+    """
+    response = client.get(f"{BASE_PATH}/tools?offset={2**64}")
+    assert response.status_code == 200
+    assert response.get_json() == []
+
+
 def test_toolsGet_pagination_max_limit(
     client: FlaskClient, tool: dict[str, Any], monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -2551,7 +2568,7 @@ INVALID_VERSIONS = pytest.mark.parametrize(
         ),
         (
             _descriptor_image_type,
-            "The type of descriptor, test and other files must be a "
+            "The type of descriptor, test, I/O Schema and other files must be a "
             "supported descriptor type: CWL, WDL, NFL, GALAXY, SMK.",
         ),
         (
