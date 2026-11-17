@@ -145,6 +145,10 @@ def test_set_release_duplicate_key(extra: str) -> None:
         "version: 0.1.0  # comment\r\n\r\n  rc1",
         # Stray CRs on blank lines don't hide continuations
         "version: 0.1.0\n\r\n  rc1",
+        # Bare CRs are line breaks too, also after blank and comment lines
+        "version: 0.1.0\n\r  rc1",
+        "version: 0.1.0\n# comment\r  rc1",
+        "version: 0.1.0\n\n\r  rc1",
         "version: \"0.1.0'",
         'version: "0.1#0"',
         "version: 0.1.0#x",
