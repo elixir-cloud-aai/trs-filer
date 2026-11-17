@@ -8,10 +8,14 @@ note: |
 rule:
   any:
     - pattern: logging.$METHOD($$$ARGS)
+    - pattern: logging.root.$METHOD($$$ARGS)
     - pattern: logging.getLogger().$METHOD($$$ARGS)
+    # Before the positional form, which also matches `name=...` as `$NAME`
+    # (constraints are checked on the first pattern that matches)
+    - pattern: logging.getLogger(name=$NAME).$METHOD($$$ARGS)
     - pattern: logging.getLogger($NAME).$METHOD($$$ARGS)
 constraints:
   NAME:
-    regex: ^(None|""|'')$
+    regex: ^(None|""|''|"root"|'root')$
   METHOD:
     regex: ^(debug|info|warning|warn|error|exception|critical|fatal|log)$
