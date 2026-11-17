@@ -361,6 +361,15 @@ def test_io_schema_file_type_checked_at_any_path(
     assert response.get_json()["detail"] == (
         "The I/O Schema file (IO_SCHEMA) is not valid JSON."
     )
+    assert client.get(TOOL_PATH).status_code == 404
+
+    # errors of the meta-schema, found in a process of its own, too
+    file["file_wrapper"] = {"content": json.dumps({**json.loads(content), "type": 1})}
+    response = client.put(TOOL_PATH, json=deepcopy(tool))
+    assert response.status_code == 400
+    assert response.get_json()["detail"].startswith(
+        "The I/O Schema file (IO_SCHEMA) doesn't validate against the meta-schema"
+    )
 
     # a valid one is accepted there, and served by its path
     file["file_wrapper"] = {"content": content}
@@ -393,6 +402,7 @@ def test_io_schema_file_type_descriptor_type_mismatch(
         "The I/O Schema file (IO_SCHEMA) of descriptor type CWL "
         "names another descriptor type in 'x-ga4gh-workflow.descriptor_type'."
     )
+    assert client.get(TOOL_PATH).status_code == 404
 
 
 def test_io_schema_file_type_next_to_other(
@@ -471,4 +481,7 @@ def test_io_schema_file_type_needs_descriptor_type(
     file["type"] = "Docker"
     response = client.put(TOOL_PATH, json=tool)
     assert response.status_code == 400
-    assert "supported descriptor type" in response.get_json()["detail"]
+    assert response.get_json()["detail"].startswith(
+        "The type of descriptor, test, I/O Schema and other files must be a "
+        "supported descriptor type: "
+    )

@@ -159,6 +159,10 @@ are replaced by `*`), e.g.:
 }
 ```
 
+For files of type `IO_SCHEMA`, which may have any path, `detail` names the
+file by its type instead: `The I/O Schema file (IO_SCHEMA) ...`; their path
+isn't echoed.
+
 The [validator of the
 profile](https://github.com/uniqueg/ga4gh-io-schema/blob/v0.3/docs/tools/validator.md)
 reports all errors with their values; check schemas with it before

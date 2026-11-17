@@ -715,7 +715,8 @@ class RegisterToolVersion:
                 if _file["type"] not in self.descriptor_types:
                     logger.error("Invalid descriptor type.")
                     raise InvalidRequest(
-                        "The type of descriptor, test and other files must be a "
+                        "The type of descriptor, test, I/O Schema and other files "
+                        "must be a "
                         "supported descriptor type: "
                         f"{', '.join(self.descriptor_types)}."
                     )

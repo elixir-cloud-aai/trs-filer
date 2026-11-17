@@ -2568,7 +2568,7 @@ INVALID_VERSIONS = pytest.mark.parametrize(
         ),
         (
             _descriptor_image_type,
-            "The type of descriptor, test and other files must be a "
+            "The type of descriptor, test, I/O Schema and other files must be a "
             "supported descriptor type: CWL, WDL, NFL, GALAXY, SMK.",
         ),
         (
