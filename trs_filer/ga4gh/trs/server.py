@@ -27,6 +27,7 @@ from trs_filer.errors.exceptions import (
     RemoteFileError,
 )
 from trs_filer.ga4gh.trs.endpoints.register_objects import (
+    DESCRIPTOR_FILE_TYPES,
     TOOL_PROJECTION,
     UPDATED_AT,
     RegisterTool,
@@ -454,12 +455,6 @@ def toolsIdVersionsVersionIdTypeDescriptorRelativePathGet(
     validate_descriptor_type(type=type)
     file_type, plain = _negotiate_type(type)
     files = _version_files(id=id, version_id=version_id)
-    file_types = [
-        "OTHER",
-        "TEST_FILE",
-        "PRIMARY_DESCRIPTOR",
-        "SECONDARY_DESCRIPTOR",
-    ]
     # The path as it arrives wins over the decoded one (e.g., for files with
     # `%` in their paths), so don't decode it unconditionally
     candidates = [relative_path]
@@ -471,7 +466,7 @@ def toolsIdVersionsVersionIdTypeDescriptorRelativePathGet(
         for _d in files:
             if (
                 _d["tool_file"]["path"] == path
-                and _d["tool_file"]["file_type"] in file_types
+                and _d["tool_file"]["file_type"] in DESCRIPTOR_FILE_TYPES
                 and _d["type"] == file_type
             ):
                 ret = _d
@@ -735,12 +730,6 @@ def toolsIdVersionsVersionIdTypeFilesGet(
         projection=proj,
     )
 
-    file_types = [
-        "OTHER",
-        "TEST_FILE",
-        "PRIMARY_DESCRIPTOR",
-        "SECONDARY_DESCRIPTOR",
-    ]
     if data is None:
         raise NotFound
     try:
@@ -748,7 +737,8 @@ def toolsIdVersionsVersionIdTypeFilesGet(
         selected_files = [
             d
             for d in version["files"]
-            if d["type"] == type and d["tool_file"]["file_type"] in file_types
+            if d["type"] == type
+            and d["tool_file"]["file_type"] in DESCRIPTOR_FILE_TYPES
         ]
         ret = [d["tool_file"] for d in selected_files]
     except (IndexError, KeyError, TypeError) as exc:

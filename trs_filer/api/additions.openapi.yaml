@@ -1313,6 +1313,22 @@ components:
             type: string
           description: Registry-specific tags of the tool, by which tools are
             filtered (`tags` of `GET /tools`). An extension of TRS-Filer.
+    # Extension of the TRS schema (experimental): the file type `IO_SCHEMA`,
+    # proposed by the GA4GH I/O Schema for the I/O Schema of a descriptor type
+    # (see `docs/io-schema.md`); the list replaces the vendored one
+    ToolFile:
+      properties:
+        file_type:
+          enum:
+            - TEST_FILE
+            - PRIMARY_DESCRIPTOR
+            - SECONDARY_DESCRIPTOR
+            - CONTAINERFILE
+            - OTHER
+            - IO_SCHEMA
+          description: Type of the file. `IO_SCHEMA` (experimental, an
+            extension of TRS-Filer) is the GA4GH I/O Schema of the inputs and
+            outputs of the descriptor type, at most one per descriptor type.
     ChecksumRegister:
       type: object
       required:
@@ -1336,8 +1352,9 @@ components:
     TypeRegister:
       type: string
       description: Type of file. For descriptor files (`PRIMARY_DESCRIPTOR`
-        and `SECONDARY_DESCRIPTOR`), test files (`TEST_FILE`) and other files
-        (`OTHER`), the allowed file types are enumerated in the
+        and `SECONDARY_DESCRIPTOR`), test files (`TEST_FILE`), I/O Schema
+        files (`IO_SCHEMA`) and other files (`OTHER`), the allowed file types
+        are enumerated in the
         `DescriptorType` schema. For container recipe files (`CONTAINERFILE`),
         the allowed file types are enumerated in the
         `ImageType` schema.
