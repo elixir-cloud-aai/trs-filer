@@ -43,6 +43,9 @@ where `null` removes a key of the vendored files (FOCA's
   start).
 - The registration endpoints and their schemas, and the `tags` of tools
   (see [Registering tools](#registering-tools)).
+- The file type `IO_SCHEMA` (`ToolFile.file_type`, experimental), for the
+  GA4GH I/O Schema of a descriptor type, which the I/O Schema proposes for
+  TRS (see [The file type `IO_SCHEMA`](io-schema.md#the-file-type-io_schema)).
 - The parameter `relative_path` of `{type}/descriptor/{relative_path}` has
   format `path`, so that paths with `/` (also encoded ones, `%2F`, which
   servers decode before routing) reach the endpoint (see [Relative
@@ -243,10 +246,10 @@ a `description` and the versions of its languages (`descriptor_type_version`,
 by descriptor type, e.g., `{"CWL": ["v1.2"], "WDL": ["1.0", "1.1"]}`; the
 keys should be descriptor types of the version, which TRS-Filer doesn't
 check). Each file has a path and a file type (`tool_file`:
-`PRIMARY_DESCRIPTOR`, `SECONDARY_DESCRIPTOR`, `TEST_FILE`, `CONTAINERFILE` or
-`OTHER`), its descriptor type or image type (`type`: one of the supported
-[descriptor types](#descriptor-types) for descriptors, test files and other
-files, and `Docker`, `Singularity` or `Conda` for containerfiles), and its
+`PRIMARY_DESCRIPTOR`, `SECONDARY_DESCRIPTOR`, `TEST_FILE`, `CONTAINERFILE`,
+`OTHER` or `IO_SCHEMA`), its descriptor type or image type (`type`: one of
+the supported [descriptor types](#descriptor-types) for descriptors, test
+files, I/O Schemas and other files, and `Docker`, `Singularity` or `Conda` for containerfiles), and its
 content (`file_wrapper.content`) or a URL that the
 content is retrieved from (`file_wrapper.url`, see [Remote
 files](configuration.md#remote-files)), and optionally its checksums
@@ -254,8 +257,8 @@ files](configuration.md#remote-files)), and optionally its checksums
 `ToolVersionRegister`, `FilesRegister`, `ToolClassRegister`) are in the
 specification and the Swagger UI; [Getting started](getting-started.md#usage)
 has an example. Workflows can be registered with a GA4GH I/O Schema of
-their inputs and outputs, a file of type `OTHER` (experimental, see [I/O
-Schemas](io-schema.md)).
+their inputs and outputs, a file of type `IO_SCHEMA` or `OTHER`
+(experimental, see [I/O Schemas](io-schema.md)).
 
 Registering an object with the identifier of a stored one (`PUT`) replaces
 it, also with identical content. Tools store a copy of their tool class: of

@@ -1,14 +1,16 @@
 """Tests of GA4GH I/O Schema files via the API (experimental).
 
-I/O Schemas are registered and served as files of type `OTHER`; with
-`custom.io_schema.validation`, they are checked on registration (see
-`docs/io-schema.md`).
+I/O Schemas are registered and served as files of type `IO_SCHEMA` (an
+extension of TRS) or `OTHER`; with `custom.io_schema.validation`, they are
+checked on registration (see `docs/io-schema.md`).
 """
 
 from copy import deepcopy
+from io import BytesIO
 import json
 from pathlib import Path
 from typing import Any
+from zipfile import ZipFile
 
 from flask.testing import FlaskClient
 from pymongo import MongoClient
@@ -293,3 +295,115 @@ def test_io_schema_remote_file_checked(
     assert response.get_json()["detail"] == (
         "The I/O Schema file (ga4gh-io.schema.json) is not valid JSON."
     )
+
+
+@pytest.mark.parametrize("validation", [False, True])
+def test_io_schema_file_type_registered_and_served(
+    mongo_client: MongoClient[dict[str, Any]], overlay: Path, validation: bool
+) -> None:
+    """I/O Schemas of type `IO_SCHEMA` are registered, listed and served.
+
+    The file type is an extension of TRS (experimental): the file is listed
+    with the files of its descriptor type, fetched by its path (also in the
+    ZIP archive of the files), and checked like files of type `OTHER`.
+
+    Args:
+        mongo_client: MongoDB client.
+        overlay: Config overlay.
+        validation: Value of `custom.io_schema.validation`.
+    """
+    client = _client(overlay, validation)
+    tool = _example()
+    _schema_file(tool)["tool_file"]["file_type"] = "IO_SCHEMA"
+    response = client.put(TOOL_PATH, json=deepcopy(tool))
+    assert response.status_code == 200, response.get_json()
+
+    response = client.get(f"{VERSION_PATH}/WDL/files")
+    assert response.status_code == 200
+    assert {"path": SCHEMA_PATH, "file_type": "IO_SCHEMA"} in response.get_json()
+
+    wrapper = _schema_file(tool)["file_wrapper"]
+    response = client.get(f"{VERSION_PATH}/WDL/descriptor/{SCHEMA_PATH}")
+    assert response.status_code == 200
+    assert response.get_json()["content"] == wrapper["content"]
+    response = client.get(f"{VERSION_PATH}/PLAIN_WDL/descriptor/{SCHEMA_PATH}")
+    assert response.status_code == 200
+    assert response.get_data(as_text=True) == wrapper["content"]
+
+    response = client.get(f"{VERSION_PATH}/WDL/files?format=zip")
+    assert response.status_code == 200
+    with ZipFile(BytesIO(response.data)) as archive:
+        assert archive.read(SCHEMA_PATH).decode() == wrapper["content"]
+
+    # not a test file (the version has none)
+    response = client.get(f"{VERSION_PATH}/WDL/tests")
+    assert response.status_code == 404
+
+
+def test_io_schema_file_type_checked_at_any_path(
+    mongo_client: MongoClient[dict[str, Any]], overlay: Path
+) -> None:
+    """Files of type `IO_SCHEMA` are checked whatever their path.
+
+    Args:
+        mongo_client: MongoDB client.
+        overlay: Config overlay.
+    """
+    client = _client(overlay, validation=True)
+    tool = _example()
+    file = _schema_file(tool)
+    file["tool_file"] = {"path": "schemas/inputs.json", "file_type": "IO_SCHEMA"}
+    file["file_wrapper"] = {"content": "not JSON"}
+    response = client.put(TOOL_PATH, json=tool)
+    assert response.status_code == 400
+    assert response.get_json()["detail"] == (
+        "The I/O Schema file (ga4gh-io.schema.json) is not valid JSON."
+    )
+
+
+def test_io_schema_file_type_once_per_descriptor_type(
+    mongo_client: MongoClient[dict[str, Any]], overlay: Path
+) -> None:
+    """A descriptor type of a version has at most one file of type `IO_SCHEMA`.
+
+    Args:
+        mongo_client: MongoDB client.
+        overlay: Config overlay.
+    """
+    client = _client(overlay, validation=False)
+    tool = _example()
+    file = _schema_file(tool)
+    file["tool_file"]["file_type"] = "IO_SCHEMA"
+    second = deepcopy(file)
+    second["tool_file"]["path"] = "other/ga4gh-io.schema.json"
+    tool["versions"][0]["files"].append(second)
+    response = client.put(TOOL_PATH, json=deepcopy(tool))
+    assert response.status_code == 400
+    assert response.get_json()["detail"] == (
+        "Each descriptor type of a version must have at most one IO_SCHEMA file."
+    )
+
+    # one per descriptor type
+    tool["versions"][0]["descriptor_type"] = ["WDL", "CWL"]
+    second["type"] = "CWL"
+    response = client.put(TOOL_PATH, json=tool)
+    assert response.status_code == 200, response.get_json()
+
+
+def test_io_schema_file_type_needs_descriptor_type(
+    mongo_client: MongoClient[dict[str, Any]], overlay: Path
+) -> None:
+    """Files of type `IO_SCHEMA` belong to a descriptor type, not an image type.
+
+    Args:
+        mongo_client: MongoDB client.
+        overlay: Config overlay.
+    """
+    client = _client(overlay, validation=False)
+    tool = _example()
+    file = _schema_file(tool)
+    file["tool_file"]["file_type"] = "IO_SCHEMA"
+    file["type"] = "Docker"
+    response = client.put(TOOL_PATH, json=tool)
+    assert response.status_code == 400
+    assert "supported descriptor type" in response.get_json()["detail"]

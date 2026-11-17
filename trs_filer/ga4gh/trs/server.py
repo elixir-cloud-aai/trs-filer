@@ -72,6 +72,16 @@ MAX_LIMIT = 1000
 # Reasons of `400 Bad Request` for invalid offsets and limits of `GET /tools`
 OFFSET_INVALID = "The offset must be a non-negative integer."
 LIMIT_INVALID = "The limit must be at least 1."
+# File types of the files of a descriptor type, which `{type}/files` lists
+# and `{type}/descriptor/{relative_path}` serves (not `CONTAINERFILE`);
+# `IO_SCHEMA` is an extension of TRS (experimental, see `docs/io-schema.md`)
+DESCRIPTOR_FILE_TYPES = (
+    "OTHER",
+    "TEST_FILE",
+    "PRIMARY_DESCRIPTOR",
+    "SECONDARY_DESCRIPTOR",
+    "IO_SCHEMA",
+)
 # Media types of the paths that the specification offers as JSON and plain
 # text (`{type}/descriptor`, `{type}/descriptor/{relative_path}`,
 # `{type}/tests`): JSON for the descriptor types, plain text for their
@@ -454,12 +464,6 @@ def toolsIdVersionsVersionIdTypeDescriptorRelativePathGet(
     validate_descriptor_type(type=type)
     file_type, plain = _negotiate_type(type)
     files = _version_files(id=id, version_id=version_id)
-    file_types = [
-        "OTHER",
-        "TEST_FILE",
-        "PRIMARY_DESCRIPTOR",
-        "SECONDARY_DESCRIPTOR",
-    ]
     # The path as it arrives wins over the decoded one (e.g., for files with
     # `%` in their paths), so don't decode it unconditionally
     candidates = [relative_path]
@@ -471,7 +475,7 @@ def toolsIdVersionsVersionIdTypeDescriptorRelativePathGet(
         for _d in files:
             if (
                 _d["tool_file"]["path"] == path
-                and _d["tool_file"]["file_type"] in file_types
+                and _d["tool_file"]["file_type"] in DESCRIPTOR_FILE_TYPES
                 and _d["type"] == file_type
             ):
                 ret = _d
@@ -735,12 +739,6 @@ def toolsIdVersionsVersionIdTypeFilesGet(
         projection=proj,
     )
 
-    file_types = [
-        "OTHER",
-        "TEST_FILE",
-        "PRIMARY_DESCRIPTOR",
-        "SECONDARY_DESCRIPTOR",
-    ]
     if data is None:
         raise NotFound
     try:
@@ -748,7 +746,8 @@ def toolsIdVersionsVersionIdTypeFilesGet(
         selected_files = [
             d
             for d in version["files"]
-            if d["type"] == type and d["tool_file"]["file_type"] in file_types
+            if d["type"] == type
+            and d["tool_file"]["file_type"] in DESCRIPTOR_FILE_TYPES
         ]
         ret = [d["tool_file"] for d in selected_files]
     except (IndexError, KeyError, TypeError) as exc:

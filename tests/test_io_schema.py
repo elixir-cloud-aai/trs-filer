@@ -129,10 +129,16 @@ def test_meta_schema_id() -> None:
         ({"file_type": "OTHER", "path": "GA4GH-IO.schema.json"}, False),
         ({"file_type": "TEST_FILE", "path": "ga4gh-io.schema.json"}, False),
         ({"file_type": "PRIMARY_DESCRIPTOR", "path": "ga4gh-io.schema.json"}, False),
+        ({"file_type": "IO_SCHEMA", "path": "ga4gh-io.schema.json"}, True),
+        ({"file_type": "IO_SCHEMA", "path": "schemas/inputs.json"}, True),
+        ({"file_type": "IO_SCHEMA"}, True),
     ],
 )
 def test_is_io_schema_file(tool_file: dict[str, str], expected: bool) -> None:
-    """I/O Schema files are files of type `OTHER` named `ga4gh-io.schema.json`.
+    """I/O Schema files have type `IO_SCHEMA`, or `OTHER` and a fixed name.
+
+    Files of type `IO_SCHEMA` are I/O Schema files at any path; files of type
+    `OTHER` only if named `ga4gh-io.schema.json`.
 
     Args:
         tool_file: File type and path of a file.

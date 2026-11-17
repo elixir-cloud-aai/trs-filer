@@ -90,7 +90,12 @@ existing data needs no changes. Check clients and custom configs:
   nothing changes) checks them on registration, each in a process of its
   own (about 50 to 100 MB of memory, one at a time), within
   `custom.io_schema.timeout` seconds (see [Checking I/O
-  Schemas](io-schema.md#checking-io-schemas)).
+  Schemas](io-schema.md#checking-io-schemas)). Files may also have the new
+  file type `IO_SCHEMA` (an extension of TRS, at most one per descriptor
+  type of a version, see [The file type
+  `IO_SCHEMA`](io-schema.md#the-file-type-io_schema)); `{type}/files` lists
+  them, so clients that accept only the file types of TRS 2.0.2 may reject
+  the lists of versions that have one.
 - **Tokens for writes (breaking):** registering, changing and deleting tools,
   versions and tool classes (`POST`, `PUT` and `DELETE`, see [Registering
   tools](api.md#registering-tools)) need an access token (RFC 9068,

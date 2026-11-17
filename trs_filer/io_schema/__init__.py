@@ -2,8 +2,10 @@
 
 The [GA4GH I/O Schema](https://github.com/uniqueg/ga4gh-io-schema) describes
 the inputs and outputs of a workflow. It is published in TRS as a file of
-type `OTHER` named `ga4gh-io.schema.json`, next to the primary descriptor; it
-needs no change of the TRS specification. With `custom.io_schema.validation`,
+type `IO_SCHEMA`, a file type that the profile proposes as an extension of
+TRS (accepted by TRS-Filer), or, for TRS servers without it, as a file of
+type `OTHER` named `ga4gh-io.schema.json`, next to the primary descriptor.
+With `custom.io_schema.validation`,
 such files are checked on registration against a vendored copy of the
 meta-schema of the profile (`trs_filer.io_schema.check`, see
 `docs/io-schema.md`).
@@ -36,10 +38,16 @@ from jsonschema.exceptions import ValidationError, relevance
 from referencing import Registry, Resource
 from referencing.jsonschema import DRAFT202012
 
-#: File name of I/O Schema files (`ToolFile.path`, in any directory).
+#: File name of I/O Schema files of type `OTHER` (`ToolFile.path`, in any
+#: directory).
 IO_SCHEMA_FILE_NAME = "ga4gh-io.schema.json"
-#: TRS file type of I/O Schema files (`ToolFile.file_type`).
-IO_SCHEMA_FILE_TYPE = "OTHER"
+#: TRS file type of I/O Schema files (`ToolFile.file_type`), an extension of
+#: TRS that the profile proposes; files of this type are I/O Schema files at
+#: any path.
+IO_SCHEMA_FILE_TYPE = "IO_SCHEMA"
+#: TRS file type of I/O Schema files for TRS servers without `IO_SCHEMA`;
+#: files of this type are I/O Schema files if named `IO_SCHEMA_FILE_NAME`.
+OTHER_FILE_TYPE = "OTHER"
 #: Version of the GA4GH I/O Profile that I/O Schemas are checked against.
 PROFILE_VERSION = "0.3.0"
 #: Directory of the vendored meta-schema and its vocabularies.
@@ -69,11 +77,13 @@ def is_io_schema_file(tool_file: dict[str, Any]) -> bool:
         tool_file: File type and path of the file (`ToolFile`).
 
     Returns:
-        Whether the file has type `OTHER` and the name `ga4gh-io.schema.json`
-        (case-sensitive), in any directory.
+        Whether the file has type `IO_SCHEMA` (at any path), or type `OTHER`
+        and the name `ga4gh-io.schema.json` (case-sensitive), in any
+        directory.
     """
-    return (
-        tool_file.get("file_type") == IO_SCHEMA_FILE_TYPE
+    file_type = tool_file.get("file_type")
+    return file_type == IO_SCHEMA_FILE_TYPE or (
+        file_type == OTHER_FILE_TYPE
         and PurePosixPath(str(tool_file.get("path", ""))).name == IO_SCHEMA_FILE_NAME
     )
 

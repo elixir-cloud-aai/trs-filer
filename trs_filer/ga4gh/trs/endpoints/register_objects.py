@@ -27,7 +27,7 @@ from trs_filer.ga4gh.trs.tool_classes import (
     sync_pending_flags,
     tool_classes_pending,
 )
-from trs_filer.io_schema import is_io_schema_file
+from trs_filer.io_schema import IO_SCHEMA_FILE_TYPE, is_io_schema_file
 from trs_filer.io_schema.check import check_io_schema
 from trs_filer.remote_files import fetch_remote_file
 from trs_filer.storage import store_file
@@ -645,6 +645,16 @@ class RegisterToolVersion:
                 "PRIMARY_DESCRIPTOR file, and one if it has SECONDARY_DESCRIPTOR "
                 "files."
             )
+        # clients take the I/O Schema of a descriptor type by its file type
+        # (experimental, see `docs/io-schema.md`), so it must be unambiguous
+        if any(
+            f_types.count(IO_SCHEMA_FILE_TYPE) > 1 for f_types in file_types.values()
+        ):
+            logger.error("More than one IO_SCHEMA file for a descriptor type")
+            raise InvalidRequest(
+                "Each descriptor type of a version must have at most one "
+                f"{IO_SCHEMA_FILE_TYPE} file."
+            )
 
         # validate required fields
         for _file in self.data.get("files", []):
@@ -691,6 +701,7 @@ class RegisterToolVersion:
                 "SECONDARY_DESCRIPTOR",
                 "TEST_FILE",
                 "OTHER",
+                IO_SCHEMA_FILE_TYPE,
             )
             if _file["tool_file"]["file_type"] in descriptor_set:
                 if _file["type"] not in self.descriptor_types:

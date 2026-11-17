@@ -18,19 +18,40 @@ enter into the parameters of a run (e.g., via WES).
 An I/O Schema is published in TRS as a file of the tool version, as the
 [TRS convention of the
 profile](https://github.com/uniqueg/ga4gh-io-schema/blob/v0.3/docs/adoption/trs.md)
-defines; the TRS specification is not changed. TRS-Filer stores and serves
-such files like any other file, with or without the
-[check](#checking-io-schemas).
+defines. TRS-Filer stores and serves such files like any other file, with
+or without the [check](#checking-io-schemas).
+
+## The file type `IO_SCHEMA`
+
+The profile proposes a TRS file type of its own for I/O Schemas,
+`IO_SCHEMA`, which TRS 2.0.2 doesn't have; until TRS adopts it, servers
+without it take I/O Schemas as files of type `OTHER` at a fixed path.
+TRS-Filer accepts both (experimental): `IO_SCHEMA` is an extension of the
+TRS file types (`ToolFile.file_type`) in its API. Files of type `IO_SCHEMA`:
+
+- belong to a descriptor type (`type`), at most one per descriptor type of
+  a version (`400 Bad Request` otherwise);
+- are listed by `{type}/files` (also in its ZIP archive) and served by
+  `{type}/descriptor/{relative_path}`, as files of type `OTHER` are;
+- are [checked](#checking-io-schemas) at any path.
+
+Clients of the profile look for an `IO_SCHEMA` file first, and for the file
+of type `OTHER` only if there is none. Clients that know only the file types
+of TRS 2.0.2 may reject a list of files with `IO_SCHEMA`; register the
+schema as `OTHER` for them.
 
 ## Publishing an I/O Schema
 
 For each descriptor type of a tool version, register the I/O Schema as a
 file with:
 
-- the file type `OTHER` (`tool_file.file_type`);
+- the file type `IO_SCHEMA` or `OTHER` (`tool_file.file_type`, see [The file
+  type `IO_SCHEMA`](#the-file-type-io_schema));
 - the path `ga4gh-io.schema.json` in the directory of the primary descriptor
   (`tool_file.path`, e.g., `ga4gh-io.schema.json` for the primary descriptor
-  `hello.wdl`, or `wdl/ga4gh-io.schema.json` for `wdl/main.wdl`);
+  `hello.wdl`, or `wdl/ga4gh-io.schema.json` for `wdl/main.wdl`); for type
+  `OTHER`, the path is what makes the file an I/O Schema, so it is required;
+  for type `IO_SCHEMA`, it is recommended;
 - the descriptor type that it describes (`type`, e.g., `WDL`), the one
   that its `x-ga4gh-workflow.descriptor_type` names;
 - its content (`file_wrapper.content`), or a URL that TRS-Filer retrieves it
@@ -53,8 +74,10 @@ several times:
 ```
 
 [`tool.json`](examples/io-schema/tool.json) registers the workflow with its
-I/O Schema as version `1.0.0` of the tool `HELLO` (with an access token of
-an admin, see [Access control](access-control.md)):
+I/O Schema, as a file of type `OTHER`, as version `1.0.0` of the tool `HELLO`
+(with an access token of an admin, see [Access
+control](access-control.md)); with `IO_SCHEMA` in place of `OTHER`, it
+registers the same schema with the new file type:
 
 ```bash
 curl -X PUT "http://localhost:8080/ga4gh/trs/v2/tools/HELLO" \
@@ -71,7 +94,12 @@ by its path:
 1. List the files of the tool version for the descriptor type: `GET
    /tools/HELLO/versions/1.0.0/WDL/files` lists, e.g., `{"path":
    "ga4gh-io.schema.json", "file_type": "OTHER"}` next to the primary
-   descriptor.
+   descriptor. Take the entry of type `IO_SCHEMA`, or else the one of type
+   `OTHER` with the path `ga4gh-io.schema.json` in the directory of the
+   primary descriptor, comparing only `file_type` and the normalised `path`
+   (as the profile's [discovery by
+   clients](https://github.com/uniqueg/ga4gh-io-schema/blob/v0.3/docs/adoption/trs.md#discovery-by-clients)
+   describes).
 2. Fetch it: `GET
    /tools/HELLO/versions/1.0.0/WDL/descriptor/ga4gh-io.schema.json` returns
    it in a `FileWrapper`, as `content`, with its `checksum`; `PLAIN_WDL` in
@@ -95,8 +123,9 @@ custom:
         timeout: 10
 ```
 
-I/O Schema files are files of type `OTHER` named `ga4gh-io.schema.json`, in
-any directory; other files aren't checked. A file is invalid if it:
+I/O Schema files are files of type `IO_SCHEMA`, at any path, and files of
+type `OTHER` named `ga4gh-io.schema.json`, in any directory; other files
+aren't checked. A file is invalid if it:
 
 - is not a JSON object;
 - names another meta-schema than that of profile version 0.3.0 in `$schema`
