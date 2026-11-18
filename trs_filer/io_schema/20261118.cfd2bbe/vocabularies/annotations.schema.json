@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://raw.githubusercontent.com/uniqueg/ga4gh-io-schema/v0.3.0/schemas/vocabularies/annotations.schema.json",
+  "$id": "https://raw.githubusercontent.com/elixir-cloud-aai/ga4gh-io-schema/main/schemas/vocabularies/annotations.schema.json",
   "title": "GA4GH IO Profile Annotations",
   "description": "Keywords that annotate a parameter for clients: UI hints, error message, description format and ontology term.",
   "properties": {
@@ -10,7 +10,7 @@
       "description": "URI to an ontology term (e.g., an EDAM data term) semantically describing the data of the parameter. The format of a file goes into ontology of x-ga4gh-file."
     },
     "x-ga4gh-ui-widget": {
-      "$ref": "https://raw.githubusercontent.com/uniqueg/ga4gh-io-schema/v0.3.0/schemas/vocabularies/ui-widgets.schema.json",
+      "$ref": "https://raw.githubusercontent.com/elixir-cloud-aai/ga4gh-io-schema/main/schemas/vocabularies/ui-widgets.schema.json",
       "description": "Hint for UI clients on how to render this input/output. References an external standardized vocabulary."
     },
     "x-ga4gh-description-format": {
@@ -37,7 +37,7 @@
       "dependentSchemas": {
         "x-ga4gh-ui-widget": {
           "$comment": "A widget of the vocabulary needs the keywords that it fits in the same schema (e.g., a slider a numeric type and both bounds); see the table of widgets in the specification.",
-          "$ref": "https://raw.githubusercontent.com/uniqueg/ga4gh-io-schema/v0.3.0/schemas/vocabularies/ui-widgets.schema.json#/$defs/fit"
+          "$ref": "https://raw.githubusercontent.com/elixir-cloud-aai/ga4gh-io-schema/main/schemas/vocabularies/ui-widgets.schema.json#/$defs/fit"
         }
       }
     }

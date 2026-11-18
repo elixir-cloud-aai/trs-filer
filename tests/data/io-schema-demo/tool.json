@@ -1,0 +1,60 @@
+{
+  "organization": "GA4GH I/O Schema",
+  "name": "I/O Schema demo",
+  "description": "Filters aligned reads by mapping quality and flags, sorts and indexes them, and reports alignment statistics.",
+  "toolclass": {
+    "id": "workflow",
+    "name": "Workflow",
+    "description": "A workflow."
+  },
+  "versions": [
+    {
+      "id": "1.0.0",
+      "name": "I/O Schema demo",
+      "descriptor_type": [
+        "WDL"
+      ],
+      "descriptor_type_version": {
+        "WDL": [
+          "1.1"
+        ]
+      },
+      "is_production": false,
+      "files": [
+        {
+          "tool_file": {
+            "path": "demo.wdl",
+            "file_type": "PRIMARY_DESCRIPTOR"
+          },
+          "type": "WDL",
+          "file_wrapper": {
+            "content": "# SPDX-FileCopyrightText: 2026 ELIXIR On-Cloud <cloud-service@elixir-europe.org>\n#\n# SPDX-License-Identifier: Apache-2.0\n\nversion 1.1\n\n# The demo workflow of the GA4GH I/O Schema (see docs/adoption/demo.md):\n# filters, sorts and indexes aligned reads, and writes an HTML report.\n# Its I/O Schema, ga4gh-io.schema.json, is generated from this document by\n# build_schema.py; change both together.\n\nworkflow io_schema_demo {\n  meta {\n    description: \"Filters aligned reads by mapping quality and flags, sorts and indexes them, and reports alignment statistics.\"\n  }\n\n  input {\n    File reads\n    Int min_mapq = 0\n    String read_filter = \"none\"\n  }\n\n  parameter_meta {\n    reads: {\n      label: \"Aligned reads (BAM)\",\n      description: \"Reads aligned to a reference, in BAM format, in any order.\"\n    }\n    min_mapq: {\n      label: \"Minimum mapping quality\",\n      description: \"Reads with a lower mapping quality are removed (0 keeps all reads).\"\n    }\n    read_filter: {\n      label: \"Read filter\",\n      description: \"Which reads to keep besides the mapping quality: all, properly paired only, or primary alignments only.\",\n      choices: [\"none\", \"proper_pairs\", \"primary_only\"]\n    }\n    filtered_bam: {\n      label: \"Filtered reads (BAM)\",\n      description: \"The filtered reads, sorted by coordinate.\"\n    }\n    filtered_bam_index: {\n      label: \"Index of the filtered reads (BAI)\",\n      description: \"The index of the filtered reads.\"\n    }\n    report: {\n      label: \"Alignment report (HTML)\",\n      description: \"Statistics of the reads before and after filtering.\"\n    }\n  }\n\n  call filter_sort_index {\n    input:\n      reads = reads,\n      min_mapq = min_mapq,\n      read_filter = read_filter\n  }\n\n  call make_report {\n    input:\n      reads = reads,\n      filtered_bam = filter_sort_index.bam,\n      min_mapq = min_mapq,\n      read_filter = read_filter\n  }\n\n  output {\n    File filtered_bam = filter_sort_index.bam\n    File filtered_bam_index = filter_sort_index.bai\n    File report = make_report.html\n  }\n}\n\ntask filter_sort_index {\n  input {\n    File reads\n    Int min_mapq\n    String read_filter\n  }\n\n  command <<<\n    set -euo pipefail\n    # Read from a file, not interpolated into the script: clients that skip\n    # the schema can send any string.\n    read_filter=$(cat ~{write_lines([read_filter])})\n    case \"$read_filter\" in\n      none) flags=\"\" ;;\n      proper_pairs) flags=\"-f 2\" ;;\n      primary_only) flags=\"-F 0x900\" ;;\n      *) echo \"Unknown read filter\" >&2; exit 1 ;;\n    esac\n    # shellcheck disable=SC2086\n    samtools view -b -q ~{min_mapq} $flags \"~{reads}\" \\\n      | samtools sort -o filtered.bam -\n    samtools index filtered.bam filtered.bam.bai\n  >>>\n\n  output {\n    File bam = \"filtered.bam\"\n    File bai = \"filtered.bam.bai\"\n  }\n\n  runtime {\n    docker: \"quay.io/biocontainers/samtools:1.24--h9dcdb79_1\"\n    cpu: 1\n    memory: \"1 GiB\"\n  }\n}\n\ntask make_report {\n  input {\n    File reads\n    File filtered_bam\n    Int min_mapq\n    String read_filter\n  }\n\n  command <<<\n    set -euo pipefail\n    read_filter=$(cat ~{write_lines([read_filter])})  # see filter_sort_index\n    case \"$read_filter\" in\n      none|proper_pairs|primary_only) ;;\n      *) echo \"Unknown read filter\" >&2; exit 1 ;;\n    esac\n    samtools flagstat \"~{reads}\" > before.txt\n    samtools flagstat \"~{filtered_bam}\" > after.txt\n    {\n      echo '<!DOCTYPE html>'\n      echo '<html lang=\"en\"><head><meta charset=\"utf-8\">'\n      echo '<title>Alignment report</title></head><body>'\n      echo '<h1>Alignment report</h1>'\n      echo \"<p>Minimum mapping quality: ~{min_mapq}; read filter: $read_filter.</p>\"\n      echo '<h2>Before filtering</h2><pre>'\n      sed 's/&/\\&amp;/g; s/</\\&lt;/g; s/>/\\&gt;/g' before.txt\n      echo '</pre><h2>After filtering</h2><pre>'\n      sed 's/&/\\&amp;/g; s/</\\&lt;/g; s/>/\\&gt;/g' after.txt\n      echo '</pre></body></html>'\n    } > report.html\n  >>>\n\n  output {\n    File html = \"report.html\"\n  }\n\n  runtime {\n    docker: \"quay.io/biocontainers/samtools:1.24--h9dcdb79_1\"\n    cpu: 1\n    memory: \"1 GiB\"\n  }\n}\n",
+            "checksum": [
+              {
+                "type": "sha-256",
+                "checksum": "752bcc3fafff87dbd85121975b05264735021a7aaf07d5e802183100be862c1b"
+              }
+            ],
+            "url": "https://raw.githubusercontent.com/elixir-cloud-aai/ga4gh-io-schema/e80692ae9069cd5cb12efcf1863c66e87057a606/examples/demo/demo.wdl"
+          }
+        },
+        {
+          "tool_file": {
+            "path": "ga4gh-io.schema.json",
+            "file_type": "OTHER"
+          },
+          "type": "WDL",
+          "file_wrapper": {
+            "content": "{\n  \"$schema\": \"https://raw.githubusercontent.com/elixir-cloud-aai/ga4gh-io-schema/main/schemas/ga4gh-io-profile.schema.json\",\n  \"title\": \"I/O Schema demo\",\n  \"description\": \"Filters aligned reads by mapping quality and flags, sorts and indexes them, and reports alignment statistics.\",\n  \"x-ga4gh-workflow\": {\n    \"descriptor_type\": \"WDL\",\n    \"descriptor_type_version\": \"1.1\",\n    \"entry_point\": \"io_schema_demo\",\n    \"checksum\": [\n      {\n        \"type\": \"sha-256\",\n        \"checksum\": \"752bcc3fafff87dbd85121975b05264735021a7aaf07d5e802183100be862c1b\"\n      }\n    ],\n    \"trs_tool_id\": \"ga4gh-io-schema-demo\",\n    \"trs_version_id\": \"1.0.0\",\n    \"primary_descriptor_path\": \"demo.wdl\"\n  },\n  \"type\": \"object\",\n  \"properties\": {\n    \"inputs\": {\n      \"type\": \"object\",\n      \"properties\": {\n        \"reads\": {\n          \"type\": \"string\",\n          \"x-ga4gh-file\": {\n            \"kind\": \"file\",\n            \"ontology\": \"http://edamontology.org/format_2572\",\n            \"schemes\": [\n              \"https\",\n              \"s3\"\n            ]\n          },\n          \"description\": \"Reads aligned to a reference, in BAM format, in any order.\",\n          \"title\": \"Aligned reads (BAM)\",\n          \"x-ga4gh-parameter\": {\n            \"type\": \"File\"\n          },\n          \"examples\": [\n            \"https://raw.githubusercontent.com/nf-core/test-datasets/3e548a3b34994380db1602506e0721fadbad6de1/data/genomics/sarscov2/illumina/bam/test.paired_end.bam\"\n          ]\n        },\n        \"min_mapq\": {\n          \"type\": \"integer\",\n          \"description\": \"Reads with a lower mapping quality are removed (0 keeps all reads).\",\n          \"title\": \"Minimum mapping quality\",\n          \"default\": 0,\n          \"x-ga4gh-parameter\": {\n            \"type\": \"Int\"\n          },\n          \"minimum\": 0,\n          \"maximum\": 60,\n          \"x-ga4gh-ui-widget\": \"slider\",\n          \"x-ga4gh-error-message\": \"The minimum mapping quality is a whole number from 0 to 60\"\n        },\n        \"read_filter\": {\n          \"type\": \"string\",\n          \"description\": \"Which reads to keep besides the mapping quality: all, properly paired only, or primary alignments only.\",\n          \"title\": \"Read filter\",\n          \"enum\": [\n            \"none\",\n            \"proper_pairs\",\n            \"primary_only\"\n          ],\n          \"default\": \"none\",\n          \"x-ga4gh-parameter\": {\n            \"type\": \"String\"\n          },\n          \"x-ga4gh-ui-widget\": \"radio\"\n        }\n      },\n      \"required\": [\n        \"reads\"\n      ],\n      \"additionalProperties\": false\n    },\n    \"outputs\": {\n      \"type\": \"object\",\n      \"properties\": {\n        \"filtered_bam\": {\n          \"type\": \"string\",\n          \"x-ga4gh-file\": {\n            \"kind\": \"file\",\n            \"ontology\": \"http://edamontology.org/format_2572\"\n          },\n          \"description\": \"The filtered reads, sorted by coordinate.\",\n          \"title\": \"Filtered reads (BAM)\",\n          \"x-ga4gh-parameter\": {\n            \"type\": \"File\"\n          }\n        },\n        \"filtered_bam_index\": {\n          \"type\": \"string\",\n          \"x-ga4gh-file\": {\n            \"kind\": \"file\",\n            \"ontology\": \"http://edamontology.org/format_3327\"\n          },\n          \"description\": \"The index of the filtered reads.\",\n          \"title\": \"Index of the filtered reads (BAI)\",\n          \"x-ga4gh-parameter\": {\n            \"type\": \"File\"\n          }\n        },\n        \"report\": {\n          \"type\": \"string\",\n          \"x-ga4gh-file\": {\n            \"kind\": \"file\",\n            \"mediaType\": \"text/html\"\n          },\n          \"description\": \"Statistics of the reads before and after filtering.\",\n          \"title\": \"Alignment report (HTML)\",\n          \"x-ga4gh-parameter\": {\n            \"type\": \"File\"\n          },\n          \"x-ga4gh-ui-widget\": \"html-viewer\"\n        }\n      },\n      \"required\": [\n        \"filtered_bam\",\n        \"filtered_bam_index\",\n        \"report\"\n      ],\n      \"additionalProperties\": false\n    }\n  }\n}\n",
+            "checksum": [
+              {
+                "type": "sha-256",
+                "checksum": "0997e951f13133fedb2da13eec3c3b92edd0c8af30c68e49dbc98b164f83805c"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

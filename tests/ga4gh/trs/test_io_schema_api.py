@@ -153,14 +153,14 @@ def test_io_schema_example_registered_and_served(
             json.dumps({"$schema": "https://json-schema.org/draft/2020-12/schema"}),
             "The I/O Schema file (ga4gh-io.schema.json) must name the "
             "meta-schema of the GA4GH I/O Profile that TRS-Filer supports in "
-            "'$schema': 'https://raw.githubusercontent.com/uniqueg/"
-            "ga4gh-io-schema/v0.3.0/schemas/ga4gh-io-profile.schema.json'.",
+            "'$schema': 'https://raw.githubusercontent.com/elixir-cloud-aai/"
+            "ga4gh-io-schema/main/schemas/ga4gh-io-profile.schema.json'.",
         ),
         (
             json.dumps(
                 {
-                    "$schema": "https://raw.githubusercontent.com/uniqueg/"
-                    "ga4gh-io-schema/v0.3.0/schemas/ga4gh-io-profile.schema.json",
+                    "$schema": "https://raw.githubusercontent.com/elixir-cloud-aai/"
+                    "ga4gh-io-schema/main/schemas/ga4gh-io-profile.schema.json",
                     "properties": {},
                 }
             ),
@@ -485,3 +485,80 @@ def test_io_schema_file_type_needs_descriptor_type(
         "The type of descriptor, test, I/O Schema and other files must be a "
         "supported descriptor type: "
     )
+
+
+# The registration of the demo of ga4gh-io-schema (`examples/demo/` at commit
+# e80692a), as built by its `register.py` (`--revision <e80692a, in full>
+# --repository https://github.com/elixir-cloud-aai/ga4gh-io-schema --dry-run`)
+DEMO = Path(__file__).resolve().parents[2] / "data" / "io-schema-demo" / "tool.json"
+DEMO_TOOL_PATH = f"{BASE_PATH}/tools/ga4gh-io-schema-demo"
+# Identifier of the meta-schema of profile 0.3.0 before ga4gh-io-schema moved
+# to elixir-cloud-aai (ga4gh-io-schema #78), which images from `dev` required
+# before #312
+OLD_META_SCHEMA_ID = (
+    "https://raw.githubusercontent.com/uniqueg/ga4gh-io-schema/v0.3.0/"
+    "schemas/ga4gh-io-profile.schema.json"
+)
+
+
+def _demo() -> tuple[dict[str, Any], dict[str, Any]]:
+    """Get the registration of the demo of ga4gh-io-schema.
+
+    Returns:
+        The payload (tool `ga4gh-io-schema-demo` with version `1.0.0`, with
+        a WDL workflow and its I/O Schema, of type `OTHER`), and the file of
+        its I/O Schema in it.
+    """
+    tool: dict[str, Any] = json.loads(DEMO.read_text(encoding="utf-8"))
+    (file,) = (
+        f for f in tool["versions"][0]["files"] if f["tool_file"]["path"] == SCHEMA_PATH
+    )
+    return tool, file
+
+
+def test_io_schema_demo_registered(
+    mongo_client: MongoClient[dict[str, Any]], overlay: Path
+) -> None:
+    """The demo of ga4gh-io-schema passes the check and is served.
+
+    Regression test of trs-filer #312: its I/O Schema names the meta-schema
+    by its URI in elixir-cloud-aai, which was rejected.
+
+    Args:
+        mongo_client: MongoDB client.
+        overlay: Config overlay.
+    """
+    client = _client(overlay, validation=True)
+    tool, file = _demo()
+    response = client.put(DEMO_TOOL_PATH, json=deepcopy(tool))
+    assert response.status_code == 200, response.get_json()
+    response = client.get(
+        f"{DEMO_TOOL_PATH}/versions/1.0.0/WDL/descriptor/{SCHEMA_PATH}"
+    )
+    assert response.status_code == 200
+    assert response.get_json()["content"] == file["file_wrapper"]["content"]
+
+
+def test_io_schema_old_meta_schema_rejected(
+    mongo_client: MongoClient[dict[str, Any]], overlay: Path
+) -> None:
+    """I/O Schemas naming the meta-schema by its old URI are rejected.
+
+    Args:
+        mongo_client: MongoDB client.
+        overlay: Config overlay.
+    """
+    client = _client(overlay, validation=True)
+    tool, file = _demo()
+    schema = json.loads(file["file_wrapper"]["content"])
+    schema["$schema"] = OLD_META_SCHEMA_ID
+    file["file_wrapper"] = {"content": json.dumps(schema)}
+    response = client.put(DEMO_TOOL_PATH, json=tool)
+    assert response.status_code == 400
+    assert response.get_json()["detail"] == (
+        "The I/O Schema file (ga4gh-io.schema.json) must name the meta-schema "
+        "of the GA4GH I/O Profile that TRS-Filer supports in '$schema': "
+        "'https://raw.githubusercontent.com/elixir-cloud-aai/ga4gh-io-schema/"
+        "main/schemas/ga4gh-io-profile.schema.json'."
+    )
+    assert client.get(DEMO_TOOL_PATH).status_code == 404

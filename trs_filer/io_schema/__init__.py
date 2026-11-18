@@ -1,19 +1,22 @@
 """Validation of GA4GH I/O Schema files (experimental).
 
-The [GA4GH I/O Schema](https://github.com/uniqueg/ga4gh-io-schema) describes
-the inputs and outputs of a workflow. It is published in TRS as a file of
-type `IO_SCHEMA`, a file type that the profile proposes as an extension of
-TRS (accepted by TRS-Filer), or, for TRS servers without it, as a file of
-type `OTHER` named `ga4gh-io.schema.json`, next to the primary descriptor.
+The [GA4GH I/O Schema](https://github.com/elixir-cloud-aai/ga4gh-io-schema)
+describes the inputs and outputs of a workflow. It is published in TRS as a
+file of type `IO_SCHEMA`, a file type that the profile proposes as an
+extension of TRS (accepted by TRS-Filer), or, for TRS servers without it,
+as a file of type `OTHER` named `ga4gh-io.schema.json`, next to the primary
+descriptor.
 With `custom.io_schema.validation`, such files are checked on registration
 against a vendored copy of the meta-schema of the profile
 (`trs_filer.io_schema.check`, see `docs/io-schema.md`).
 
 The meta-schema and its vocabularies are vendored unchanged from
-`schemas/` of uniqueg/ga4gh-io-schema at commit d44e8d4 (2026-11-13, branch
-`v0.3`, profile version 0.3.0), licensed under the Apache License 2.0, in
-the directory named after the date and commit (`META_SCHEMA_DIR`). Their
-references are resolved from these copies; nothing is fetched.
+`schemas/` of elixir-cloud-aai/ga4gh-io-schema at commit cfd2bbe
+(2026-11-18, branch `v0.3`, profile version 0.3.0), licensed under the
+Apache License 2.0, in the directory named after the date and commit
+(`META_SCHEMA_DIR`). The meta-schema doesn't require `$schema`; the check
+does (`trs_filer.io_schema.check`). References between the files are
+resolved from these copies; nothing is fetched.
 
 Validating against the meta-schema takes time that grows about linearly
 with the size of a schema, also for deeply nested ones, but a schema that
@@ -50,11 +53,12 @@ OTHER_FILE_TYPE = "OTHER"
 #: Version of the GA4GH I/O Profile that I/O Schemas are checked against.
 PROFILE_VERSION = "0.3.0"
 #: Directory of the vendored meta-schema and its vocabularies.
-META_SCHEMA_DIR = Path(__file__).resolve().parent / "20261113.d44e8d4"
-#: Identifier of the meta-schema, which I/O Schemas name in `$schema`.
+META_SCHEMA_DIR = Path(__file__).resolve().parent / "20261118.cfd2bbe"
+#: Identifier of the meta-schema, which I/O Schemas name in `$schema`: its URL
+#: on the branch `main` of the profile's repository (the profile has no tags).
 META_SCHEMA_ID = (
-    "https://raw.githubusercontent.com/uniqueg/ga4gh-io-schema/"
-    f"v{PROFILE_VERSION}/schemas/ga4gh-io-profile.schema.json"
+    "https://raw.githubusercontent.com/elixir-cloud-aai/ga4gh-io-schema/"
+    "main/schemas/ga4gh-io-profile.schema.json"
 )
 #: Formats that the meta-schema uses (`format`), which are asserted.
 META_SCHEMA_FORMATS = ["uri"]

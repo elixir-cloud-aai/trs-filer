@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://raw.githubusercontent.com/uniqueg/ga4gh-io-schema/v0.3.0/schemas/vocabularies/ui-widgets.schema.json",
+  "$id": "https://raw.githubusercontent.com/elixir-cloud-aai/ga4gh-io-schema/main/schemas/vocabularies/ui-widgets.schema.json",
   "title": "GA4GH UI Widgets Vocabulary",
   "description": "Controlled vocabulary defining UI rendering hints for input and output properties.",
   "type": "string",

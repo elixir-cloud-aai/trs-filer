@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://raw.githubusercontent.com/uniqueg/ga4gh-io-schema/v0.3.0/schemas/vocabularies/parameter.schema.json",
+  "$id": "https://raw.githubusercontent.com/elixir-cloud-aai/ga4gh-io-schema/main/schemas/vocabularies/parameter.schema.json",
   "title": "GA4GH IO Profile Parameter Keywords",
   "description": "Keywords that bind a parameter of an IO schema (a property of inputs or outputs) to the parameter of the engine, where their names or types differ.",
   "properties": {

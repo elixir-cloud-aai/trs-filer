@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://raw.githubusercontent.com/uniqueg/ga4gh-io-schema/v0.3.0/schemas/vocabularies/outputs.schema.json",
+  "$id": "https://raw.githubusercontent.com/elixir-cloud-aai/ga4gh-io-schema/main/schemas/vocabularies/outputs.schema.json",
   "title": "GA4GH IO Profile Output Keywords",
   "description": "Keywords that tell clients where to find the outputs of a run when the engine doesn't report them by name.",
   "properties": {
