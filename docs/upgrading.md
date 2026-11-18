@@ -630,4 +630,7 @@ release require the current one
 (`https://raw.githubusercontent.com/elixir-cloud-aai/ga4gh-io-schema/main/schemas/ga4gh-io-profile.schema.json`)
 and reject the old one with `400 Bad Request`: change `$schema` in such
 I/O Schemas before registering them again. Stored versions are not checked
-again.
+again. No identifier is accepted by both: during a rolling upgrade with
+several replicas, a registration may reach a replica that rejects its
+`$schema`, so register I/O Schemas only once all replicas run the new
+image (or retry those rejected).
