@@ -7,7 +7,7 @@ deleted. Prints a `GITHUB_OUTPUT` line (`state=<state>`) to standard
 output, and errors and warnings as GitHub annotations to standard error.
 See "Versioning and releases" in `docs/development.md`.
 
-Command:
+Commands:
     `state <tag> --releases <file> <asset>...`: the state of the release of
         `<tag>` among the releases in `<file>` (the JSON of
         `gh api --paginate --slurp "repos/<repo>/releases?per_page=100"`,
@@ -21,6 +21,12 @@ Command:
         (with a warning). Drafts are an error if there are several, as it is
         unclear which one to publish, or if the tag has a published release
         too, as `gh release edit <tag>` might pick a draft.
+    `precheck <tag> --releases <file> <asset>...`: the same, before the
+        assets are signed, so that a run that `state` would reject fails
+        before it attests, signs or tags anything: a published release must
+        also have the Sigstore bundle of each `<asset>`
+        (`<asset>.sigstore.json`), which the run hasn't made yet, so with
+        any digest.
 
 Only the stdlib is used, so the workflow runs it without installing the app.
 """
@@ -76,7 +82,7 @@ def sha256(path: Path) -> str:
 
 
 def check_published(
-    tag: str, release: dict[str, Any], assets: Iterable[Path]
+    tag: str, release: dict[str, Any], assets: Iterable[Path], unsigned: bool = False
 ) -> tuple[list[str], list[str]]:
     """Check that a published release has all assets.
 
@@ -84,6 +90,8 @@ def check_published(
         tag: Git tag of the release.
         release: The release, as the GitHub API returns it.
         assets: Local files that the release must have, by name.
+        unsigned: Whether the assets aren't signed yet: the release must
+            also have the Sigstore bundle of each asset, with any digest.
 
     Returns:
         Errors (assets that are missing, have another or no digest than
@@ -107,6 +115,14 @@ def check_published(
             signature = path.name.endswith(SIGNATURE_SUFFIX)
             (resigned if signature else changed).append(path.name)
     names = {path.name for path in paths}
+    if unsigned:
+        bundles = [
+            f"{path.name}{SIGNATURE_SUFFIX}"
+            for path in paths
+            if not path.name.endswith(SIGNATURE_SUFFIX)
+        ]
+        missing.extend(name for name in bundles if name not in uploaded)
+        names.update(bundles)
     # Of all assets, whatever their state (an unfinished upload is visible too)
     unexpected = sorted(
         str(asset.get("name"))
@@ -151,7 +167,10 @@ def check_published(
 
 
 def release_state(
-    tag: str, releases: Iterable[dict[str, Any]], assets: Iterable[Path]
+    tag: str,
+    releases: Iterable[dict[str, Any]],
+    assets: Iterable[Path],
+    unsigned: bool = False,
 ) -> tuple[str | None, list[str], list[str]]:
     """Return the state of the release of a tag.
 
@@ -159,6 +178,8 @@ def release_state(
         tag: Git tag of the release.
         releases: Releases of the repository, drafts included.
         assets: Local files that the release must have.
+        unsigned: Whether the assets aren't signed yet (see
+            `check_published`).
 
     Returns:
         The state (`none`, `draft` or `published`; `None` on errors), errors
@@ -181,7 +202,7 @@ def release_state(
             [],
         )
     if published:
-        errors, warnings = check_published(tag, published[0], assets)
+        errors, warnings = check_published(tag, published[0], assets, unsigned)
         return (None if errors else "published"), errors, warnings
     if len(drafts) > 1:
         return (
@@ -209,7 +230,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Find the release of a tag and check a published one."
     )
-    parser.add_argument("command", choices=["state"])
+    parser.add_argument("command", choices=["state", "precheck"])
     parser.add_argument("tag", help="release tag, e.g., v1.2.3")
     parser.add_argument(
         "--releases",
@@ -222,7 +243,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         releases = read_releases(args.releases.read_text(encoding="utf-8"))
-        state, errors, warnings = release_state(args.tag, releases, args.assets)
+        state, errors, warnings = release_state(
+            args.tag, releases, args.assets, unsigned=args.command == "precheck"
+        )
     except (OSError, ValueError) as error:
         print(f"::error::Cannot check release {args.tag}: {error}", file=sys.stderr)
         return 1

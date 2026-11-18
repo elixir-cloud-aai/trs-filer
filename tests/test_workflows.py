@@ -1,12 +1,14 @@
 """Tests for the names, publishing conditions, checks and installs of the workflows."""
 
 import hashlib
+import json
 import os
 from pathlib import Path
 import re
 import shlex
 import shutil
 import subprocess
+import sys
 import tomllib
 from typing import Any
 
@@ -18,6 +20,9 @@ ROOT = Path(__file__).parents[1]
 WORKFLOWS = ROOT / ".github" / "workflows"
 # A chart file name as the release workflow packages it
 CHART = "trs-filer-1.2.3.tgz"
+# The digest of a release run's image, and another one
+DIGEST = "sha256:" + "a" * 64
+OTHER_DIGEST = "sha256:" + "b" * 64
 
 
 def _load(path: Path) -> dict[str, Any]:
@@ -392,6 +397,146 @@ def test_release_chart_check_runs(
         check=False,
     )
     assert (result.returncode == 0) == passes, result.stdout + result.stderr
+
+
+def test_release_state_checked_first() -> None:
+    """A re-run that a published release rejects fails before it signs.
+
+    `publish` checks the state of the release (`release_assets.py
+    precheck`) and, for a published release, the digest of the `X.Y.Z`
+    image tag right after the chart, before it logs in to Docker Hub,
+    attests, signs or tags anything, so that a re-run of all jobs (new
+    digest, new chart) leaves the tags of the published release alone.
+    "Create release" checks the release again (`state`). The script itself
+    is tested by `test_release_state_check_runs`.
+    """
+    publish = _load(WORKFLOWS / "release.yml")["jobs"]["publish"]
+    steps = {step["name"]: step for step in publish["steps"]}
+    names = [step["name"] for step in publish["steps"]]
+    assert len(names) == len(steps)
+    check = steps["Check release state"]
+    assert "if" not in check
+    assert "continue-on-error" not in check
+    assert check["env"]["TAG"] == "${{ github.ref_name }}"
+    assert "release_assets.py precheck" in check["run"]
+    assert '--releases "${releases}" dist/*' in check["run"]
+    assert '"${IMAGE_NAME}:${VERSION}"' in check["run"]
+    assert '"${actual}" != "${DIGEST}"' in check["run"]
+    assert names.index("Check chart") < names.index("Check release state")
+    for later in (
+        "Log in to Docker Hub",
+        "Attest build provenance",
+        "Sign image",
+        "Tag image",
+        "Attest chart provenance",
+        "Sign chart",
+    ):
+        assert names.index("Check release state") < names.index(later), later
+    assert "release_assets.py state" in steps["Create release"]["run"]
+
+
+@pytest.mark.parametrize(
+    ("release", "chart", "tagged", "passes"),
+    [
+        pytest.param(None, True, None, True, id="none"),
+        pytest.param("draft", False, None, True, id="draft"),
+        pytest.param("published", True, DIGEST, True, id="rerun-failed-jobs"),
+        pytest.param("published", True, OTHER_DIGEST, False, id="new-digest"),
+        pytest.param("published", True, None, False, id="no-image-tag"),
+        pytest.param("published", False, DIGEST, False, id="new-chart"),
+        pytest.param("no-bundle", True, DIGEST, False, id="no-bundle"),
+        pytest.param("mutable", True, DIGEST, True, id="mutable-rerun-failed"),
+        pytest.param("mutable", False, DIGEST, False, id="mutable-new-chart"),
+    ],
+)
+def test_release_state_check_runs(
+    tmp_path: Path,
+    release: str | None,
+    chart: bool,
+    tagged: str | None,
+    passes: bool,
+) -> None:
+    """The release state check of `publish` rejects re-runs of all jobs.
+
+    The step's script runs as in `test_release_chart_check_runs`, with
+    stand-ins for `gh` (the releases) and `docker` (the digest of the image
+    tag); `python` runs `scripts/release_assets.py`, and `jq` is needed, as
+    on the GitHub runners.
+
+    Args:
+        tmp_path: The working directory of the step.
+        release: The release of the tag, if any: `draft`, `published`
+            (immutable), `no-bundle` (published without the chart's
+            Sigstore bundle) or `mutable` (published, not immutable).
+        chart: Whether the release has this run's chart (else another).
+        tagged: The digest that the image tag points to; no tag if `None`.
+        passes: Whether the check passes.
+    """
+    bash = shutil.which("bash")
+    assert bash and shutil.which("jq")
+    steps = _load(WORKFLOWS / "release.yml")["jobs"]["publish"]["steps"]
+    script = {step["name"]: step for step in steps}["Check release state"]["run"]
+    (tmp_path / "scripts").mkdir()
+    shutil.copy(ROOT / "scripts" / "release_assets.py", tmp_path / "scripts")
+    dist = tmp_path / "dist"
+    dist.mkdir()
+    (dist / CHART).write_bytes(b"chart")
+    digest = hashlib.sha256(b"chart" if chart else b"other chart").hexdigest()
+    assets = [
+        {"name": CHART, "digest": f"sha256:{digest}", "state": "uploaded"},
+        {"name": f"{CHART}.sigstore.json", "digest": None, "state": "uploaded"},
+    ]
+    releases = [{"tag_name": "v1.2.2", "draft": False, "immutable": True, "assets": []}]
+    if release is not None:
+        draft = release == "draft"
+        releases.append(
+            {
+                "tag_name": "v1.2.3",
+                "draft": draft,
+                "immutable": release in ("published", "no-bundle"),
+                "assets": assets[:1] if release == "no-bundle" else assets,
+            }
+        )
+    (tmp_path / "releases.json").write_text(json.dumps([releases]))
+    (tmp_path / "manifest.json").write_text(json.dumps({"digest": tagged}))
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    (bin_dir / "python").symlink_to(sys.executable)
+    stubs = {
+        "gh": f'cat "{tmp_path}/releases.json"',
+        "docker": (
+            '[[ "$*" == "buildx imagetools inspect $IMAGE_NAME:1.2.3 '
+            '--format {{ json .Manifest }}" ]] && '
+            + (f'cat "{tmp_path}/manifest.json"' if tagged else "exit 1")
+        ),
+    }
+    for name, body in stubs.items():
+        stub = bin_dir / name
+        stub.write_text(f"#!/usr/bin/env bash\n{body}\n")
+        stub.chmod(0o755)
+    result = subprocess.run(  # noqa: S603 (fixed arguments, no shell)
+        [bash, "--noprofile", "--norc", "-e", "-c", script],
+        capture_output=True,
+        text=True,
+        cwd=tmp_path,
+        env={
+            **os.environ,
+            "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}",
+            "GH_REPO": "elixir-cloud-aai/trs-filer",
+            "TAG": "v1.2.3",
+            "VERSION": "1.2.3",
+            "DIGEST": DIGEST,
+            "IMAGE_NAME": "docker.io/elixircloud/trs-filer",
+        },
+        check=False,
+    )
+    assert (result.returncode == 0) == passes, result.stdout + result.stderr
+    if release in ("published", "no-bundle") and not passes:
+        assert "release a new patch version" in result.stdout + result.stderr
+    if release == "mutable" and not passes:
+        assert "gh release delete v1.2.3" in result.stdout + result.stderr
+    if tagged is None and release == "published":
+        assert "can't be inspected" in result.stdout + result.stderr
 
 
 def test_verification_commands() -> None:

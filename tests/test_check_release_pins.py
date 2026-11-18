@@ -46,6 +46,26 @@ digest: sha256:{digest}
 generated: "2026-10-22T22:26:15.352841967+02:00"
 """
 DIGEST = "0" * 64
+# A `uv.lock` with the project itself and a package from PyPI
+UV_LOCK = """version = 1
+revision = 3
+requires-python = ">=3.13"
+
+[[package]]
+name = "app"
+source = { editable = "." }
+dependencies = [
+    { name = "foca" },
+]
+
+[[package]]
+name = "foca"
+version = "0.17.0"
+source = { registry = "https://pypi.org/simple" }
+"""
+# Where `uv.lock` and `[tool.uv]` may take packages from; not the script's
+# constant, so that a change of it fails the tests
+PYPI = "https://pypi.org/simple"
 
 
 def _write(
@@ -53,6 +73,7 @@ def _write(
     dependencies: str = '"foca>=0.17.0,<0.18",',
     tag: str = "0.17.0-py3.13",
     chart_version: str = "0.2.0",
+    uv_lock: str = UV_LOCK,
 ) -> Path:
     """Write the files that the script checks.
 
@@ -62,12 +83,14 @@ def _write(
         tag: Tag of the base image in the `Dockerfile`.
         chart_version: Version of the chart's dependency, also locked and
             named by the values schema.
+        uv_lock: Content of `uv.lock`.
 
     Returns:
         The directory.
     """
     (root / "deployment").mkdir()
     (root / "pyproject.toml").write_text(PYPROJECT.format(dependencies=dependencies))
+    (root / "uv.lock").write_text(uv_lock)
     (root / "Dockerfile").write_text(DOCKERFILE.format(tag=tag, digest=DIGEST))
     (root / "deployment" / "Chart.yaml").write_text(CHART.format(version=chart_version))
     (root / "deployment" / "Chart.lock").write_text(
@@ -585,3 +608,335 @@ def test_library_version_mismatch(tmp_path: Path) -> None:
     root = _write(tmp_path, chart_version="0.1.0")
     _write_schema(root, "Schema of the library chart foca-common 0.2.0.")
     assert check_release_pins.find_dev_pins(root) == [_schema_error("0.2.0", "0.1.0")]
+
+
+def _append(path: Path, text: str) -> None:
+    """Append text to a file.
+
+    Args:
+        path: The file.
+        text: The text to append.
+    """
+    path.write_text(path.read_text() + text)
+
+
+def _index_error(name: str, url: str) -> str:
+    """Return the error for a package index other than PyPI.
+
+    Args:
+        name: The name of the index.
+        url: Its URL.
+
+    Returns:
+        The error.
+    """
+    return f"pyproject.toml: [[tool.uv.index]] '{name}' is {url}, not {PYPI}"
+
+
+# The indexes that `test_uv_sources` defines: PyPI (with a trailing slash,
+# which is the same index) and a mirror
+INDEXES = f"""
+[[tool.uv.index]]
+name = "pypi"
+url = "{PYPI}/"
+
+[[tool.uv.index]]
+name = "mirror"
+url = "https://example.org/simple"
+"""
+MIRROR = _index_error("mirror", "https://example.org/simple")
+
+
+@pytest.mark.parametrize(
+    ("sources", "errors"),
+    [
+        (
+            'foca = { git = "https://github.com/elixir-cloud-aai/foca", rev = "a" }\n',
+            ["pyproject.toml: [tool.uv.sources] 'foca' is a git source", MIRROR],
+        ),
+        (
+            'foca = { url = "https://example.org/foca.tar.gz" }\n',
+            ["pyproject.toml: [tool.uv.sources] 'foca' is a url source", MIRROR],
+        ),
+        (
+            'foca = { path = "../foca" }\n',
+            ["pyproject.toml: [tool.uv.sources] 'foca' is a path source", MIRROR],
+        ),
+        (
+            'foca = { path = "../foca", editable = true }\n',
+            ["pyproject.toml: [tool.uv.sources] 'foca' is a path source", MIRROR],
+        ),
+        (
+            "foca = { workspace = true }\n",
+            ["pyproject.toml: [tool.uv.sources] 'foca' is a workspace source", MIRROR],
+        ),
+        (
+            'foca = [\n  { git = "https://example.org/foca", marker = "os_name == '
+            '\'nt\'" },\n  { index = "pypi" },\n]\n',
+            ["pyproject.toml: [tool.uv.sources] 'foca' is a git source", MIRROR],
+        ),
+        (
+            'foca = { index = "mirror" }\n',
+            [
+                "pyproject.toml: [tool.uv.sources] 'foca' is from index 'mirror' "
+                f"(https://example.org/simple), not {PYPI}",
+                MIRROR,
+            ],
+        ),
+        (
+            'foca = { index = "missing" }\n',
+            [
+                "pyproject.toml: [tool.uv.sources] 'foca' is from index 'missing' "
+                f"(not defined), not {PYPI}",
+                MIRROR,
+            ],
+        ),
+        ('foca = { index = "pypi" }\n', [MIRROR]),
+        (
+            'foca = { branch = "main" }\n',
+            ["pyproject.toml: [tool.uv.sources] 'foca' is an unknown source", MIRROR],
+        ),
+        (
+            'foca = "https://example.org/foca"\n',
+            ["pyproject.toml: [tool.uv.sources] 'foca' is an unknown source", MIRROR],
+        ),
+    ],
+    ids=[
+        "git",
+        "url",
+        "path",
+        "editable",
+        "workspace",
+        "list",
+        "other-index",
+        "undefined-index",
+        "pypi-index",
+        "unknown",
+        "not-table",
+    ],
+)
+def test_uv_sources(tmp_path: Path, sources: str, errors: list[str]) -> None:
+    """Sources of `[tool.uv.sources]` other than PyPI are reported.
+
+    The mirror that is defined as an index is reported, too.
+
+    Args:
+        tmp_path: Directory of the repository.
+        sources: The lines of `[tool.uv.sources]`.
+        errors: The expected findings.
+    """
+    root = _write(tmp_path)
+    _append(root / "pyproject.toml", f"{INDEXES}\n[tool.uv.sources]\n{sources}")
+    assert check_release_pins.find_dev_pins(root) == errors
+
+
+@pytest.mark.parametrize(
+    ("settings", "errors"),
+    [
+        (f'index-url = "{PYPI}"\n', []),
+        (
+            'index-url = "https://example.org/simple"\n',
+            [
+                "pyproject.toml: [tool.uv] index-url is "
+                f"https://example.org/simple, not {PYPI}"
+            ],
+        ),
+        (
+            f'extra-index-url = ["https://example.org/simple", "{PYPI}"]\n',
+            [
+                "pyproject.toml: [tool.uv] extra-index-url is "
+                f"https://example.org/simple, not {PYPI}"
+            ],
+        ),
+        (
+            'find-links = ["./wheels"]\n',
+            [f"pyproject.toml: [tool.uv] find-links is ./wheels, not {PYPI}"],
+        ),
+        (
+            "index-url = 1\n",
+            [f"pyproject.toml: [tool.uv] index-url is 1, not {PYPI}"],
+        ),
+        (f'[[tool.uv.index]]\nurl = "{PYPI}"\n', []),
+        (
+            '[[tool.uv.index]]\nurl = "https://example.org/simple"\n',
+            [_index_error("(no name)", "https://example.org/simple")],
+        ),
+        ("index = 1\n", ["pyproject.toml: [tool.uv] index can't be read"]),
+        ("index = [1]\n", ["pyproject.toml: [tool.uv] index can't be read"]),
+        ("sources = 1\n", ["pyproject.toml: [tool.uv] sources can't be read"]),
+    ],
+    ids=[
+        "pypi",
+        "index-url",
+        "extra-index-url",
+        "find-links",
+        "not-text",
+        "unnamed-pypi",
+        "unnamed-other",
+        "index-not-list",
+        "index-not-tables",
+        "sources-not-table",
+    ],
+)
+def test_uv_indexes(tmp_path: Path, settings: str, errors: list[str]) -> None:
+    """Package indexes other than PyPI are reported.
+
+    Args:
+        tmp_path: Directory of the repository.
+        settings: The lines of `[tool.uv]`.
+        errors: The expected findings.
+    """
+    root = _write(tmp_path)
+    _append(root / "pyproject.toml", f"\n[tool.uv]\n{settings}")
+    assert check_release_pins.find_dev_pins(root) == errors
+
+
+@pytest.mark.parametrize(
+    ("package", "error"),
+    [
+        (
+            'version = "1.0"\nsource = { git = "https://example.org/x?rev=a#a" }\n',
+            "uv.lock: 'x' 1.0 comes from git https://example.org/x?rev=a#a",
+        ),
+        (
+            'version = "1.0"\nsource = { url = "https://example.org/x.zip" }\n',
+            "uv.lock: 'x' 1.0 comes from url https://example.org/x.zip",
+        ),
+        (
+            'version = "1.0"\nsource = { path = "wheels/x.whl" }\n',
+            "uv.lock: 'x' 1.0 comes from path wheels/x.whl",
+        ),
+        (
+            'version = "1.0"\nsource = { directory = "../x" }\n',
+            "uv.lock: 'x' 1.0 comes from directory ../x",
+        ),
+        (
+            'version = "1.0"\nsource = { editable = "../x" }\n',
+            "uv.lock: 'x' 1.0 comes from editable ../x",
+        ),
+        (
+            'version = "1.0"\nsource = { editable = "." }\n',
+            "uv.lock: 'x' 1.0 comes from editable .",
+        ),
+        (
+            'version = "1.0"\nsource = { virtual = "../x" }\n',
+            "uv.lock: 'x' 1.0 comes from virtual ../x",
+        ),
+        (
+            'source = { registry = "https://example.org/simple" }\n',
+            "uv.lock: 'x' (no version) comes from registry https://example.org/simple",
+        ),
+        ('version = "1.0"\n', "uv.lock: 'x' 1.0 comes from no source"),
+        ('version = "1.0"\nsource = {}\n', "uv.lock: 'x' 1.0 comes from no source"),
+    ],
+    ids=[
+        "git",
+        "url",
+        "path",
+        "directory",
+        "editable",
+        "editable-root-other-name",
+        "virtual",
+        "other-registry",
+        "no-source",
+        "empty-source",
+    ],
+)
+def test_lock_sources(tmp_path: Path, package: str, error: str) -> None:
+    """Packages of `uv.lock` from other sources than PyPI are reported.
+
+    Args:
+        tmp_path: Directory of the repository.
+        package: The keys of package `x` (added to `uv.lock`) after its name.
+        error: The expected finding.
+    """
+    root = _write(tmp_path, uv_lock=f'{UV_LOCK}\n[[package]]\nname = "x"\n{package}')
+    assert check_release_pins.find_dev_pins(root) == [error]
+
+
+@pytest.mark.parametrize(
+    ("project", "errors"),
+    [
+        ('name = "App"\nsource = { virtual = "." }\n', []),
+        ('name = "app"\nversion = "1.0"\nsource = { editable = "." }\n', []),
+        (
+            'name = "app"\nversion = "1.0"\nsource = { editable = "../app" }\n',
+            ["uv.lock: 'app' 1.0 comes from editable ../app"],
+        ),
+    ],
+    ids=["virtual", "editable", "elsewhere"],
+)
+def test_lock_project(tmp_path: Path, project: str, errors: list[str]) -> None:
+    """The project itself (`.`, by its normalized name) is not reported.
+
+    Args:
+        tmp_path: Directory of the repository.
+        project: The keys of the project's package in `uv.lock`.
+        errors: The expected findings.
+    """
+    lock = UV_LOCK.replace('name = "app"\nsource = { editable = "." }\n', project)
+    assert lock != UV_LOCK
+    root = _write(tmp_path, uv_lock=lock)
+    assert check_release_pins.find_dev_pins(root) == errors
+
+
+def test_lock_pypi_trailing_slash(tmp_path: Path) -> None:
+    """PyPI with a trailing slash is PyPI."""
+    lock = UV_LOCK.replace(f'"{PYPI}"', f'"{PYPI}/"')
+    assert lock != UV_LOCK
+    assert check_release_pins.find_dev_pins(_write(tmp_path, uv_lock=lock)) == []
+
+
+@pytest.mark.parametrize(
+    ("lock", "error"),
+    [
+        (None, "uv.lock: missing (the image is installed from it)"),
+        ("[[package]\n", "uv.lock: can't be read ("),
+        ("package = 1\n", "uv.lock: can't be read (no list of packages)"),
+        ("package = [1]\n", "uv.lock: can't be read (no list of packages)"),
+    ],
+    ids=["missing", "invalid", "not-list", "not-tables"],
+)
+def test_lock_unreadable(tmp_path: Path, lock: str | None, error: str) -> None:
+    """A missing or unreadable `uv.lock` is reported.
+
+    Args:
+        tmp_path: Directory of the repository.
+        lock: Content of `uv.lock`; none if `None`.
+        error: The start of the expected finding.
+    """
+    root = _write(tmp_path)
+    if lock is None:
+        (root / "uv.lock").unlink()
+    else:
+        (root / "uv.lock").write_text(lock)
+    (pin,) = check_release_pins.find_dev_pins(root)
+    assert pin.startswith(error)
+
+
+def test_repository_lock() -> None:
+    """This repository's `uv.lock` and `[tool.uv]` pass, but for FOCA.
+
+    The real lock can be read, and its only possible finding is a temporary
+    pin to a FOCA commit, which the release must reject until FOCA is
+    released (see "Versioning and releases" in `docs/development.md`).
+    """
+    pins = [
+        pin
+        for pin in check_release_pins.find_dev_pins(ROOT)
+        if pin.startswith(("uv.lock:", "pyproject.toml: [tool.uv"))
+    ]
+    assert all(pin.startswith("uv.lock: 'foca' ") for pin in pins), pins
+    # A FOCA commit in `pyproject.toml` is locked from Git, and reported
+    pyproject = (ROOT / "pyproject.toml").read_text()
+    assert bool(pins) == ("foca @ git+" in pyproject), pins
+
+
+def test_lock_project_without_name(tmp_path: Path) -> None:
+    """Without a project name, no package of `uv.lock` is the project."""
+    root = _write(tmp_path, uv_lock='[[package]]\nsource = { editable = "." }\n')
+    pyproject = root / "pyproject.toml"
+    pyproject.write_text(pyproject.read_text().replace('name = "app"\n', ""))
+    assert check_release_pins.find_dev_pins(root) == [
+        "uv.lock: '(no name)' (no version) comes from editable ."
+    ]

@@ -13,6 +13,16 @@ annotations on standard error, if:
   Git commit), names a pre-release or development version (e.g.,
   `>=0.17.0rc1`), or a local version (e.g., `==0.17.0+gabc1234`, a build of
   a commit);
+- `pyproject.toml` takes a package from elsewhere than PyPI
+  (`https://pypi.org/simple`, the only package index allowed): a source of
+  `[tool.uv.sources]` (also in a list of sources with markers) that is a
+  `git`, `url`, `path` or `workspace` source, or an `index` other than PyPI,
+  or a package index (`[[tool.uv.index]]`, or `index-url`,
+  `extra-index-url` and `find-links` of `[tool.uv]`) other than PyPI;
+- `uv.lock`, from which the image is installed, is missing or has a package
+  whose `source` is not PyPI (`registry`), e.g., `git`, `url`, `path`,
+  `directory`, `editable` or another registry; only the project itself (by
+  its name, as `editable` or `virtual` source `.`) is exempt;
 - an image of FOCA in the `Dockerfile` (`elixircloud/foca`, as the base
   image of any stage, or in `--from=`) has no release tag
   (`<X.Y.Z>-py<X.Y>`, e.g., a dated development image); images named via
@@ -40,6 +50,7 @@ from pathlib import Path
 import re
 import sys
 import tomllib
+from typing import Any
 
 # A release version `X.Y.Z` (no pre-release or build metadata)
 SEMVER = r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)"
@@ -89,6 +100,14 @@ LIBRARY_CHART = "foca-common"
 LIBRARY_VERSION = re.compile(
     rf"(?<![\w.-]){re.escape(LIBRARY_CHART)} (?P<version>{SEMVER})(?![\w+-]|\.[0-9])"
 )
+# The only package index that `pyproject.toml` and `uv.lock` may use
+PYPI = "https://pypi.org/simple"
+# Kinds of sources of `[tool.uv.sources]` that aren't a package index, in
+# the order they are reported (`{path = ..., editable = true}` is a path)
+UV_SOURCE_KINDS = ("git", "url", "path", "workspace")
+# Settings of `[tool.uv]` that name package indexes (or, `find-links`,
+# other places to find packages), each a URL or a list of URLs
+UV_INDEX_SETTINGS = ("index-url", "extra-index-url", "find-links")
 
 
 def _chart_dependencies(path: Path) -> list[dict[str, str] | None]:
@@ -231,6 +250,135 @@ def _requirement_pins(
     return pins
 
 
+def _is_pypi(url: object) -> bool:
+    """Tell whether a URL is PyPI's package index.
+
+    Args:
+        url: The URL.
+
+    Returns:
+        Whether it is `PYPI`, with or without a trailing slash.
+    """
+    return isinstance(url, str) and url.rstrip("/") == PYPI
+
+
+def _normalize(name: object) -> str:
+    """Normalize the name of a package (PEP 503).
+
+    Args:
+        name: The name.
+
+    Returns:
+        The normalized name; empty if it is not a string.
+    """
+    return re.sub(r"[-_.]+", "-", name).lower() if isinstance(name, str) else ""
+
+
+def _uv_pins(uv: dict[str, Any]) -> list[str]:
+    """Find packages that uv would take from elsewhere than PyPI.
+
+    Early, readable findings at their cause; `_lock_pins` is the check that
+    counts, as the image is installed from `uv.lock` (e.g., overrides and
+    constraints of `[tool.uv]` aren't checked here, but in the lock).
+
+    Args:
+        uv: The `[tool.uv]` table of `pyproject.toml`.
+
+    Returns:
+        A description of each source and package index other than PyPI.
+    """
+    pins = []
+    indexes = uv.get("index", [])
+    if not isinstance(indexes, list) or not all(
+        isinstance(index, dict) for index in indexes
+    ):
+        pins.append("pyproject.toml: [tool.uv] index can't be read")
+        indexes = []
+    urls = {index.get("name"): index.get("url") for index in indexes}
+    sources = uv.get("sources", {})
+    if not isinstance(sources, dict):
+        pins.append("pyproject.toml: [tool.uv] sources can't be read")
+        sources = {}
+    for name, value in sources.items():
+        prefix = f"pyproject.toml: [tool.uv.sources] '{name}'"
+        for source in value if isinstance(value, list) else [value]:
+            if not isinstance(source, dict):
+                pins.append(f"{prefix} is an unknown source")
+                continue
+            kind = next((kind for kind in UV_SOURCE_KINDS if kind in source), None)
+            if kind is not None:
+                pins.append(f"{prefix} is a {kind} source")
+            elif "index" in source:
+                url = urls.get(source["index"])
+                if not _is_pypi(url):
+                    pins.append(
+                        f"{prefix} is from index '{source['index']}' "
+                        f"({url or 'not defined'}), not {PYPI}"
+                    )
+            else:
+                pins.append(f"{prefix} is an unknown source")
+    for index in indexes:
+        if not _is_pypi(index.get("url")):
+            pins.append(
+                f"pyproject.toml: [[tool.uv.index]] '{index.get('name', '(no name)')}'"
+                f" is {index.get('url')}, not {PYPI}"
+            )
+    for setting in UV_INDEX_SETTINGS:
+        value = uv.get(setting, [])
+        for url in value if isinstance(value, list) else [value]:
+            if not _is_pypi(url):
+                pins.append(f"pyproject.toml: [tool.uv] {setting} is {url}, not {PYPI}")
+    return pins
+
+
+def _lock_pins(root: Path, project: str) -> list[str]:
+    """Find packages of `uv.lock` that don't come from PyPI.
+
+    Args:
+        root: Root directory of the repository.
+        project: The name of the project, whose own package (`.`) is exempt.
+
+    Returns:
+        A description of each package from elsewhere, or of why the lock
+        can't be checked.
+    """
+    path = root / "uv.lock"
+    if not path.is_file():
+        return ["uv.lock: missing (the image is installed from it)"]
+    try:
+        packages = tomllib.loads(path.read_text()).get("package", [])
+    except (OSError, ValueError) as error:
+        return [f"uv.lock: can't be read ({error})"]
+    if not isinstance(packages, list) or not all(
+        isinstance(package, dict) for package in packages
+    ):
+        return ["uv.lock: can't be read (no list of packages)"]
+    pins = []
+    for package in packages:
+        source = package.get("source")
+        if not isinstance(source, dict):
+            source = {}
+        name = _normalize(package.get("name"))
+        if (
+            name
+            and name == _normalize(project)
+            and source
+            in (
+                {"editable": "."},
+                {"virtual": "."},
+            )
+        ):
+            continue
+        if set(source) == {"registry"} and _is_pypi(source["registry"]):
+            continue
+        origin = " ".join(map(str, next(iter(source.items()), ("no source",))))
+        pins.append(
+            f"uv.lock: '{package.get('name', '(no name)')}' "
+            f"{package.get('version', '(no version)')} comes from {origin}"
+        )
+    return pins
+
+
 def find_dev_pins(root: Path) -> list[str]:
     """Find pins to development versions.
 
@@ -263,6 +411,8 @@ def find_dev_pins(root: Path) -> list[str]:
             pyproject.get("build-system", {}).get("requires", []),
             "build requirement",
         ),
+        *_uv_pins(pyproject.get("tool", {}).get("uv", {})),
+        *_lock_pins(root, project.get("name", "")),
     ]
     dockerfile = re.sub(
         r"\\[ \t]*\n",
