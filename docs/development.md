@@ -458,8 +458,8 @@ release state") before it attests, signs or tags the new digest, so that
 `X.Y.Z` and `latest` keep pointing to the published image; re-running the
 failed jobs of a published release still passes, as it reuses the digest
 and the chart. Re-runs use the workflow of the tagged commit, so releases
-tagged before this check existed (v0.5.0 and older) don't have it: never
-re-run all jobs of their runs. Images of
+tagged before this step was added don't have it (check the step's name in
+the run): never re-run all jobs of their runs. Images of
 commits on `dev` are published by the CI workflow (environment
 `dev-images`): it pushes the image by digest, scans it, and attests, signs
 and tags exactly that digest once all other jobs passed.
