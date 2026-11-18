@@ -592,6 +592,23 @@ TRS_READS = [
 ]
 
 
+def test_spec_version_is_trs_release(client: FlaskClient) -> None:
+    """The served specification states the TRS release of the service info.
+
+    The vendored TRS 2.0.2 specification states `info.version: 2.1.0`, which
+    the release notes of TRS 2.0.2 call incorrect; `additions.openapi.yaml`
+    sets the version of the release, as reported by the service info
+    (`type.version`).
+
+    Args:
+        client: Test client.
+    """
+    spec = client.get(f"{BASE_PATH}/openapi.json").get_json()
+    service_info = client.get(f"{BASE_PATH}/service-info").get_json()
+    assert spec["info"]["version"] == "2.0.2"
+    assert spec["info"]["version"] == service_info["type"]["version"]
+
+
 def test_vendored_specs_unchanged(app: App) -> None:
     """The GA4GH specifications are vendored as published, and merged first.
 
