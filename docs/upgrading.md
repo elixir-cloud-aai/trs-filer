@@ -67,7 +67,8 @@ existing data needs no changes. Check clients and custom configs:
   release 2.0.2 instead of a commit of TRS `develop` before it (see
   [Supported TRS version](api.md#supported-trs-version)), and the service
   info reports TRS version `2.0.2` (`type.version`) instead of `2.0.1`.
-  Custom configs that set `service_info.service.type.version` keep their
+  The served specification states `info.version: 2.0.2`, too, instead of
+  the `2.1.0` of the TRS specification file. Custom configs that set `service_info.service.type.version` keep their
   value; set it to `2.0.2`. The response of `GET
   /tools/{id}/versions/{version_id}/{type}/files?format=zip` is declared as
   a binary file (`application/zip`), as it is served; clients generated

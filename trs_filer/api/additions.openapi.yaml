@@ -5,9 +5,14 @@
 # the vendored specifications (`merge_null_removes` in `config.yaml`), so
 # this file can't set values to `null`. The registration schemas mirror the
 # read schemas of TRS and reference its enums instead of copying them.
-# `info.version` stays that of the TRS specification
+# `info.version` is the version of the TRS release, not the app's: the
+# vendored TRS 2.0.2 specification states `2.1.0`, which the TRS 2.0.2
+# release notes call incorrect
+# (https://github.com/ga4gh/tool-registry-service-schemas/releases/tag/2.0.2);
+# keep it equal to `service_info.service.type.version` in `config.yaml`
 info:
   title: 'TRS-Filer'
+  version: '2.0.2'
   description: |
     Registry of tools and workflows, implementing the GA4GH Tool Registry
     Service (TRS) API, with endpoints to register, change and delete tools,

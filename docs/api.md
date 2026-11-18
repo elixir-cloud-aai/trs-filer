@@ -13,8 +13,11 @@ TRS-Filer implements [TRS
 2.0.2](https://github.com/ga4gh/tool-registry-service-schemas/releases/tag/2.0.2),
 with the service info of the [GA4GH service info specification
 1.0.0](https://github.com/ga4gh-discovery/ga4gh-service-info/releases/tag/v1.0.0).
-The service info reports TRS version 2.0.2 (`type.version`); the
-specification itself says `info.version: 2.1.0`, as published.
+The service info reports TRS version 2.0.2 (`type.version`), and so does
+the served specification (`info.version`). The vendored TRS specification
+file says `info.version: 2.1.0`, which the [release notes of TRS
+2.0.2](https://github.com/ga4gh/tool-registry-service-schemas/releases/tag/2.0.2)
+call incorrect: the release is 2.0.2, and there is no TRS release 2.1.0.
 
 Both specifications are vendored unchanged
 ([`20250902.4854e2f.openapi.yaml`](https://github.com/elixir-cloud-aai/trs-filer/blob/dev/trs_filer/api/20250902.4854e2f.openapi.yaml),
@@ -26,8 +29,8 @@ are merged into them from
 where `null` removes a key of the vendored files (FOCA's
 `merge_null_removes`):
 
-- The app's info: title, description, license and contact (`info.version`
-  stays the specification's, not the app's).
+- The app's info: title, description, license and contact, and the TRS
+  release as `info.version` (`2.0.2`, not the app's version).
 - The read operations of TRS (all `GET` endpoints below) and the service
   info are public (`security: []`), so that no token is needed to read;
   the [registration endpoints](#registering-tools) require a bearer token
