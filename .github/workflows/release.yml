@@ -11,10 +11,12 @@
 # (`publish`; see "Verifying images and charts" in `docs/operations.md`).
 # `push` and `publish` each need approval in the `release` environment.
 # Re-running all jobs builds, scans, signs and tags a new digest (and
-# packages the chart again); re-running failed jobs reuses the digest
-# already pushed (and scans it again if the scan failed). The tag is the
-# only source of the version: it is passed to the image build (the Docker
-# build gets no Git metadata) and set as the chart's `version` and
+# packages the chart again), unless the GitHub release is published
+# already: then `publish` fails before it attests, signs or tags anything
+# (the release needs a new patch version); re-running failed jobs reuses
+# the digest already pushed (and scans it again if the scan failed). The
+# tag is the only source of the version: it is passed to the image build
+# (the Docker build gets no Git metadata) and set as the chart's `version` and
 # `appVersion` (the tag of its default image). Release notes are the
 # curated `docs/releases/<version>.md` followed by GitHub's generated notes
 # if the former exists (the run fails if it contains `TODO` or is not in the
@@ -403,6 +405,37 @@ jobs:
           echo "${SHA256}  ${files[0]}" | sha256sum --check --strict
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      # Assets of a published immutable release can't be replaced, and a
+      # re-run of all jobs builds a new image digest and packages the chart
+      # again, so such a run fails here, before anything is attested, signed
+      # or tagged: tags `X.Y.Z` and `latest` stay where they are. A published
+      # release must already have exactly this run's chart (and a Sigstore
+      # bundle of it, which this run makes later; see
+      # `scripts/release_assets.py`), and `X.Y.Z` must point to this run's
+      # digest (the repository is public, so no credentials are needed), as
+      # on a re-run of failed jobs, which reuses both. Drafts and new
+      # releases pass; "Create release" checks the release again
+      - name: Check release state
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          releases="$(mktemp)"
+          gh api --paginate --slurp "repos/${GH_REPO}/releases?per_page=100" \
+              > "${releases}"
+          state="$(python scripts/release_assets.py precheck "${TAG}" \
+              --releases "${releases}" dist/*)"
+          state="${state#state=}"
+          echo "Release ${TAG}: ${state}"
+          if [[ "${state}" == "published" ]]; then
+              actual="$(docker buildx imagetools inspect "${IMAGE_NAME}:${VERSION}" \
+                  --format '{{ json .Manifest }}' | jq -r .digest)"
+              if [[ "${actual}" != "${DIGEST}" ]]; then
+                  echo "::error::Release ${TAG} is published, but ${IMAGE_NAME}:${VERSION} points to ${actual:-no image}, not to this run's digest ${DIGEST} (a re-run of all jobs builds a new image): release a new patch version (tags can't be reused)"
+                  exit 1
+              fi
+          fi
       - name: Log in to Docker Hub
         uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
         with:

@@ -314,3 +314,93 @@ def test_main_invalid_releases(
     assert captured.out == ""
     assert captured.err.startswith(f"::error::Cannot check release {TAG}: ")
     assert message in captured.err
+
+
+def test_precheck_published(files: list[Path]) -> None:
+    """Before signing, a published release's bundles are expected, unchecked.
+
+    The run hasn't made them yet, so they aren't local files: they must be
+    in the release, with any digest, and don't count as unexpected.
+    """
+    chart, bundle = files
+    assets = [_asset(chart), _asset(bundle, digest=ZERO)]
+    assert release_assets.release_state(
+        TAG, [_release(assets=assets)], [chart], unsigned=True
+    ) == ("published", [], [])
+
+
+def test_precheck_published_changed(files: list[Path]) -> None:
+    """Before signing, a published release with another chart is an error.
+
+    E.g., on a re-run of all jobs, which packages the chart again.
+    """
+    chart, bundle = files
+    assets = [_asset(chart, digest=ZERO), _asset(bundle)]
+    state, errors, warnings = release_assets.release_state(
+        TAG, [_release(assets=assets)], [chart], unsigned=True
+    )
+    assert state is None
+    assert len(errors) == 1
+    assert f"other versions of {chart.name} than this run built" in errors[0]
+    assert "release a new patch version" in errors[0]
+    assert warnings == []
+
+
+def test_precheck_published_missing_bundle(files: list[Path]) -> None:
+    """Before signing, a published release must have the bundles already."""
+    chart, bundle = files
+    state, errors, warnings = release_assets.release_state(
+        TAG, [_release(assets=[_asset(chart)])], [chart], unsigned=True
+    )
+    assert state is None
+    assert errors == [
+        f"Release {TAG} is published without the assets {bundle.name}: assets"
+        " of a published immutable release can't be added or replaced, so"
+        " release a new patch version (tags can't be reused)"
+    ]
+    assert warnings == []
+
+
+def test_precheck_published_unexpected(files: list[Path]) -> None:
+    """Before signing, other assets of a published release are an error."""
+    chart, bundle = files
+    extra = chart.with_name("extra.txt")
+    extra.write_text("extra")
+    assets = [_asset(chart), _asset(bundle), _asset(extra)]
+    state, errors, _ = release_assets.release_state(
+        TAG, [_release(assets=assets)], [chart], unsigned=True
+    )
+    assert state is None
+    assert len(errors) == 1 and "did not build (extra.txt)" in errors[0]
+
+
+@pytest.mark.parametrize(
+    ("releases", "state"),
+    [([], "none"), ([_release(draft=True)], "draft")],
+    ids=["none", "draft"],
+)
+def test_precheck_unpublished(
+    files: list[Path], releases: list[dict[str, Any]], state: str
+) -> None:
+    """Before signing, releases that aren't published have the same state."""
+    assert release_assets.release_state(TAG, releases, files[:1], unsigned=True) == (
+        state,
+        [],
+        [],
+    )
+
+
+def test_main_precheck(
+    tmp_path: Path, files: list[Path], capsys: pytest.CaptureFixture[str]
+) -> None:
+    """`precheck` expects the Sigstore bundles of the assets in the release."""
+    chart, bundle = files
+    path = tmp_path / "releases.json"
+    path.write_text(json.dumps([_release(assets=[_asset(chart), _asset(bundle)])]))
+    bundle.unlink()
+    args = [TAG, "--releases", str(path), str(chart)]
+    assert release_assets.main(["precheck", *args]) == 0
+    assert capsys.readouterr() == ("state=published\n", "")
+    # After signing, the bundle is a local file that `state` must be given
+    assert release_assets.main(["state", *args]) == 1
+    assert "did not build (chart-1.2.3.tgz.sigstore.json)" in capsys.readouterr().err
