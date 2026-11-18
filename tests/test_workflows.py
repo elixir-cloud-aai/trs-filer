@@ -20,6 +20,9 @@ ROOT = Path(__file__).parents[1]
 WORKFLOWS = ROOT / ".github" / "workflows"
 # A chart file name as the release workflow packages it
 CHART = "trs-filer-1.2.3.tgz"
+# The digest of a release run's image, and another one
+DIGEST = "sha256:" + "a" * 64
+OTHER_DIGEST = "sha256:" + "b" * 64
 
 
 def _load(path: Path) -> dict[str, Any]:
@@ -432,11 +435,6 @@ def test_release_state_checked_first() -> None:
     assert "release_assets.py state" in steps["Create release"]["run"]
 
 
-# The digest of this run's image, and another one
-DIGEST = "sha256:" + "a" * 64
-OTHER_DIGEST = "sha256:" + "b" * 64
-
-
 @pytest.mark.parametrize(
     ("release", "chart", "tagged", "passes"),
     [
@@ -446,6 +444,9 @@ OTHER_DIGEST = "sha256:" + "b" * 64
         pytest.param("published", True, OTHER_DIGEST, False, id="new-digest"),
         pytest.param("published", True, None, False, id="no-image-tag"),
         pytest.param("published", False, DIGEST, False, id="new-chart"),
+        pytest.param("no-bundle", True, DIGEST, False, id="no-bundle"),
+        pytest.param("mutable", True, DIGEST, True, id="mutable-rerun-failed"),
+        pytest.param("mutable", False, DIGEST, False, id="mutable-new-chart"),
     ],
 )
 def test_release_state_check_runs(
@@ -464,7 +465,9 @@ def test_release_state_check_runs(
 
     Args:
         tmp_path: The working directory of the step.
-        release: The release of the tag (`draft`, `published`), if any.
+        release: The release of the tag, if any: `draft`, `published`
+            (immutable), `no-bundle` (published without the chart's
+            Sigstore bundle) or `mutable` (published, not immutable).
         chart: Whether the release has this run's chart (else another).
         tagged: The digest that the image tag points to; no tag if `None`.
         passes: Whether the check passes.
@@ -490,8 +493,8 @@ def test_release_state_check_runs(
             {
                 "tag_name": "v1.2.3",
                 "draft": draft,
-                "immutable": not draft,
-                "assets": assets,
+                "immutable": release in ("published", "no-bundle"),
+                "assets": assets[:1] if release == "no-bundle" else assets,
             }
         )
     (tmp_path / "releases.json").write_text(json.dumps([releases]))
@@ -528,8 +531,12 @@ def test_release_state_check_runs(
         check=False,
     )
     assert (result.returncode == 0) == passes, result.stdout + result.stderr
-    if release == "published" and not passes:
+    if release in ("published", "no-bundle") and not passes:
         assert "release a new patch version" in result.stdout + result.stderr
+    if release == "mutable" and not passes:
+        assert "gh release delete v1.2.3" in result.stdout + result.stderr
+    if tagged is None and release == "published":
+        assert "can't be inspected" in result.stdout + result.stderr
 
 
 def test_verification_commands() -> None:

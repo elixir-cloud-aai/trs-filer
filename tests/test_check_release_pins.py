@@ -6,7 +6,6 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
-import tomllib
 
 import pytest
 
@@ -64,7 +63,8 @@ name = "foca"
 version = "0.17.0"
 source = { registry = "https://pypi.org/simple" }
 """
-# Where `uv.lock` and `[tool.uv]` may take packages from
+# Where `uv.lock` and `[tool.uv]` may take packages from; not the script's
+# constant, so that a change of it fails the tests
 PYPI = "https://pypi.org/simple"
 
 
@@ -915,26 +915,25 @@ def test_lock_unreadable(tmp_path: Path, lock: str | None, error: str) -> None:
 
 
 def test_repository_lock() -> None:
-    """This repository's `uv.lock` is checked as the release checks it.
+    """This repository's `uv.lock` and `[tool.uv]` pass, but for FOCA.
 
-    Its only findings are those of a temporary pin to a FOCA commit (a
-    direct reference in `pyproject.toml`), which the release must reject
-    until FOCA is released (see "Versioning and releases" in
-    `docs/development.md`).
+    The real lock can be read, and its only possible finding is a temporary
+    pin to a FOCA commit, which the release must reject until FOCA is
+    released (see "Versioning and releases" in `docs/development.md`).
     """
-    pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text())
     pins = [
         pin
         for pin in check_release_pins.find_dev_pins(ROOT)
         if pin.startswith(("uv.lock:", "pyproject.toml: [tool.uv"))
     ]
-    foca_commit = any(
-        requirement.replace(" ", "").startswith("foca@git+")
-        for requirement in pyproject["project"]["dependencies"]
-    )
-    assert pins == (
-        [pin for pin in pins if pin.startswith("uv.lock: 'foca' ")]
-        if foca_commit
-        else []
-    )
-    assert bool(pins) == foca_commit
+    assert all(pin.startswith("uv.lock: 'foca' ") for pin in pins), pins
+
+
+def test_lock_project_without_name(tmp_path: Path) -> None:
+    """Without a project name, no package of `uv.lock` is the project."""
+    root = _write(tmp_path, uv_lock='[[package]]\nsource = { editable = "." }\n')
+    pyproject = root / "pyproject.toml"
+    pyproject.write_text(pyproject.read_text().replace('name = "app"\n', ""))
+    assert check_release_pins.find_dev_pins(root) == [
+        "uv.lock: '(no name)' (no version) comes from editable ."
+    ]

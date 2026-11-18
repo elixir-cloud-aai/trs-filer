@@ -16,8 +16,8 @@
 # (the release needs a new patch version); re-running failed jobs reuses
 # the digest already pushed (and scans it again if the scan failed). The
 # tag is the only source of the version: it is passed to the image build
-# (the Docker build gets no Git metadata) and set as the chart's `version` and
-# `appVersion` (the tag of its default image). Release notes are the
+# (the Docker build gets no Git metadata) and set as the chart's `version`
+# and `appVersion` (the tag of its default image). Release notes are the
 # curated `docs/releases/<version>.md` followed by GitHub's generated notes
 # if the former exists (the run fails if it contains `TODO` or is not in the
 # agreed format, see `scripts/release_notes.py`), otherwise the generated
@@ -414,7 +414,8 @@ jobs:
       # `scripts/release_assets.py`), and `X.Y.Z` must point to this run's
       # digest (the repository is public, so no credentials are needed), as
       # on a re-run of failed jobs, which reuses both. Drafts and new
-      # releases pass; "Create release" checks the release again
+      # releases pass; "Create release" checks the release again (keep the
+      # fetch of the releases the same in both steps)
       - name: Check release state
         env:
           GH_TOKEN: ${{ github.token }}
@@ -429,10 +430,16 @@ jobs:
           state="${state#state=}"
           echo "Release ${TAG}: ${state}"
           if [[ "${state}" == "published" ]]; then
-              actual="$(docker buildx imagetools inspect "${IMAGE_NAME}:${VERSION}" \
-                  --format '{{ json .Manifest }}' | jq -r .digest)"
+              # A missing tag and a failed request (e.g., a rate limit) both
+              # fail here, apart from a tag on another digest
+              if ! manifest="$(docker buildx imagetools inspect \
+                  "${IMAGE_NAME}:${VERSION}" --format '{{ json .Manifest }}')"; then
+                  echo "::error::Release ${TAG} is published, but ${IMAGE_NAME}:${VERSION} can't be inspected: if the registry failed, re-run this job; if the tag doesn't exist, release a new patch version (tags can't be reused)"
+                  exit 1
+              fi
+              actual="$(jq -r .digest <<< "${manifest}")"
               if [[ "${actual}" != "${DIGEST}" ]]; then
-                  echo "::error::Release ${TAG} is published, but ${IMAGE_NAME}:${VERSION} points to ${actual:-no image}, not to this run's digest ${DIGEST} (a re-run of all jobs builds a new image): release a new patch version (tags can't be reused)"
+                  echo "::error::Release ${TAG} is published, but ${IMAGE_NAME}:${VERSION} points to ${actual}, not to this run's digest ${DIGEST} (a re-run of all jobs builds a new image): release a new patch version (tags can't be reused)"
                   exit 1
               fi
           fi

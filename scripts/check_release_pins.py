@@ -277,6 +277,10 @@ def _normalize(name: object) -> str:
 def _uv_pins(uv: dict[str, Any]) -> list[str]:
     """Find packages that uv would take from elsewhere than PyPI.
 
+    Early, readable findings at their cause; `_lock_pins` is the check that
+    counts, as the image is installed from `uv.lock` (e.g., overrides and
+    constraints of `[tool.uv]` aren't checked here, but in the lock).
+
     Args:
         uv: The `[tool.uv]` table of `pyproject.toml`.
 
@@ -298,17 +302,13 @@ def _uv_pins(uv: dict[str, Any]) -> list[str]:
     for name, value in sources.items():
         prefix = f"pyproject.toml: [tool.uv.sources] '{name}'"
         for source in value if isinstance(value, list) else [value]:
-            kind = next(
-                (
-                    kind
-                    for kind in UV_SOURCE_KINDS
-                    if isinstance(source, dict) and kind in source
-                ),
-                None,
-            )
+            if not isinstance(source, dict):
+                pins.append(f"{prefix} is an unknown source")
+                continue
+            kind = next((kind for kind in UV_SOURCE_KINDS if kind in source), None)
             if kind is not None:
                 pins.append(f"{prefix} is a {kind} source")
-            elif isinstance(source, dict) and "index" in source:
+            elif "index" in source:
                 url = urls.get(source["index"])
                 if not _is_pypi(url):
                     pins.append(
@@ -358,16 +358,22 @@ def _lock_pins(root: Path, project: str) -> list[str]:
         source = package.get("source")
         if not isinstance(source, dict):
             source = {}
-        if _normalize(package.get("name")) == _normalize(project) and source in (
-            {"editable": "."},
-            {"virtual": "."},
+        name = _normalize(package.get("name"))
+        if (
+            name
+            and name == _normalize(project)
+            and source
+            in (
+                {"editable": "."},
+                {"virtual": "."},
+            )
         ):
             continue
         if set(source) == {"registry"} and _is_pypi(source["registry"]):
             continue
         origin = " ".join(map(str, next(iter(source.items()), ("no source",))))
         pins.append(
-            f"uv.lock: '{package.get('name')}' "
+            f"uv.lock: '{package.get('name', '(no name)')}' "
             f"{package.get('version', '(no version)')} comes from {origin}"
         )
     return pins
