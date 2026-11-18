@@ -136,11 +136,15 @@ aren't checked. A file is invalid if it:
 - is not a JSON object;
 - names another meta-schema than that of profile version 0.3.0 in `$schema`
   (`https://raw.githubusercontent.com/elixir-cloud-aai/ga4gh-io-schema/main/schemas/ga4gh-io-profile.schema.json`),
-  or none (the meta-schema itself doesn't require `$schema`); e.g., that of
-  another version of the profile, or the identifier of this one from before
-  the profile moved to elixir-cloud-aai
-  (`https://raw.githubusercontent.com/uniqueg/ga4gh-io-schema/v0.3.0/schemas/ga4gh-io-profile.schema.json`,
-  which earlier images from `dev` required; see [Upgrading](upgrading.md#from-050));
+  or none (the meta-schema itself doesn't require `$schema`), e.g., the
+  identifier of this one from before the profile moved to elixir-cloud-aai
+  (`uniqueg/ga4gh-io-schema/v0.3.0/...`, see
+  [Upgrading](upgrading.md#images-from-dev-since-foca-017)). The identifier
+  is a URL on the profile's `main` branch, not of a version (the profile
+  has no tags yet): what counts is the vendored copy (see below), not what
+  the URL serves (until `v0.3` is merged into `main`, an older draft).
+  Later versions of the profile published under the same identifier pass
+  this check and are then validated against the rules of 0.3.0;
 - doesn't validate against that meta-schema (which also checks that UI
   widgets fit the types of their schemas, and that the parameters directly
   under `inputs` and `outputs` use only widgets for inputs and outputs,

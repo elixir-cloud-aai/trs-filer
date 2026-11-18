@@ -26,6 +26,18 @@ EXAMPLE = Path(__file__).resolve().parents[3] / "docs" / "examples" / "io-schema
 TOOL_PATH = f"{BASE_PATH}/tools/HELLO"
 VERSION_PATH = f"{TOOL_PATH}/versions/1.0.0"
 SCHEMA_PATH = "ga4gh-io.schema.json"
+# The registration of the demo of ga4gh-io-schema (`examples/demo/` at commit
+# e80692a), as built by its `register.py` (`--revision <e80692a, in full>
+# --repository https://github.com/elixir-cloud-aai/ga4gh-io-schema --dry-run`)
+DEMO = Path(__file__).resolve().parents[2] / "data" / "io-schema-demo" / "tool.json"
+DEMO_TOOL_PATH = f"{BASE_PATH}/tools/ga4gh-io-schema-demo"
+# Identifier of the meta-schema of profile 0.3.0 before ga4gh-io-schema moved
+# to elixir-cloud-aai (ga4gh-io-schema #78), which images from `dev` required
+# before #312
+OLD_META_SCHEMA_ID = (
+    "https://raw.githubusercontent.com/uniqueg/ga4gh-io-schema/v0.3.0/"
+    "schemas/ga4gh-io-profile.schema.json"
+)
 
 
 def _example() -> dict[str, Any]:
@@ -485,20 +497,6 @@ def test_io_schema_file_type_needs_descriptor_type(
         "The type of descriptor, test, I/O Schema and other files must be a "
         "supported descriptor type: "
     )
-
-
-# The registration of the demo of ga4gh-io-schema (`examples/demo/` at commit
-# e80692a), as built by its `register.py` (`--revision <e80692a, in full>
-# --repository https://github.com/elixir-cloud-aai/ga4gh-io-schema --dry-run`)
-DEMO = Path(__file__).resolve().parents[2] / "data" / "io-schema-demo" / "tool.json"
-DEMO_TOOL_PATH = f"{BASE_PATH}/tools/ga4gh-io-schema-demo"
-# Identifier of the meta-schema of profile 0.3.0 before ga4gh-io-schema moved
-# to elixir-cloud-aai (ga4gh-io-schema #78), which images from `dev` required
-# before #312
-OLD_META_SCHEMA_ID = (
-    "https://raw.githubusercontent.com/uniqueg/ga4gh-io-schema/v0.3.0/"
-    "schemas/ga4gh-io-profile.schema.json"
-)
 
 
 def _demo() -> tuple[dict[str, Any], dict[str, Any]]:
