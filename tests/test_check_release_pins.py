@@ -927,6 +927,9 @@ def test_repository_lock() -> None:
         if pin.startswith(("uv.lock:", "pyproject.toml: [tool.uv"))
     ]
     assert all(pin.startswith("uv.lock: 'foca' ") for pin in pins), pins
+    # A FOCA commit in `pyproject.toml` is locked from Git, and reported
+    pyproject = (ROOT / "pyproject.toml").read_text()
+    assert bool(pins) == ("foca @ git+" in pyproject), pins
 
 
 def test_lock_project_without_name(tmp_path: Path) -> None:
