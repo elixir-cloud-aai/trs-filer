@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://raw.githubusercontent.com/uniqueg/ga4gh-io-schema/v0.3.0/schemas/vocabularies/file.schema.json",
+  "$id": "https://raw.githubusercontent.com/elixir-cloud-aai/ga4gh-io-schema/main/schemas/vocabularies/file.schema.json",
   "title": "GA4GH IO Profile File Keywords",
   "description": "Keywords that describe file parameters: file references and the structure of tabular files.",
   "properties": {

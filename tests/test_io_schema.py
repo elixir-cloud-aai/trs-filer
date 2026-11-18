@@ -39,28 +39,28 @@ ROOT = Path(__file__).resolve().parents[1]
 EXAMPLE = ROOT / "docs" / "examples" / "io-schema"
 # The vendored meta-schema of the profile, by path relative to
 # `META_SCHEMA_DIR`, with the SHA-256 checksums of the files of
-# uniqueg/ga4gh-io-schema (`schemas/`) at commit d44e8d4
+# elixir-cloud-aai/ga4gh-io-schema (`schemas/`) at commit cfd2bbe
 VENDORED = {
     "ga4gh-io-profile.schema.json": (
-        "96b86700af3b0179ce1a3987716e044203c47a351cb3ac5300cb18e4c418ab2f"
+        "9d173188a15db07b9e5f592460cf0a9494d3791e07613d2f1a86e573cccb186c"
     ),
     "vocabularies/annotations.schema.json": (
-        "01f80107c0f40d96f78849fabcfbd618f1fff33c762d9c4f41cab086a8d8e43c"
+        "47cc47e0ae6d554222df35d356b5c27b05a44da29c7502cd24a1dbbb8280a3d5"
     ),
     "vocabularies/file.schema.json": (
-        "064ad2f640e4e5b79fce7ceb1558ee7078773cf6230f1bdeebb70c32004d97b8"
+        "56208d882bbffcad43b2ece8f55abf811b2dc6eaf2bc38b0b14194da86dca61a"
     ),
     "vocabularies/outputs.schema.json": (
-        "2bcf4d16f4b6d6e7190537a58d12919620cfa2af2b2de2d381bc52a3f267c103"
+        "ca48249547ad0fc7d8451353c571c19c6039800426212500d909da781b040cdc"
     ),
     "vocabularies/parameter.schema.json": (
-        "f0e25228d50b73168039a7b7c424b460c0f8882fa6eb53d0886a3fd086cf0870"
+        "fa652fcdbbd3b5e3634148b81c8d65574bb7b9ec42df99dbcd09977faa41a9be"
     ),
     "vocabularies/ui-widgets.schema.json": (
-        "0fdb3d3b0989b4f719ad737a8364bc8f5af4e9774a3393d8ec0418a5dc395ed1"
+        "c4a017f61e3c547a729d9a0852713f2ccb09650d8f6fc13e04a30ffd90bfc6a7"
     ),
     "vocabularies/workflow.schema.json": (
-        "f362277ba39661fb4ebf35909f1f523b0dc8eda81b7e856e83dd7ffa1e2822f8"
+        "c5c5a821c6880a1e2ab0d85f93b4223b0314ae66de66d765fa57410d8fd31c8c"
     ),
 }
 
@@ -116,7 +116,13 @@ def test_meta_schema_id() -> None:
     )
     assert profile["$id"] == META_SCHEMA_ID
     assert profile["properties"]["$schema"]["const"] == META_SCHEMA_ID
-    assert "/v0.3.0/" in META_SCHEMA_ID
+    assert META_SCHEMA_ID == (
+        "https://raw.githubusercontent.com/elixir-cloud-aai/ga4gh-io-schema/"
+        "main/schemas/ga4gh-io-profile.schema.json"
+    )
+    # `$schema` is checked by TRS-Filer (`check_io_schema()`), not required by
+    # the meta-schema
+    assert "$schema" not in profile["required"]
 
 
 @pytest.mark.parametrize(
@@ -192,6 +198,9 @@ def test_check_io_schema_not_object(content: str) -> None:
     [
         None,
         "https://raw.githubusercontent.com/uniqueg/ga4gh-io-schema/v0.2.0/"
+        "schemas/ga4gh-io-profile.schema.json",
+        # the URI before the profile moved to elixir-cloud-aai (#312)
+        "https://raw.githubusercontent.com/uniqueg/ga4gh-io-schema/v0.3.0/"
         "schemas/ga4gh-io-profile.schema.json",
         "https://json-schema.org/draft/2020-12/schema",
     ],
@@ -560,8 +569,8 @@ def test_check_io_schema_nested(parameter: dict[str, Any]) -> None:
 
     Regression test of uniqueg/ga4gh-io-schema #47: against the meta-schema
     of commit 573f65e, validating either schema took more than 70 s (time
-    exponential in the depth of nesting); against that of commit d44e8d4,
-    each is checked well within the time limit (about 0.2 s, including the
+    exponential in the depth of nesting); against that of commit d44e8d4
+    and later, each is checked well within the time limit (about 0.2 s, including the
     start of the process).
 
     Args:

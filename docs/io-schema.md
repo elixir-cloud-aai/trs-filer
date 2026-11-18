@@ -4,11 +4,11 @@
 
     Support for I/O Schemas follows a draft of the GA4GH I/O Schema, the
     [profile version
-    0.3.0](https://github.com/uniqueg/ga4gh-io-schema/tree/v0.3), which may
+    0.3.0](https://github.com/elixir-cloud-aai/ga4gh-io-schema/tree/v0.3), which may
     still change; so may this support, also in minor releases of TRS-Filer.
     The [check](#checking-io-schemas) is off by default.
 
-The [GA4GH I/O Schema](https://github.com/uniqueg/ga4gh-io-schema) describes
+The [GA4GH I/O Schema](https://github.com/elixir-cloud-aai/ga4gh-io-schema) describes
 the inputs and outputs of a workflow as a JSON Schema, with keywords for
 forms (titles, widgets, files) and for the workflow engine (which tool
 version and descriptor it belongs to, and the names and types of the
@@ -17,7 +17,7 @@ enter into the parameters of a run (e.g., via WES).
 
 An I/O Schema is published in TRS as a file of the tool version, as the
 [TRS convention of the
-profile](https://github.com/uniqueg/ga4gh-io-schema/blob/v0.3/docs/adoption/trs.md)
+profile](https://github.com/elixir-cloud-aai/ga4gh-io-schema/blob/v0.3/docs/adoption/trs.md)
 defines. TRS-Filer stores and serves such files like any other file, with
 or without the [check](#checking-io-schemas).
 
@@ -25,7 +25,7 @@ or without the [check](#checking-io-schemas).
 
 A TRS file type of its own for I/O Schemas, `IO_SCHEMA`, which TRS 2.0.2
 doesn't have, is proposed for the profile
-([uniqueg/ga4gh-io-schema#82](https://github.com/uniqueg/ga4gh-io-schema/issues/82)),
+([elixir-cloud-aai/ga4gh-io-schema#82](https://github.com/elixir-cloud-aai/ga4gh-io-schema/issues/82)),
 but not part of a release of it yet: the profile version 0.3.0 publishes
 I/O Schemas only as files of type `OTHER` at a fixed path, and so do TRS
 servers without `IO_SCHEMA`.
@@ -103,7 +103,7 @@ by its path:
    descriptor. Take the entry of type `IO_SCHEMA`, or else the one of type
    `OTHER` with the path `ga4gh-io.schema.json` in the directory of the
    primary descriptor, comparing only `file_type` and the normalised `path`
-   (as the [proposal](https://github.com/uniqueg/ga4gh-io-schema/issues/82)
+   (as the [proposal](https://github.com/elixir-cloud-aai/ga4gh-io-schema/issues/82)
    describes; clients of the profile version 0.3.0 look only for the file
    of type `OTHER`).
 2. Fetch it: `GET
@@ -135,14 +135,22 @@ aren't checked. A file is invalid if it:
 
 - is not a JSON object;
 - names another meta-schema than that of profile version 0.3.0 in `$schema`
-  (`https://raw.githubusercontent.com/uniqueg/ga4gh-io-schema/v0.3.0/schemas/ga4gh-io-profile.schema.json`),
-  e.g., of another version of the profile;
+  (`https://raw.githubusercontent.com/elixir-cloud-aai/ga4gh-io-schema/main/schemas/ga4gh-io-profile.schema.json`),
+  or none (the meta-schema itself doesn't require `$schema`), e.g., the
+  identifier of this one from before the profile moved to elixir-cloud-aai
+  (`uniqueg/ga4gh-io-schema/v0.3.0/...`, see
+  [Upgrading](upgrading.md#images-from-dev-since-foca-017)). The identifier
+  is a URL on the profile's `main` branch, not of a version (the profile
+  has no tags yet): what counts is the vendored copy (see below), not what
+  the URL serves (until `v0.3` is merged into `main`, an older draft).
+  Later versions of the profile published under the same identifier pass
+  this check and are then validated against the rules of 0.3.0;
 - doesn't validate against that meta-schema (which also checks that UI
   widgets fit the types of their schemas, and that the parameters directly
   under `inputs` and `outputs` use only widgets for inputs and outputs,
   respectively; nested schemas and definitions aren't checked for this; see
   the profile's
-  [changelog](https://github.com/uniqueg/ga4gh-io-schema/blob/v0.3/CHANGELOG.md)); or
+  [changelog](https://github.com/elixir-cloud-aai/ga4gh-io-schema/blob/v0.3/CHANGELOG.md)); or
 - names another descriptor type than its own in
   `x-ga4gh-workflow.descriptor_type`.
 
@@ -164,7 +172,7 @@ file by its type instead: `The I/O Schema file (IO_SCHEMA) ...`; their path
 isn't echoed.
 
 The [validator of the
-profile](https://github.com/uniqueg/ga4gh-io-schema/blob/v0.3/docs/tools/validator.md)
+profile](https://github.com/elixir-cloud-aai/ga4gh-io-schema/blob/v0.3/docs/tools/validator.md)
 reports all errors with their values; check schemas with it before
 registering them. Files retrieved from their URLs are checked once
 retrieved; the check applies to every registration of tools and versions
@@ -192,10 +200,10 @@ must be installed (as in the image), as the process imports it.
 The meta-schema of profile version 0.3.0 and its vocabularies are vendored
 unchanged in
 [`trs_filer/io_schema/`](https://github.com/elixir-cloud-aai/trs-filer/tree/dev/trs_filer/io_schema),
-from commit `d44e8d4` of the profile's `v0.3` branch (Apache License 2.0);
+from commit `cfd2bbe` of the profile's `v0.3` branch (Apache License 2.0);
 nothing is fetched. To vendor another version, replace the directory (named
-after the date and commit of the source) and update `PROFILE_VERSION` and
-`META_SCHEMA_DIR` in `trs_filer/io_schema/__init__.py`, the checksums in
+after the date and commit of the source) and update `PROFILE_VERSION`,
+`META_SCHEMA_DIR` and `META_SCHEMA_ID` in `trs_filer/io_schema/__init__.py`, the checksums in
 `tests/test_io_schema.py`, the example (`docs/examples/io-schema/`, whose
 `tool.json` holds the other two files) and this page.
 TRS-Filer doesn't check the identifiers and the checksum of

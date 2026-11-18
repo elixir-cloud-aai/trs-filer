@@ -92,7 +92,11 @@ existing data needs no changes. Check clients and custom configs:
   nothing changes) checks them on registration, each in a process of its
   own (about 50 to 100 MB of memory, one at a time), within
   `custom.io_schema.timeout` seconds (see [Checking I/O
-  Schemas](io-schema.md#checking-io-schemas)). Files may also have the new
+  Schemas](io-schema.md#checking-io-schemas)). Checked I/O Schemas must
+  name the meta-schema of the GA4GH I/O Profile 0.3.0 by its identifier in
+  elixir-cloud-aai in `$schema`
+  (`https://raw.githubusercontent.com/elixir-cloud-aai/ga4gh-io-schema/main/schemas/ga4gh-io-profile.schema.json`).
+  Files may also have the new
   file type `IO_SCHEMA` (an extension of TRS, at most one per descriptor
   type of a version, see [The file type
   `IO_SCHEMA`](io-schema.md#the-file-type-io_schema)); `{type}/files` lists
@@ -615,3 +619,18 @@ app (logger `trs_filer.app`), which warned of the placeholders `id` and
 (collection `plugin_store`) and plugin listing are for gateway apps:
 TRS-Filer creates no collections or indexes beyond its own, so its
 database user needs no new rights.
+
+**I/O Schemas (breaking for images with the check):** images from `dev`
+built before [#312](https://github.com/elixir-cloud-aai/trs-filer/issues/312)
+checked I/O Schemas (`custom.io_schema.validation`) against the meta-schema
+identified as it was before the profile moved to elixir-cloud-aai
+(`https://raw.githubusercontent.com/uniqueg/ga4gh-io-schema/v0.3.0/schemas/ga4gh-io-profile.schema.json`),
+and required that identifier in `$schema`. Later images and the next
+release require the current one
+(`https://raw.githubusercontent.com/elixir-cloud-aai/ga4gh-io-schema/main/schemas/ga4gh-io-profile.schema.json`)
+and reject the old one with `400 Bad Request`: change `$schema` in such
+I/O Schemas before registering them again. Stored versions are not checked
+again. No identifier is accepted by both: during a rolling upgrade with
+several replicas, a registration may reach a replica that rejects its
+`$schema`, so register I/O Schemas only once all replicas run the new
+image (or retry those rejected).

@@ -1,5 +1,5 @@
 {
-  "$schema": "https://raw.githubusercontent.com/uniqueg/ga4gh-io-schema/v0.3.0/schemas/ga4gh-io-profile.schema.json",
+  "$schema": "https://raw.githubusercontent.com/elixir-cloud-aai/ga4gh-io-schema/main/schemas/ga4gh-io-profile.schema.json",
   "$id": "https://example.org/schemas/hello/wdl/1.0.0",
   "title": "Hello",
   "description": "Greets someone, once or several times.",

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://raw.githubusercontent.com/uniqueg/ga4gh-io-schema/v0.3.0/schemas/ga4gh-io-profile.schema.json",
+  "$id": "https://raw.githubusercontent.com/elixir-cloud-aai/ga4gh-io-schema/main/schemas/ga4gh-io-profile.schema.json",
   "$vocabulary": {
     "https://json-schema.org/draft/2020-12/vocab/core": true,
     "https://json-schema.org/draft/2020-12/vocab/applicator": true,
@@ -9,22 +9,22 @@
     "https://json-schema.org/draft/2020-12/vocab/meta-data": true,
     "https://json-schema.org/draft/2020-12/vocab/format-annotation": true,
     "https://json-schema.org/draft/2020-12/vocab/content": true,
-    "https://raw.githubusercontent.com/uniqueg/ga4gh-io-schema/v0.3.0/schemas/vocabularies/ga4gh-io": false
+    "https://raw.githubusercontent.com/elixir-cloud-aai/ga4gh-io-schema/main/schemas/vocabularies/ga4gh-io": false
   },
   "title": "GA4GH IO Profile Meta-Schema",
   "description": "Meta-schema for validating GA4GH workflow and tool IO JSON Schema profiles. The top level requires the inputs/outputs wrapper and may carry the top-level keywords of the workflow vocabulary; every schema, at any depth, must follow the rules of $defs/node, which combines one vocabulary file per keyword group.",
   "allOf": [
     {
-      "$ref": "https://raw.githubusercontent.com/uniqueg/ga4gh-io-schema/v0.3.0/schemas/ga4gh-io-profile-node#/$defs/schema"
+      "$ref": "https://raw.githubusercontent.com/elixir-cloud-aai/ga4gh-io-schema/main/schemas/ga4gh-io-profile-node#/$defs/schema"
     },
     {
       "$comment": "The keywords of every schema plus the top-level keywords; other x-ga4gh-* keywords are rejected. The check of unevaluated keywords sits in this branch, next to the rules that reach nested schemas, so that it doesn't evaluate the nested schemas a second time (see $defs/node).",
       "allOf": [
         {
-          "$ref": "https://raw.githubusercontent.com/uniqueg/ga4gh-io-schema/v0.3.0/schemas/ga4gh-io-profile-node#/$defs/keywords"
+          "$ref": "https://raw.githubusercontent.com/elixir-cloud-aai/ga4gh-io-schema/main/schemas/ga4gh-io-profile-node#/$defs/keywords"
         },
         {
-          "$ref": "https://raw.githubusercontent.com/uniqueg/ga4gh-io-schema/v0.3.0/schemas/vocabularies/workflow.schema.json"
+          "$ref": "https://raw.githubusercontent.com/elixir-cloud-aai/ga4gh-io-schema/main/schemas/vocabularies/workflow.schema.json"
         },
         {
           "patternProperties": {
@@ -37,13 +37,12 @@
   ],
   "type": "object",
   "required": [
-    "$schema",
     "properties"
   ],
   "properties": {
     "$schema": {
-      "description": "IO schemas must name this meta-schema.",
-      "const": "https://raw.githubusercontent.com/uniqueg/ga4gh-io-schema/v0.3.0/schemas/ga4gh-io-profile.schema.json"
+      "description": "IO schemas must name this meta-schema. Validators check that $schema is present before they apply the meta-schema; the meta-schema doesn't require it, because some validators (e.g., @hyperjump/json-schema) remove $schema from a schema before they check it against its dialect.",
+      "const": "https://raw.githubusercontent.com/elixir-cloud-aai/ga4gh-io-schema/main/schemas/ga4gh-io-profile.schema.json"
     },
     "$id": {
       "description": "The identifier of the IO schema: an absolute URI that is stable and versioned, never the URL of a branch.",
@@ -65,7 +64,7 @@
           "description": "JSON Schema block defining the expected input parameters for the workflow or tool.",
           "properties": {
             "properties": {
-              "$ref": "https://raw.githubusercontent.com/uniqueg/ga4gh-io-schema/v0.3.0/schemas/vocabularies/ui-widgets.schema.json#/$defs/inputParameters"
+              "$ref": "https://raw.githubusercontent.com/elixir-cloud-aai/ga4gh-io-schema/main/schemas/vocabularies/ui-widgets.schema.json#/$defs/inputParameters"
             }
           }
         },
@@ -88,7 +87,7 @@
             "else": false,
             "dependentSchemas": false,
             "properties": {
-              "$ref": "https://raw.githubusercontent.com/uniqueg/ga4gh-io-schema/v0.3.0/schemas/vocabularies/ui-widgets.schema.json#/$defs/outputParameters"
+              "$ref": "https://raw.githubusercontent.com/elixir-cloud-aai/ga4gh-io-schema/main/schemas/vocabularies/ui-widgets.schema.json#/$defs/outputParameters"
             }
           }
         }
@@ -101,7 +100,7 @@
   "$comment": "The top level takes the rules of every schema from $defs/node ($defs/schema and $defs/keywords, without its check of unevaluated keywords), adds the top-level keywords, and rejects other x-ga4gh-* keywords itself. Nested schemas get all of $defs/node, so top-level keywords are rejected there.",
   "$defs": {
     "node": {
-      "$id": "https://raw.githubusercontent.com/uniqueg/ga4gh-io-schema/v0.3.0/schemas/ga4gh-io-profile-node",
+      "$id": "https://raw.githubusercontent.com/elixir-cloud-aai/ga4gh-io-schema/main/schemas/ga4gh-io-profile-node",
       "title": "GA4GH IO Profile Schema Rules",
       "description": "Applies to every schema of an IO schema, at any depth: JSON Schema Draft 2020-12 plus the x-ga4gh-* keywords of the vocabularies. Keywords starting with x-ga4gh- that no vocabulary defines are rejected.",
       "$comment": "Two branches: the rules that reach nested schemas ($defs/subschemas) and the check of the x-ga4gh-* keywords. The check of unevaluated keywords sees only the vocabularies: validators that evaluate what such a check sees once more, to collect annotations, would otherwise validate every nested schema again at each level, in time exponential in the depth of nesting. The Draft 2020-12 meta-schema is not applied here but once per tree ($defs/schema), because it checks the whole tree below the schema it is applied to.",
@@ -140,16 +139,16 @@
           "description": "The x-ga4gh-* keywords of every schema, one vocabulary file per keyword group. None of them applies $defs/node to a nested schema ($defs/subschemas does). Used by $defs/node and, without the check of unevaluated keywords, by the top level.",
           "allOf": [
             {
-              "$ref": "https://raw.githubusercontent.com/uniqueg/ga4gh-io-schema/v0.3.0/schemas/vocabularies/annotations.schema.json"
+              "$ref": "https://raw.githubusercontent.com/elixir-cloud-aai/ga4gh-io-schema/main/schemas/vocabularies/annotations.schema.json"
             },
             {
-              "$ref": "https://raw.githubusercontent.com/uniqueg/ga4gh-io-schema/v0.3.0/schemas/vocabularies/file.schema.json"
+              "$ref": "https://raw.githubusercontent.com/elixir-cloud-aai/ga4gh-io-schema/main/schemas/vocabularies/file.schema.json"
             },
             {
-              "$ref": "https://raw.githubusercontent.com/uniqueg/ga4gh-io-schema/v0.3.0/schemas/vocabularies/parameter.schema.json"
+              "$ref": "https://raw.githubusercontent.com/elixir-cloud-aai/ga4gh-io-schema/main/schemas/vocabularies/parameter.schema.json"
             },
             {
-              "$ref": "https://raw.githubusercontent.com/uniqueg/ga4gh-io-schema/v0.3.0/schemas/vocabularies/outputs.schema.json"
+              "$ref": "https://raw.githubusercontent.com/elixir-cloud-aai/ga4gh-io-schema/main/schemas/vocabularies/outputs.schema.json"
             }
           ]
         },

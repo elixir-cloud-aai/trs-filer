@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://raw.githubusercontent.com/uniqueg/ga4gh-io-schema/v0.3.0/schemas/vocabularies/workflow.schema.json",
+  "$id": "https://raw.githubusercontent.com/elixir-cloud-aai/ga4gh-io-schema/main/schemas/vocabularies/workflow.schema.json",
   "title": "GA4GH IO Profile Workflow Keywords",
   "description": "Keywords of the top level of an IO schema that tie it to one version of a workflow or tool in a TRS and to the engine that runs it. They are allowed only at the top level.",
   "properties": {
