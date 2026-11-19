@@ -544,6 +544,9 @@ def test_release_state_check_runs(
         assert "gh release delete v1.2.3" in result.stdout + result.stderr
     if tagged is None and release == "published":
         assert "can't be inspected" in result.stdout + result.stderr
+    # Not the error of a failed inspection (e.g., wrong `docker` arguments)
+    if tagged == OTHER_DIGEST:
+        assert f"points to {OTHER_DIGEST}" in result.stdout + result.stderr
 
 
 def test_verification_commands() -> None:
