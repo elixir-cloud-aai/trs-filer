@@ -418,6 +418,7 @@ def test_release_state_checked_first() -> None:
     assert "if" not in check
     assert "continue-on-error" not in check
     assert check["env"]["TAG"] == "${{ github.ref_name }}"
+    assert check["env"]["GH_REPO"] == "${{ github.repository }}"
     assert "release_assets.py precheck" in check["run"]
     assert '--releases "${releases}" dist/*' in check["run"]
     assert '"${IMAGE_NAME}:${VERSION}"' in check["run"]
@@ -503,7 +504,13 @@ def test_release_state_check_runs(
     bin_dir.mkdir()
     (bin_dir / "python").symlink_to(sys.executable)
     stubs = {
-        "gh": f'cat "{tmp_path}/releases.json"',
+        # Only the request of the step gets the releases (`$GH_REPO` is
+        # this test's, see below)
+        "gh": (
+            '[[ "$*" == "api --paginate --slurp '
+            'repos/$GH_REPO/releases?per_page=100" ]] && '
+            f'cat "{tmp_path}/releases.json"'
+        ),
         "docker": (
             '[[ "$*" == "buildx imagetools inspect $IMAGE_NAME:1.2.3 '
             '--format {{ json .Manifest }}" ]] && '
@@ -537,6 +544,9 @@ def test_release_state_check_runs(
         assert "gh release delete v1.2.3" in result.stdout + result.stderr
     if tagged is None and release == "published":
         assert "can't be inspected" in result.stdout + result.stderr
+    # Not the error of a failed inspection (e.g., wrong `docker` arguments)
+    if tagged == OTHER_DIGEST:
+        assert f"points to {OTHER_DIGEST}" in result.stdout + result.stderr
 
 
 def test_verification_commands() -> None:

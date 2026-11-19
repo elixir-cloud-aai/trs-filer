@@ -30,8 +30,8 @@ annotations on standard error, if:
 - a dependency of the Helm chart (`deployment/Chart.yaml`) has no version or
   another version than a release (`X.Y.Z`, e.g., a pre-release or a range),
   has no chart repository (`oci://` or `https://`, e.g., `file://` or an
-  alias), or is given in flow style (`{...}`, `[...]`), which the check
-  can't read;
+  alias), or is given in flow style (`{...}`, `[...]`, unless empty),
+  which the check can't read;
 - the library chart `foca-common` has another version in
   `deployment/Chart.yaml` than in `deployment/Chart.lock`, or than the one
   that the `$comment` of `deployment/values.schema.json` names
@@ -124,7 +124,7 @@ def _chart_dependencies(path: Path) -> list[dict[str, str] | None]:
     Returns:
         The dependencies, in order, as mappings of keys to values; `None`
         for dependencies in flow style (`{...}`, `[...]`), which aren't
-        read.
+        read; none for an empty list or map (`[]`, `{}`).
     """
     dependencies: list[dict[str, str] | None] = []
     in_dependencies = False
