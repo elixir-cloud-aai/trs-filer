@@ -590,10 +590,9 @@ def test_notify_job() -> None:
         ":${{ needs.prepare.outputs.version }}",
         "git-tag": "${{ github.ref_name }}",
     }
-    # The image as `publish` tags it, without the registry
-    assert f"docker.io/{step['with']['image']}" == (
-        f"{workflow['env']['IMAGE_NAME']}:${{{{ needs.prepare.outputs.version }}}}"
-    )
+    # The image that `publish` tags (`IMAGE_NAME`), without the registry
+    repository, _ = step["with"]["image"].split(":${{", maxsplit=1)
+    assert workflow["env"]["IMAGE_NAME"] == f"docker.io/{repository}"
     lines = [
         line.strip()
         for line in (WORKFLOWS / "release.yml").read_text().splitlines()
@@ -726,6 +725,7 @@ def test_credential_jobs_found() -> None:
         ("ci.yml", "publish"),
         ("release.yml", "push"),
         ("release.yml", "publish"),
+        ("release.yml", "notify"),
     } <= found
 
 

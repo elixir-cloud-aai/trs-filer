@@ -425,13 +425,15 @@ provenance of the scanned digest and signs it (see
 tags exactly that image `X.Y.Z` (and `latest`, if it is the highest stable
 release on `main`), attests and signs the chart, and creates a GitHub
 release with the chart (`.tgz`), its Sigstore bundle (`.tgz.sigstore.json`)
-and the release notes (see below). Releases are immutable (see the repository
-settings below): once published, their assets can't be added, replaced or
-deleted. The workflow therefore creates the release as a draft, uploads the
-assets and publishes it last. A re-run finishes a draft left by an earlier
-attempt; if the release is already published (e.g., by hand), it uploads
-nothing and fails unless the release has exactly the assets that the run
-built (only the Sigstore bundles may differ, as every attempt signs anew).
+and the release notes (see below); then, if Pubgrade is configured, it
+registers the image at Pubgrade (see below). Releases are immutable (see
+the repository settings below): once published, their assets can't be
+added, replaced or deleted. The workflow therefore creates the release as
+a draft, uploads the assets and publishes it last. A re-run finishes a
+draft left by an earlier attempt; if the release is already published
+(e.g., by hand), it uploads nothing and fails unless the release has
+exactly the assets that the run built (only the Sigstore bundles may
+differ, as every attempt signs anew).
 It checks this twice: right after the chart, before it attests, signs or
 tags anything (for a published release, the image tag `X.Y.Z` must also
 point to the run's digest already), and again before it creates the
@@ -470,7 +472,8 @@ the same job), the workflow registers the image, with the release tag, at
 Pubgrade", `POST /repositories/{id}/builds`, through Pubgrade's action
 [`actions/notify`](https://github.com/elixir-cloud-aai/Pubgrade/tree/344a58adc1c871135f86c404eb33ed91011886ad/actions/notify),
 pinned to the commit of v0.3.0), which notifies the deployments that
-subscribed to upgrades, also for pre-releases, if they subscribed to those.
+subscribed to upgrades. The job sends no build type, so deployments that
+subscribed to all tags (`*`) get every release, pre-releases included.
 No job waits for it, so a failed notification never holds up the release.
 The action masks the token and retries a request only if it never reached
 Pubgrade, so that one run registers the build at most once; re-running the
@@ -502,7 +505,11 @@ again, without a new release. Unless it failed on an invalid setting or
 with "Could not reach Pubgrade (curl exit status 6)" or "(... 7)" (no
 connection), Pubgrade may have registered the build all the same: check the
 repository's builds (`GET /repositories/{id}/builds`) before re-running it,
-as re-running notifies the subscribed deployments again.
+as re-running notifies the subscribed deployments again. Pubgrade doesn't
+compare versions: the deployments roll out the image of the latest
+notification, so re-running the job of an older release after a newer one
+(or approving two releases' jobs in the wrong order) rolls them back to
+the older version.
 
 The CI workflow builds the image of every pull request and scans it with
 [Trivy](https://trivy.dev/) (the shared action
