@@ -132,7 +132,8 @@ what is stored. These identifiers name users in the roles on tools (`GET
 /tools/{id}/permissions`, `PUT /tools/{id}/permissions/users/{userId}`), in
 rules of `security.access_control.policies` (`user:<namespace>|<sub>`), and
 who added a tool or tool class (`_createdBy`). An issuer may get a shorter
-`namespace` (e.g., `ls`; it must not change later):
+`namespace` (e.g., `ls`; it must not change later, and must differ from
+those of the other trusted issuers, or the app refuses to start):
 
 ```yaml
 security:
