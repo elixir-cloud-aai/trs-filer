@@ -28,10 +28,6 @@ clients and custom configs:
   so must config overlays that name users in
   `security.access_control.policies` (`user:<namespace>|<sub>`), or the
   app refuses to start. 0.5.0 stored no users.
-- Writes without a valid token get `401 Unauthorized` also if their body is
-  larger than `server.max_content_length` (`413` before), as the token is
-  checked before the body is read (see [Request size
-  limit](configuration.md#request-size-limit)).
 - **Optional object storage:** file contents can be stored in
   S3-compatible object storage (`custom.storage.backend: s3`, see [File
   storage](configuration.md#file-storage)). Nothing changes by default
@@ -189,7 +185,9 @@ clients and custom configs:
        Grant each the owner that should manage it (`PUT
        /tools/{id}/permissions/users/{userId}` with `{"role": "owner"}`, as
        an admin); the user identifier is the `sub` claim of the user's
-       tokens.
+       tokens, namespaced by the issuer (see [User
+       identifiers](configuration.md#user-identifiers)). Bare `sub` values
+       are accepted too, but apply to nobody.
     2. Config overlays that replace the read rules `get-tools` (e.g., for
        readers, with `/ga4gh/trs/v2/tools/*`) by name: the base config now
        has `get-tools` for `/tools/:id` only, plus `list-versions` and
@@ -643,7 +641,8 @@ and as who added tools and tool classes (`_createdBy`). Later images and
 the next release namespace them by issuer (see [User
 identifiers](configuration.md#user-identifiers)), so the stored roles of
 users no longer apply (owners lose their tools, until an admin grants them
-again; roles of groups and admins by group are not affected), users no
+again, and users made admins via FOCA's permissions API lose the role;
+roles of groups and admins by group are not affected), users no
 longer see the pending tool classes they added, and their unused tool
 classes no longer count towards
 `custom.access_control.max_unused_tool_classes`. To keep them, set
@@ -658,9 +657,16 @@ security:
               namespace: ""
 ```
 
-TRS-Filer has no tool to rewrite stored users: FOCA's `foca
-namespace-subjects` needs a module-level `Foca` instance, which TRS-Filer
-doesn't have, and wouldn't rewrite `_createdBy`. Config overlays that name
+TRS-Filer ships no tool to rewrite stored users. FOCA's `foca
+namespace-subjects` rewrites stored roles, given a module with a `Foca`
+instance built as in `trs_filer/app.py` (`--app`), but not `_createdBy` of
+`tools` and `toolclasses`, which would have to be rewritten in the
+database as in FOCA's [migration
+guide](https://foca.readthedocs.io/en/v0.23.0/migration-0.23/#subjects-are-always-namespaced-by-issuer).
+Writes without a valid token get `401 Unauthorized` also if their body is
+larger than `server.max_content_length` (`413` before), as the token is
+checked before the body is read (see [Request size
+limit](configuration.md#request-size-limit)). Config overlays that name
 bare users in `security.access_control.policies` (`user:alice`) make the
 app refuse to start unless the issuer has `namespace: ""`.
 

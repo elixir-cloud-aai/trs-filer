@@ -101,7 +101,8 @@ deletes the stored policy rules directly. Only admins can use it. The
 configured policies (`security.access_control.policies`) are managed on
 startup and can't be changed via the API; rules added via the API (e.g.,
 `{"policy_type": "g", "rule": {"v0": "user:<user-id>", "v1": "admin"}}`,
-which makes a user an admin) apply until they are deleted, also after the
+which makes a user an admin; `<user-id>` is namespaced by issuer, see [User
+identifiers](configuration.md#user-identifiers)) apply until they are deleted, also after the
 group mapping changes, so prefer groups (see [Admins](access-control.md#admins)).
 The API is served like the TRS API (e.g., the Helm chart's Ingress routes
 all paths); to keep it off the internet, route only `/ga4gh/trs/v2/`
