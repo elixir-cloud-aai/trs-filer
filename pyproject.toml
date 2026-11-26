@@ -109,11 +109,9 @@ dependencies = [
     "boto3>=1.40,<2",
     "connexion>=2.15.1,<3.0.0",
     # FOCA is bumped by hand, together with the base image in the
-    # `Dockerfile` (`.github/dependabot.yml`).
-    # TEMPORARY: FOCA's `dev` head, for `null` in merged specification files
-    # (`merge_null_removes`, FOCA 0.23); replace with `foca>=0.23.0,<0.24`
-    # once released, before the next release of TRS-Filer
-    "foca @ git+https://github.com/elixir-cloud-aai/foca@93e9721711f7d6412abc69a10f0047c9e95ce490",
+    # `Dockerfile` (`.github/dependabot.yml`); 0.23 for `null` in merged
+    # specification files (`merge_null_removes`)
+    "foca>=0.23.0,<0.24",
     "gunicorn>=26.2.0,<28",
     # Checks of GA4GH I/O Schema files against the vendored meta-schema
     # (`trs_filer/io_schema/`), JSON Schema Draft 2020-12 with
