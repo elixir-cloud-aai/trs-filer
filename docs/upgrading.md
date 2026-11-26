@@ -11,11 +11,23 @@ Upgrading from 0.5.0? See [From 0.5.0](#from-050); from 0.4.0, see
 
 ## From 0.5.0
 
-The API implements TRS 2.0.2, and TRS-Filer runs on FOCA 0.23 (see FOCA's
-[migration
-guide](https://github.com/elixir-cloud-aai/foca/blob/dev/docs/migration-0.23.md));
-existing data needs no changes. Check clients and custom configs:
+The API implements TRS 2.0.2, and TRS-Filer runs on FOCA 0.23.0 (from
+0.22; see FOCA's [release
+notes](https://github.com/elixir-cloud-aai/foca/releases/tag/v0.23.0) and
+[migration guide](https://foca.readthedocs.io/en/v0.23.0/migration-0.23/));
+the data of 0.5.0 needs no changes (for images from `dev`, see [Images
+from `dev` since FOCA 0.17](#images-from-dev-since-foca-017)). Check
+clients and custom configs:
 
+- **User identifiers:** users are identified by the `sub` claim of their
+  tokens namespaced by the issuer (`<namespace>|<sub>`, e.g.,
+  `https://login.example.org/oidc/|alice`), also with a single trusted
+  issuer (see [User identifiers](configuration.md#user-identifiers)).
+  Clients and scripts that grant roles on tools
+  (`/tools/{id}/permissions/users/{userId}`) must name users that way, and
+  so must config overlays that name users in
+  `security.access_control.policies` (`user:<namespace>|<sub>`), or the
+  app refuses to start. 0.5.0 stored no users.
 - **Optional object storage:** file contents can be stored in
   S3-compatible object storage (`custom.storage.backend: s3`, see [File
   storage](configuration.md#file-storage)). Nothing changes by default
@@ -173,7 +185,9 @@ existing data needs no changes. Check clients and custom configs:
        Grant each the owner that should manage it (`PUT
        /tools/{id}/permissions/users/{userId}` with `{"role": "owner"}`, as
        an admin); the user identifier is the `sub` claim of the user's
-       tokens.
+       tokens, namespaced by the issuer (see [User
+       identifiers](configuration.md#user-identifiers)). Bare `sub` values
+       are accepted too, but apply to nobody.
     2. Config overlays that replace the read rules `get-tools` (e.g., for
        readers, with `/ga4gh/trs/v2/tools/*`) by name: the base config now
        has `get-tools` for `/tools/:id` only, plus `list-versions` and
@@ -619,6 +633,45 @@ app (logger `trs_filer.app`), which warned of the placeholders `id` and
 (collection `plugin_store`) and plugin listing are for gateway apps:
 TRS-Filer creates no collections or indexes beyond its own, so its
 database user needs no new rights.
+
+**User identifiers (breaking for images with access control):** images
+from `dev` built before the move to FOCA 0.23.0 stored users bare (their
+`sub`, e.g., `alice`) with a single trusted issuer: in the roles on tools,
+and as who added tools and tool classes (`_createdBy`). Later images and
+the next release namespace them by issuer (see [User
+identifiers](configuration.md#user-identifiers)), so the stored roles of
+users no longer apply (owners lose their tools, until an admin grants them
+again, and users made admins via FOCA's permissions API lose the role;
+roles of groups and admins by group are not affected), users no
+longer see the pending tool classes they added, and their unused tool
+classes no longer count towards
+`custom.access_control.max_unused_tool_classes`. To keep them, set
+`namespace: ""` for the issuer before upgrading, which keeps its subjects
+bare:
+
+```yaml
+security:
+    auth:
+        issuers:
+            - issuer: https://login.example.org/oidc/
+              namespace: ""
+```
+
+TRS-Filer ships no tool to rewrite stored users. FOCA's `foca
+namespace-subjects` rewrites stored roles, given a module with a `Foca`
+instance built as in `trs_filer/app.py` (`--app`), but not `_createdBy` of
+`tools` and `toolclasses`, which would have to be rewritten in the
+database as in FOCA's [migration
+guide](https://foca.readthedocs.io/en/v0.23.0/migration-0.23/#subjects-are-always-namespaced-by-issuer).
+Config overlays that name bare users in
+`security.access_control.policies` (`user:alice`) make the app refuse to
+start unless the issuer has `namespace: ""`.
+
+**Token before body:** writes without a valid token get `401
+Unauthorized` also if their body is larger than
+`server.max_content_length` (`413` before), as the token is checked
+before the body is read (see [Request size
+limit](configuration.md#request-size-limit)).
 
 **I/O Schemas (breaking for images with the check):** images from `dev`
 built before [#312](https://github.com/elixir-cloud-aai/trs-filer/issues/312)

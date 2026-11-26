@@ -24,6 +24,7 @@ from tests.conftest import (
     USER,
     admin_client,
     make_headers,
+    namespaced,
 )
 from tests.mock_data import BASE_PATH, MOCK_TOOL
 from trs_filer.app import create_app
@@ -242,7 +243,12 @@ def test_moderated_explicit(
     response = client.put(f"{TOOL_CLASSES}/byadmin", json=NEW_CLASS)
     assert response.status_code == 200
     stored = mongo_client[DB]["toolclasses"].find_one({"id": "new"}, {"_id": False})
-    assert stored == {"id": "new", **NEW_CLASS, "_createdBy": USER, PENDING: True}
+    assert stored == {
+        "id": "new",
+        **NEW_CLASS,
+        "_createdBy": namespaced(USER),
+        PENDING: True,
+    }
     assert _class_ids(client) == {posted, "new", "byadmin"}
     assert _class_ids(client, headers=user) == {posted, "new", "byadmin"}
     assert _class_ids(client, headers=make_headers(COLLEAGUE)) == {"byadmin"}
@@ -267,7 +273,12 @@ def test_moderated_explicit(
     changed = {"name": "Changed"}
     assert client.put(f"{TOOL_CLASSES}/new", json=changed).status_code == 200
     stored = mongo_client[DB]["toolclasses"].find_one({"id": "new"}, {"_id": False})
-    assert stored == {"id": "new", **changed, "_createdBy": USER, PENDING: True}
+    assert stored == {
+        "id": "new",
+        **changed,
+        "_createdBy": namespaced(USER),
+        PENDING: True,
+    }
     # only admins approve tool classes
     approval = f"{TOOL_CLASSES}/new/approval"
     assert client.put(approval, headers=user).status_code == 403
@@ -302,7 +313,7 @@ def test_moderated_tools(
     assert toolclasses.find_one({"id": "new"}, {"_id": False}) == {
         "id": "new",
         **NEW_CLASS,
-        "_createdBy": USER,
+        "_createdBy": namespaced(USER),
         PENDING: True,
     }
     assert _doc(tools, tool_id)[PENDING] is True
@@ -544,7 +555,9 @@ def test_open_mode_keeps_pending(
     tools = mongo_client[DB]["tools"]
     assert _doc(tools, tool_id)[PENDING] is True
     assert PENDING not in _doc(tools, other_id)
-    assert _doc(mongo_client[DB]["toolclasses"], "other")["_createdBy"] == COLLEAGUE
+    assert _doc(mongo_client[DB]["toolclasses"], "other")["_createdBy"] == namespaced(
+        COLLEAGUE
+    )
 
 
 def test_indexes(mongo_client: MongoClient[dict[str, Any]], overlay: Path) -> None:

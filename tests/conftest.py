@@ -394,6 +394,21 @@ def make_token(
     )
 
 
+def namespaced(user: str) -> str:
+    """Get the subject that the app stores and serves for a user.
+
+    Subjects are namespaced by their issuer (`<namespace>|<sub>`), also with
+    a single trusted issuer, as the test overlay has (FOCA 0.23).
+
+    Args:
+        user: Subject of the user's tokens (`sub` claim).
+
+    Returns:
+        The subject, namespaced by `ISSUER`.
+    """
+    return f"{ISSUER}|{user}"
+
+
 def make_headers(user: str = ADMIN, **kwargs: Any) -> dict[str, str]:
     """Get request headers with an access token for a user.
 

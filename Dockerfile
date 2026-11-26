@@ -12,10 +12,7 @@ FROM ghcr.io/astral-sh/uv:0.13.8@sha256:5cc1805e2426484abca4ad46ea783bab281fdb22
 ## Pinned by digest, so that rebuilds (e.g., of a release) use the same base
 ## image; Dependabot updates the tag and digest together
 ## (`.github/dependabot.yml`). It has no pip (since FOCA 0.20)
-## TEMPORARY: FOCA's development image of the commit that `pyproject.toml`
-## pins, until FOCA 0.23 is released
-## FOCA commit: 93e9721711f7d6412abc69a10f0047c9e95ce490
-FROM elixircloud/foca:20261111-py3.13@sha256:a82b49d37729f5b943e6d18cef435b1b4ada98eaf8a2fe8c2dc1b486fe5cc6c9 AS base
+FROM elixircloud/foca:0.23.0-py3.13@sha256:a3b53a07399a1e6c8d9ea192f6b6cd6b16db18d10cf10d29aa4cd4d2faec5057 AS base
 
 ##### BUILD #####
 ## Build the app's wheel, in a stage of its own, so that the image doesn't

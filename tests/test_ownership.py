@@ -21,9 +21,11 @@ from tests.conftest import (
     ADMIN_GROUP,
     COLLEAGUE,
     EDITOR,
+    ISSUER,
     USER,
     USERS_GROUP,
     make_headers,
+    namespaced,
 )
 from tests.mock_data import BASE_PATH, MOCK_TOOL, MOCK_VERSION_NO_ID
 from tests.test_access_control import _doc_example, _overlay
@@ -37,10 +39,25 @@ from trs_filer.ga4gh.trs.endpoints.register_objects import (
     RegisterTool,
     RegisterToolVersion,
 )
+from trs_filer.utils import DB
 
 TOOLS = f"{BASE_PATH}/tools"
 # Another user, without a role on the tools of the tests and in no group
 STRANGER = "mallory@example.org"
+
+
+def _user_path(tool_id: str, user: str) -> str:
+    """Get the path of the role of a user on a tool.
+
+    Args:
+        tool_id: Tool identifier.
+        user: User (its `sub` claim, namespaced here).
+
+    Returns:
+        Path of the role, with the namespaced user encoded.
+    """
+    subject = quote(namespaced(user), safe="")
+    return f"{TOOLS}/{tool_id}/permissions/users/{subject}"
 
 
 def _register(client: FlaskClient, user: str = USER) -> str:
@@ -86,7 +103,7 @@ def _grant(
     Args:
         client: Test client.
         tool_id: Tool identifier.
-        subject: User or group.
+        subject: User (its `sub` claim, namespaced here) or group.
         role: Role to grant.
         by: User granting the role.
         group: Whether the subject is a group.
@@ -94,9 +111,12 @@ def _grant(
     Returns:
         Response.
     """
-    kind = "groups" if group else "users"
+    if group:
+        path = f"{TOOLS}/{tool_id}/permissions/groups/{quote(subject, safe='')}"
+    else:
+        path = _user_path(tool_id, subject)
     return client.put(
-        f"{TOOLS}/{tool_id}/permissions/{kind}/{quote(subject, safe='')}",
+        path,
         json={"role": role},
         headers=make_headers(by),
     )
@@ -139,7 +159,7 @@ def _changes(tool_id: str, version_id: str) -> dict[str, tuple[str, str, Any]]:
         "list roles": ("GET", f"{tool}/permissions", None),
         "grant role": (
             "PUT",
-            f"{tool}/permissions/users/{STRANGER}",
+            _user_path(tool_id, STRANGER),
             {"role": "maintainer"},
         ),
         "delete tool": ("DELETE", tool, None),
@@ -184,7 +204,7 @@ def test_creator_owns_tool(client: FlaskClient) -> None:
         client: Test client.
     """
     tool_id = _register(client)
-    owner = [{"subject_type": "user", "subject": USER, "role": "owner"}]
+    owner = [{"subject_type": "user", "subject": namespaced(USER), "role": "owner"}]
     for user in (USER, ADMIN):
         response = _roles(client, tool_id, by=user)
         assert response.status_code == 200
@@ -245,7 +265,7 @@ def test_put_new_tool(client: FlaskClient) -> None:
     response = client.put(path, json=MOCK_TOOL, headers=make_headers(USER))
     assert response.status_code == 200
     assert _roles(client, "NEWTOOL").get_json() == [
-        {"subject_type": "user", "subject": USER, "role": "owner"}
+        {"subject_type": "user", "subject": namespaced(USER), "role": "owner"}
     ]
     response = client.put(path, json=MOCK_TOOL, headers=make_headers(STRANGER))
     assert response.status_code == 403
@@ -253,7 +273,7 @@ def test_put_new_tool(client: FlaskClient) -> None:
     assert response.status_code == 200
     # the owner stays the user who registered it
     assert _roles(client, "NEWTOOL").get_json() == [
-        {"subject_type": "user", "subject": USER, "role": "owner"}
+        {"subject_type": "user", "subject": namespaced(USER), "role": "owner"}
     ]
 
 
@@ -346,7 +366,7 @@ def test_delete_tool_revokes_roles(client: FlaskClient) -> None:
     response = client.put(path, json=MOCK_TOOL, headers=make_headers(STRANGER))
     assert response.status_code == 200
     assert _roles(client, "NEWTOOL").get_json() == [
-        {"subject_type": "user", "subject": STRANGER, "role": "owner"}
+        {"subject_type": "user", "subject": namespaced(STRANGER), "role": "owner"}
     ]
     response = client.delete(path, headers=make_headers(USER))
     assert response.status_code == 403
@@ -361,7 +381,7 @@ def test_last_owner(client: FlaskClient) -> None:
         client: Test client.
     """
     tool_id = _register(client)
-    path = f"{TOOLS}/{tool_id}/permissions/users/{USER}"
+    path = _user_path(tool_id, USER)
     response = client.delete(path, headers=make_headers(USER))
     assert response.status_code == 409
     assert response.get_json()["status"] == 409
@@ -372,7 +392,7 @@ def test_last_owner(client: FlaskClient) -> None:
     assert response.status_code == 409
     assert client.delete(path, headers=make_headers(COLLEAGUE)).status_code == 200
     assert _roles(client, tool_id).get_json() == [
-        {"subject_type": "user", "subject": COLLEAGUE, "role": "owner"}
+        {"subject_type": "user", "subject": namespaced(COLLEAGUE), "role": "owner"}
     ]
 
 
@@ -385,7 +405,8 @@ def test_role_errors(client: FlaskClient) -> None:
     tool_id = _register(client)
     assert _grant(client, tool_id, COLLEAGUE, "admin").status_code == 400
     response = client.delete(
-        f"{TOOLS}/{tool_id}/permissions/users/{STRANGER}", headers=make_headers(USER)
+        _user_path(tool_id, STRANGER),
+        headers=make_headers(USER),
     )
     assert response.status_code == 404
     assert _grant(client, "NOTOOL", COLLEAGUE, "owner", by=ADMIN).status_code == 404
@@ -409,12 +430,12 @@ def test_group_roles(client: FlaskClient) -> None:
     }
     _check_changes(client, tool_id, COLLEAGUE, {"add version", "replace version"})
     assert _roles(client, tool_id).get_json() == [
-        {"subject_type": "user", "subject": USER, "role": "owner"},
+        {"subject_type": "user", "subject": namespaced(USER), "role": "owner"},
         {"subject_type": "group", "subject": USERS_GROUP, "role": "maintainer"},
     ]
     # Groups count as owners
     assert _grant(client, tool_id, USERS_GROUP, "owner", group=True).status_code == 200
-    path = f"{TOOLS}/{tool_id}/permissions/users/{USER}"
+    path = _user_path(tool_id, USER)
     assert client.delete(path, headers=make_headers(USER)).status_code == 200
     group_path = f"{TOOLS}/{tool_id}/permissions/groups/{quote(USERS_GROUP, safe='')}"
     response = client.delete(group_path, headers=make_headers(COLLEAGUE))
@@ -496,7 +517,7 @@ def test_internal_fields(
     tool_id = _register(client)
     stored = tools.find_one({"id": tool_id})
     assert stored is not None
-    assert stored[CREATED_BY] == USER
+    assert stored[CREATED_BY] == namespaced(USER)
     assert stored[CREATED_AT] == stored[UPDATED_AT]
     for response in (
         client.get(f"{TOOLS}/{tool_id}"),
@@ -518,7 +539,7 @@ def test_internal_fields(
         assert response.status_code == 200
         changed = tools.find_one({"id": tool_id})
         assert changed is not None
-        assert changed[CREATED_BY] == USER
+        assert changed[CREATED_BY] == namespaced(USER)
         assert changed[CREATED_AT] == stored[CREATED_AT]
         assert changed[UPDATED_AT] > updated
         updated = changed[UPDATED_AT]
@@ -564,7 +585,7 @@ def test_tool_classes(
     assert toolclasses.find_one({"id": "new"}, {"_id": False}) == {
         **changed,
         "id": "new",
-        "_createdBy": USER,
+        "_createdBy": namespaced(USER),
     }
     response = client.post(
         f"{BASE_PATH}/toolClasses", json=tool_class, headers=make_headers(USER)
@@ -837,3 +858,76 @@ def test_version_of_tool_deleted_meanwhile(
         assert stored["versions"] == []
     else:
         assert stored is None
+
+
+def test_bare_subjects(
+    mongo_client: MongoClient[dict[str, Any]], overlay: Path
+) -> None:
+    """With `namespace: ""` for the issuer, subjects are stored bare.
+
+    As before FOCA 0.23, so that the roles and `_createdBy` fields stored by
+    earlier images keep applying (see `docs/upgrading.md`).
+
+    Args:
+        mongo_client: MongoDB client.
+        overlay: Config overlay.
+    """
+    _overlay(
+        overlay,
+        {"security": {"auth": {"issuers": [{"issuer": ISSUER, "namespace": ""}]}}},
+    )
+    bare_client = create_app().app.test_client()
+    tool_id = _register(bare_client)
+    response = bare_client.get(
+        f"{TOOLS}/{tool_id}/permissions", headers=make_headers(USER)
+    )
+    assert response.get_json() == [
+        {"subject_type": "user", "subject": USER, "role": "owner"}
+    ]
+    tool = mongo_client[DB]["tools"].find_one({"id": tool_id})
+    assert tool is not None
+    assert tool[CREATED_BY] == USER
+    response = bare_client.put(
+        f"{TOOLS}/{tool_id}/permissions/users/{COLLEAGUE}",
+        json={"role": "maintainer"},
+        headers=make_headers(USER),
+    )
+    assert response.status_code == 200
+    response = bare_client.post(
+        f"{TOOLS}/{tool_id}/versions",
+        json=MOCK_VERSION_NO_ID,
+        headers=make_headers(COLLEAGUE),
+    )
+    assert response.status_code == 200
+
+
+@pytest.mark.parametrize("bare", [False, True], ids=["namespaced", "bare"])
+def test_bare_user_in_policies(
+    mongo_client: MongoClient[dict[str, Any]], overlay: Path, bare: bool
+) -> None:
+    """Configured rules may name bare users only with `namespace: ""`.
+
+    Otherwise the app refuses to start (see `docs/upgrading.md`).
+
+    Args:
+        mongo_client: MongoDB client.
+        overlay: Config overlay.
+        bare: Whether the issuer keeps its subjects bare.
+    """
+    issuer: Any = {"issuer": ISSUER, "namespace": ""} if bare else ISSUER
+    _overlay(
+        overlay,
+        {
+            "security": {
+                "auth": {"issuers": [issuer]},
+                "access_control": {
+                    "policies": {"bare-admin": ["g", f"user:{USER}", "admin"]}
+                },
+            }
+        },
+    )
+    if bare:
+        create_app()
+    else:
+        with pytest.raises(ValueError, match="bare-admin"):
+            create_app()

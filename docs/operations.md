@@ -103,6 +103,8 @@ startup and can't be changed via the API; rules added via the API (e.g.,
 `{"policy_type": "g", "rule": {"v0": "user:<user-id>", "v1": "admin"}}`,
 which makes a user an admin) apply until they are deleted, also after the
 group mapping changes, so prefer groups (see [Admins](access-control.md#admins)).
+Users are named by their identifiers namespaced by issuer (see [User
+identifiers](configuration.md#user-identifiers)).
 The API is served like the TRS API (e.g., the Helm chart's Ingress routes
 all paths); to keep it off the internet, route only `/ga4gh/trs/v2/`
 through a reverse proxy.

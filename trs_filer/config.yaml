@@ -110,7 +110,8 @@ security:
             owners-add-versions: [p, owner, "/ga4gh/trs/v2/tools/:id/versions", POST]
             owners-change-versions: [p, owner, "/ga4gh/trs/v2/tools/:id/versions/:version_id", "(PUT)|(DELETE)"]
             owners-list-permissions: [p, owner, "/ga4gh/trs/v2/tools/:id/permissions", GET]
-            # users (namespaced by issuer, with several issuers) and groups
+            # users (namespaced by issuer, e.g.,
+            # `https://login.example.org/oidc/|alice`) and groups
             # may contain slashes; each rule covers only one of them, so
             # overlays can restrict them separately
             owners-change-permissions: [p, owner, "/ga4gh/trs/v2/tools/:id/permissions/users/*", "(PUT)|(DELETE)"]
