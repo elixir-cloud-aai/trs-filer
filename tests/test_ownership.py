@@ -46,6 +46,20 @@ TOOLS = f"{BASE_PATH}/tools"
 STRANGER = "mallory@example.org"
 
 
+def _user_path(tool_id: str, user: str) -> str:
+    """Get the path of the role of a user on a tool.
+
+    Args:
+        tool_id: Tool identifier.
+        user: User (its `sub` claim, namespaced here).
+
+    Returns:
+        Path of the role, with the namespaced user encoded.
+    """
+    subject = quote(namespaced(user), safe="")
+    return f"{TOOLS}/{tool_id}/permissions/users/{subject}"
+
+
 def _register(client: FlaskClient, user: str = USER) -> str:
     """Register a tool.
 
@@ -97,11 +111,12 @@ def _grant(
     Returns:
         Response.
     """
-    kind = "groups" if group else "users"
-    if not group:
-        subject = namespaced(subject)
+    if group:
+        path = f"{TOOLS}/{tool_id}/permissions/groups/{quote(subject, safe='')}"
+    else:
+        path = _user_path(tool_id, subject)
     return client.put(
-        f"{TOOLS}/{tool_id}/permissions/{kind}/{quote(subject, safe='')}",
+        path,
         json={"role": role},
         headers=make_headers(by),
     )
@@ -144,7 +159,7 @@ def _changes(tool_id: str, version_id: str) -> dict[str, tuple[str, str, Any]]:
         "list roles": ("GET", f"{tool}/permissions", None),
         "grant role": (
             "PUT",
-            f"{tool}/permissions/users/{quote(namespaced(STRANGER), safe='')}",
+            _user_path(tool_id, STRANGER),
             {"role": "maintainer"},
         ),
         "delete tool": ("DELETE", tool, None),
@@ -366,7 +381,7 @@ def test_last_owner(client: FlaskClient) -> None:
         client: Test client.
     """
     tool_id = _register(client)
-    path = f"{TOOLS}/{tool_id}/permissions/users/{quote(namespaced(USER), safe='')}"
+    path = _user_path(tool_id, USER)
     response = client.delete(path, headers=make_headers(USER))
     assert response.status_code == 409
     assert response.get_json()["status"] == 409
@@ -390,7 +405,7 @@ def test_role_errors(client: FlaskClient) -> None:
     tool_id = _register(client)
     assert _grant(client, tool_id, COLLEAGUE, "admin").status_code == 400
     response = client.delete(
-        f"{TOOLS}/{tool_id}/permissions/users/{quote(namespaced(STRANGER), safe='')}",
+        _user_path(tool_id, STRANGER),
         headers=make_headers(USER),
     )
     assert response.status_code == 404
@@ -420,7 +435,7 @@ def test_group_roles(client: FlaskClient) -> None:
     ]
     # Groups count as owners
     assert _grant(client, tool_id, USERS_GROUP, "owner", group=True).status_code == 200
-    path = f"{TOOLS}/{tool_id}/permissions/users/{quote(namespaced(USER), safe='')}"
+    path = _user_path(tool_id, USER)
     assert client.delete(path, headers=make_headers(USER)).status_code == 200
     group_path = f"{TOOLS}/{tool_id}/permissions/groups/{quote(USERS_GROUP, safe='')}"
     response = client.delete(group_path, headers=make_headers(COLLEAGUE))
@@ -884,3 +899,35 @@ def test_bare_subjects(
         headers=make_headers(COLLEAGUE),
     )
     assert response.status_code == 200
+
+
+@pytest.mark.parametrize("bare", [False, True], ids=["namespaced", "bare"])
+def test_bare_user_in_policies(
+    mongo_client: MongoClient[dict[str, Any]], overlay: Path, bare: bool
+) -> None:
+    """Configured rules may name bare users only with `namespace: ""`.
+
+    Otherwise the app refuses to start (see `docs/upgrading.md`).
+
+    Args:
+        mongo_client: MongoDB client.
+        overlay: Config overlay.
+        bare: Whether the issuer keeps its subjects bare.
+    """
+    issuer: Any = {"issuer": ISSUER, "namespace": ""} if bare else ISSUER
+    _overlay(
+        overlay,
+        {
+            "security": {
+                "auth": {"issuers": [issuer]},
+                "access_control": {
+                    "policies": {"bare-admin": ["g", f"user:{USER}", "admin"]}
+                },
+            }
+        },
+    )
+    if bare:
+        create_app()
+    else:
+        with pytest.raises(ValueError, match="bare-admin"):
+            create_app()

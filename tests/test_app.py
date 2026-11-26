@@ -261,6 +261,7 @@ def test_request_body_size_limit_anonymous(anonymous_client: FlaskClient) -> Non
         content_type="application/json",
     )
     assert response.status_code == 401
+    assert response.get_json()["status"] == 401
 
 
 def test_no_request_body_size_limit(

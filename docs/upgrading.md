@@ -15,7 +15,9 @@ The API implements TRS 2.0.2, and TRS-Filer runs on FOCA 0.23.0 (from
 0.22; see FOCA's [release
 notes](https://github.com/elixir-cloud-aai/foca/releases/tag/v0.23.0) and
 [migration guide](https://foca.readthedocs.io/en/v0.23.0/migration-0.23/));
-existing data needs no changes. Check clients and custom configs:
+the data of 0.5.0 needs no changes (for images from `dev`, see [Images
+from `dev` since FOCA 0.17](#images-from-dev-since-foca-017)). Check
+clients and custom configs:
 
 - **User identifiers:** users are identified by the `sub` claim of their
   tokens namespaced by the issuer (`<namespace>|<sub>`, e.g.,
@@ -25,14 +27,11 @@ existing data needs no changes. Check clients and custom configs:
   (`/tools/{id}/permissions/users/{userId}`) must name users that way, and
   so must config overlays that name users in
   `security.access_control.policies` (`user:<namespace>|<sub>`), or the
-  app refuses to start. 0.5.0 stored no users, so no data changes;
-  deployments of images from `dev` see [Images from `dev` since FOCA
-  0.17](#images-from-dev-since-foca-017).
+  app refuses to start. 0.5.0 stored no users.
 - Writes without a valid token get `401 Unauthorized` also if their body is
   larger than `server.max_content_length` (`413` before), as the token is
   checked before the body is read (see [Request size
   limit](configuration.md#request-size-limit)).
-
 - **Optional object storage:** file contents can be stored in
   S3-compatible object storage (`custom.storage.backend: s3`, see [File
   storage](configuration.md#file-storage)). Nothing changes by default

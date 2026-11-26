@@ -551,14 +551,15 @@ Then create the bucket, e.g., with the AWS CLI on the host:
 
 Request bodies are limited to `server.max_content_length` bytes (default:
 1048576, i.e., 1 MiB), by FOCA: larger requests, also chunked ones, are
-rejected with `413 Content Too Large` before they are parsed. Writes,
-which need a token, check the token first: requests without a valid token
-get `401 Unauthorized`, whatever the size of their body (FOCA 0.23).
-URL-encoded bodies are limited to 500 kB as well
-(`server.max_form_memory_size`); the API takes none. The app
+rejected with `413 Content Too Large` before they are parsed. The app
 refuses to start without a limit. Raise it to register tools with larger
 inline file contents, together with the limits of any proxies in front of
 the app; prefer files with URLs.
+
+Writes, which need a token, check the token first (FOCA 0.23): requests
+without a valid token get `401 Unauthorized`, whatever the size of their
+body. FOCA also limits URL-encoded bodies (`server.max_form_memory_size`,
+by default 500 kB), which the API doesn't take.
 
 ## Rate limits
 
