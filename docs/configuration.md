@@ -122,6 +122,32 @@ FOCA's service clients (`security.auth.service_clients`,
 `security.auth.on_behalf_of_header`) are not supported; the app refuses to
 start with them (see [Authentication](access-control.md#authentication)).
 
+### User identifiers
+
+Users are identified by the `sub` claim of their tokens, namespaced by the
+issuer (`<namespace>|<sub>`, by default with the issuer as namespace, e.g.,
+`https://login.example.org/oidc/|alice`), also if only one issuer is trusted
+(FOCA 0.23), so that trusting another issuer later changes nothing about
+what is stored. These identifiers name users in the roles on tools (`GET
+/tools/{id}/permissions`, `PUT /tools/{id}/permissions/users/{userId}`), in
+rules of `security.access_control.policies` (`user:<namespace>|<sub>`), and
+who added a tool or tool class (`_createdBy`). An issuer may get a shorter
+`namespace` (e.g., `ls`; it must not change later):
+
+```yaml
+security:
+    auth:
+        issuers:
+            - issuer: https://login.example.org/oidc/
+              namespace: ls
+```
+
+`namespace: ""` keeps the issuer's subjects bare (`alice`), as before FOCA
+0.23: for deployments with roles stored by earlier images (see
+[Upgrading](upgrading.md#images-from-dev-since-foca-017)); new deployments
+shouldn't use it. See FOCA's [migration
+guide](https://foca.readthedocs.io/en/v0.23.0/migration-0.23/#subjects-are-always-namespaced-by-issuer).
+
 ## Local overrides
 
 Docker Compose mounts
@@ -525,7 +551,11 @@ Then create the bucket, e.g., with the AWS CLI on the host:
 
 Request bodies are limited to `server.max_content_length` bytes (default:
 1048576, i.e., 1 MiB), by FOCA: larger requests, also chunked ones, are
-rejected with `413 Content Too Large` before they are parsed. The app
+rejected with `413 Content Too Large` before they are parsed. Writes,
+which need a token, check the token first: requests without a valid token
+get `401 Unauthorized`, whatever the size of their body (FOCA 0.23).
+URL-encoded bodies are limited to 500 kB as well
+(`server.max_form_memory_size`); the API takes none. The app
 refuses to start without a limit. Raise it to register tools with larger
 inline file contents, together with the limits of any proxies in front of
 the app; prefer files with URLs.

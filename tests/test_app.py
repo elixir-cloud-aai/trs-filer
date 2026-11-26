@@ -1,4 +1,4 @@
-"""Tests of the app created from `config.yaml`, with FOCA 0.22."""
+"""Tests of the app created from `config.yaml`, with FOCA 0.23."""
 
 from collections.abc import Callable
 from copy import deepcopy
@@ -245,6 +245,22 @@ def test_request_body_size_limit(client: FlaskClient) -> None:
     )
     assert response.status_code == 413
     assert response.get_json()["title"] == "Content Too Large"
+
+
+def test_request_body_size_limit_anonymous(anonymous_client: FlaskClient) -> None:
+    """Writes without a token get `401`, also with too large bodies.
+
+    The token is checked before the body is read (FOCA 0.23).
+
+    Args:
+        anonymous_client: Test client without a token.
+    """
+    response = anonymous_client.post(
+        f"{BASE_PATH}/tools",
+        data=b"x" * (1048576 + 1),
+        content_type="application/json",
+    )
+    assert response.status_code == 401
 
 
 def test_no_request_body_size_limit(

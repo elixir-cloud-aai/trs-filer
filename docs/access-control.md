@@ -92,9 +92,11 @@ Registry](https://cloud-registry.readthedocs.io/en/latest/access-control/#roles-
   Request`), as roles can't be stored for them.
 - Owners can replace (`PUT`) and delete (`DELETE`) their tools, add, replace
   and delete their versions, and grant other users the roles `owner` or
-  `maintainer` on them, by their user identifier (`sub` claim; with several
-  trusted token issuers, namespaced by issuer, as `<namespace>|<sub>`:
-  encode it in URLs, slashes may also be kept):
+  `maintainer` on them, by their user identifier (the `sub` claim,
+  namespaced by its issuer as `<namespace>|<sub>`, also with a single
+  trusted issuer, e.g., `https://login.example.org/oidc/|alice`; see [User
+  identifiers](configuration.md#user-identifiers); encode it in URLs,
+  slashes may also be kept):
 
   ```bash
   curl -X PUT "http://localhost:8080/ga4gh/trs/v2/tools/<id>/permissions/users/<user-id>" \
