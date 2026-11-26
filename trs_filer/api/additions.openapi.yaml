@@ -676,7 +676,7 @@ paths:
           required: true
           description: |
             Identifier of the user, i.e., the `sub` claim of the user's
-            tokens, namespaced by issuer (`<namespace>|<sub>`; bare unless
+            tokens, namespaced by issuer (`<namespace>|<sub>`; bare if
             the issuer has `namespace: ""`), URL-encoded (may contain `/`,
             but not start with it).
           schema:
@@ -759,7 +759,7 @@ paths:
           required: true
           description: |
             Identifier of the user, i.e., the `sub` claim of the user's
-            tokens, namespaced by issuer (`<namespace>|<sub>`; bare unless
+            tokens, namespaced by issuer (`<namespace>|<sub>`; bare if
             the issuer has `namespace: ""`), URL-encoded (may contain `/`,
             but not start with it).
           schema:

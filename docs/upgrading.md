@@ -663,12 +663,15 @@ instance built as in `trs_filer/app.py` (`--app`), but not `_createdBy` of
 `tools` and `toolclasses`, which would have to be rewritten in the
 database as in FOCA's [migration
 guide](https://foca.readthedocs.io/en/v0.23.0/migration-0.23/#subjects-are-always-namespaced-by-issuer).
-Writes without a valid token get `401 Unauthorized` also if their body is
-larger than `server.max_content_length` (`413` before), as the token is
-checked before the body is read (see [Request size
-limit](configuration.md#request-size-limit)). Config overlays that name
-bare users in `security.access_control.policies` (`user:alice`) make the
-app refuse to start unless the issuer has `namespace: ""`.
+Config overlays that name bare users in
+`security.access_control.policies` (`user:alice`) make the app refuse to
+start unless the issuer has `namespace: ""`.
+
+**Token before body:** writes without a valid token get `401
+Unauthorized` also if their body is larger than
+`server.max_content_length` (`413` before), as the token is checked
+before the body is read (see [Request size
+limit](configuration.md#request-size-limit)).
 
 **I/O Schemas (breaking for images with the check):** images from `dev`
 built before [#312](https://github.com/elixir-cloud-aai/trs-filer/issues/312)
