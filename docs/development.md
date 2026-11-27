@@ -425,13 +425,15 @@ provenance of the scanned digest and signs it (see
 tags exactly that image `X.Y.Z` (and `latest`, if it is the highest stable
 release on `main`), attests and signs the chart, and creates a GitHub
 release with the chart (`.tgz`), its Sigstore bundle (`.tgz.sigstore.json`)
-and the release notes (see below). Releases are immutable (see the repository
-settings below): once published, their assets can't be added, replaced or
-deleted. The workflow therefore creates the release as a draft, uploads the
-assets and publishes it last. A re-run finishes a draft left by an earlier
-attempt; if the release is already published (e.g., by hand), it uploads
-nothing and fails unless the release has exactly the assets that the run
-built (only the Sigstore bundles may differ, as every attempt signs anew).
+and the release notes (see below); then, if Pubgrade is configured, it
+registers the image at Pubgrade (see below). Releases are immutable (see
+the repository settings below): once published, their assets can't be
+added, replaced or deleted. The workflow therefore creates the release as
+a draft, uploads the assets and publishes it last. A re-run finishes a
+draft left by an earlier attempt; if the release is already published
+(e.g., by hand), it uploads nothing and fails unless the release has
+exactly the assets that the run built (only the Sigstore bundles may
+differ, as every attempt signs anew).
 It checks this twice: right after the chart, before it attests, signs or
 tags anything (for a published release, the image tag `X.Y.Z` must also
 point to the run's digest already), and again before it creates the
@@ -463,6 +465,51 @@ the run): never re-run all jobs of their runs. Images of
 commits on `dev` are published by the CI workflow (environment
 `dev-images`): it pushes the image by digest, scans it, and attests, signs
 and tags exactly that digest once all other jobs passed.
+
+After `publish` has tagged the image (and created the GitHub release, in
+the same job), the workflow registers the image, with the release tag, at
+[Pubgrade](https://github.com/elixir-cloud-aai/Pubgrade) (job "Notify
+Pubgrade", `POST /repositories/{id}/builds`, through Pubgrade's action
+[`actions/notify`](https://github.com/elixir-cloud-aai/Pubgrade/tree/344a58adc1c871135f86c404eb33ed91011886ad/actions/notify),
+pinned to the commit of v0.3.0), which notifies the deployments that
+subscribed to upgrades. The job sends no build type, so deployments that
+subscribed to all tags (`*`) get every release, pre-releases included.
+No job waits for it, so a failed notification never holds up the release.
+The action masks the token and retries a request only if it never reached
+Pubgrade, so that one run registers the build at most once; re-running the
+job registers it again. This needs Pubgrade's publish mode
+([#33](https://github.com/elixir-cloud-aai/Pubgrade/issues/33)) and these
+settings:
+
+Setting | Kind | Where | Meaning
+--- | --- | --- | ---
+`PUBGRADE_URL` | Variable | Repository | Base URL of the Pubgrade API, with `https://`. Switches the notification on.
+`PUBGRADE_REPOSITORY_ID` | Variable | Repository, or the `release` environment | The identifier from registering the repository in Pubgrade
+`PUBGRADE_TOKEN` | Secret | The `release` environment | The access token from registering the repository in Pubgrade
+
+Without `PUBGRADE_URL`, the job "Notify Pubgrade" is skipped, so releases
+don't wait for its approval. Set `PUBGRADE_URL` for the repository, not in
+the `release` environment: a job's condition is evaluated before the job
+enters its environment, so a variable there doesn't switch the job on (and
+would override the repository's URL within the job). An organization
+variable would switch it on for every repository it is shared with, also
+those without a Pubgrade token. With `PUBGRADE_URL`, the job waits for an
+approval in the `release` environment, like pushing and publishing, and
+fails if one of the other settings is missing or invalid: the identifier and
+the token may only hold letters, digits, `.`, `~` and `-` (as Pubgrade
+issues them). If only this job fails or is rejected, the release is
+published all the same: fix the settings and re-run the failed job (not all
+jobs, which fail in `publish` once the release is published), or leave it;
+don't release a new version for it. Re-running it notifies the deployments
+again, without a new release. Unless it failed on an invalid setting or
+with "Could not reach Pubgrade (curl exit status 6)" or "(... 7)" (no
+connection), Pubgrade may have registered the build all the same: check the
+repository's builds (`GET /repositories/{id}/builds`) before re-running it,
+as re-running notifies the subscribed deployments again. Pubgrade doesn't
+compare versions: the deployments roll out the image of the latest
+notification, so re-running the job of an older release after a newer one
+(or approving two releases' jobs in the wrong order) rolls them back to
+the older version.
 
 The CI workflow builds the image of every pull request and scans it with
 [Trivy](https://trivy.dev/) (the shared action

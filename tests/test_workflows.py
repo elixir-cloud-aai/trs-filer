@@ -549,6 +549,58 @@ def test_release_state_check_runs(
         assert f"points to {OTHER_DIGEST}" in result.stdout + result.stderr
 
 
+# Pubgrade's action, pinned to the commit of its release v0.3.0
+NOTIFY_ACTION = "elixir-cloud-aai/Pubgrade/actions/notify"
+NOTIFY_USES = f"{NOTIFY_ACTION}@344a58adc1c871135f86c404eb33ed91011886ad"
+
+
+def test_notify_job() -> None:
+    """The release workflow notifies Pubgrade once the image is tagged.
+
+    `notify` needs `publish`, the job that tags the image `X.Y.Z`, so that
+    the subscribed deployments find the tag, and runs only if the repository
+    variable `PUBGRADE_URL` is set (so that releases without Pubgrade don't
+    wait for its approval), in the `release` environment (which holds its
+    token), without permissions. No other job needs it, so that a failed
+    notification never holds up the release. Its only step is Pubgrade's
+    action, pinned to the commit of v0.3.0, with the image as tagged
+    (without `docker.io/`) and the release tag.
+    """
+    workflow = _load(WORKFLOWS / "release.yml")
+    jobs = workflow["jobs"]
+    notify = jobs["notify"]
+    assert notify["name"] == "Notify Pubgrade"
+    assert notify["needs"] == ["prepare", "publish"]
+    assert notify["if"] == "vars.PUBGRADE_URL != ''"
+    assert notify["runs-on"] == "ubuntu-latest"
+    assert notify["timeout-minutes"] == 10
+    assert notify["environment"] == "release"
+    assert notify["permissions"] == {}
+    for job_id, job in jobs.items():
+        needs = job.get("needs", [])
+        assert "notify" not in ([needs] if isinstance(needs, str) else needs), job_id
+    (step,) = notify["steps"]
+    assert step["name"] == "Notify Pubgrade"
+    assert step["uses"] == NOTIFY_USES
+    assert step["with"] == {
+        "url": "${{ vars.PUBGRADE_URL }}",
+        "repository-id": "${{ vars.PUBGRADE_REPOSITORY_ID }}",
+        "token": "${{ secrets.PUBGRADE_TOKEN }}",
+        "image": "${{ vars.DOCKERHUB_ORG || 'elixircloud' }}/trs-filer"
+        ":${{ needs.prepare.outputs.version }}",
+        "git-tag": "${{ github.ref_name }}",
+    }
+    # The image that `publish` tags (`IMAGE_NAME`), without the registry
+    repository, _ = step["with"]["image"].split(":${{", maxsplit=1)
+    assert workflow["env"]["IMAGE_NAME"] == f"docker.io/{repository}"
+    lines = [
+        line.strip()
+        for line in (WORKFLOWS / "release.yml").read_text().splitlines()
+        if NOTIFY_ACTION in line
+    ]
+    assert lines == [f"uses: {NOTIFY_USES} # v0.3.0"]
+
+
 def test_verification_commands() -> None:
     """The verification commands name the workflows that sign the images.
 
@@ -673,6 +725,7 @@ def test_credential_jobs_found() -> None:
         ("ci.yml", "publish"),
         ("release.yml", "push"),
         ("release.yml", "publish"),
+        ("release.yml", "notify"),
     } <= found
 
 

@@ -8,8 +8,10 @@
 # chart against its recorded name and SHA-256, attest the image's build
 # provenance, sign it (Sigstore keyless signing) and tag it, and create the
 # GitHub release with the chart attached, also attested and signed
-# (`publish`; see "Verifying images and charts" in `docs/operations.md`).
-# `push` and `publish` each need approval in the `release` environment.
+# (`publish`; see "Verifying images and charts" in `docs/operations.md`),
+# then, if it is configured, register the image at Pubgrade (`notify`).
+# `push` and `publish` each need approval in the `release` environment, and
+# so does `notify` if Pubgrade is configured.
 # Re-running all jobs builds, scans, signs and tags a new digest (and
 # packages the chart again), unless the GitHub release is published
 # already: then `publish` fails before it attests, signs or tags anything
@@ -611,3 +613,39 @@ jobs:
           fi
           # Publishes a draft
           gh release edit "${TAG}" "${edit[@]}" --draft=false
+
+  # Registers the image at Pubgrade (publish mode, elixir-cloud-aai/Pubgrade#33)
+  # with Pubgrade's action `actions/notify`, which notifies the subscribed
+  # deployments, once `publish` has tagged it `X.Y.Z` (so that they find the
+  # tag). `publish` also creates the GitHub release; no job needs this one, so
+  # a failed notification never holds up the release. The action checks its
+  # inputs, masks the token and retries only requests that never reached
+  # Pubgrade (no connection), so that one run registers the build at most
+  # once; a failed run says so, and re-running this job sends it again. The
+  # token is a secret of the `release` environment, like the other release
+  # credentials, so this job needs an approval there, too. The job only runs
+  # if the variable `PUBGRADE_URL` is set for the repository: variables of an
+  # environment aren't visible to a job's `if:` (it is evaluated before the
+  # job enters the environment), and a check in a step would leave every
+  # release without Pubgrade waiting for an approval that serves nothing. The
+  # step fails if `PUBGRADE_REPOSITORY_ID` or `PUBGRADE_TOKEN` is missing or
+  # invalid. See "Versioning and releases" in `docs/development.md` for where
+  # to set them.
+  notify:
+    name: Notify Pubgrade
+    needs: [prepare, publish]
+    if: vars.PUBGRADE_URL != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: release
+    permissions: {}
+    steps:
+      - name: Notify Pubgrade
+        uses: elixir-cloud-aai/Pubgrade/actions/notify@344a58adc1c871135f86c404eb33ed91011886ad # v0.3.0
+        with:
+          url: ${{ vars.PUBGRADE_URL }}
+          repository-id: ${{ vars.PUBGRADE_REPOSITORY_ID }}
+          token: ${{ secrets.PUBGRADE_TOKEN }}
+          # As `publish` tags it, without the registry (`docker.io/`)
+          image: ${{ vars.DOCKERHUB_ORG || 'elixircloud' }}/trs-filer:${{ needs.prepare.outputs.version }}
+          git-tag: ${{ github.ref_name }}
